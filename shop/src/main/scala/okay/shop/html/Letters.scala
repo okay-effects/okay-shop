@@ -1,0 +1,164 @@
+package okay.shop.html
+
+import okay.shop.effects.Note
+import okay.shop.model.*
+
+/** THE CONFIGURATION a site's program needs beyond its content: where it is answered from (the request's origin —
+ * a preview's workers.dev, or the domain), the BLIK phone, the paczkomat, the Turnstile key, who may sign in */
+final case class Conf(site: Site, origin: String, blik: String, paczkomat: String, sitekey: String,
+                      staff: Set[String], contact: String, policy: String)
+
+/**
+ * THE LETTERS, as busi wrote them (`orders.ssc`, `email.ssc`, `hub.ssc`), fixed: the client's confirmation shows
+ * the ref the track page takes, and its link is to this site's track page with the order's key. Every value escaped
+ */
+object Letters:
+  private def e(s: String) = Html.escape(s)
+  private def page(accent: String, body: String) =
+    s"<html><body style='font-family:sans-serif;color:#222;max-width:520px;margin:0 auto;padding:24px'>$body" +
+      "</body></html>"
+  /** the text of a letter: its HTML without tags */
+  def text(html: String): String =
+    // a link keeps its address in the text: a reader of the text alone can still follow it
+    html.replaceAll("(?i)<a [^>]*href='([^']*)'[^>]*>([^<]*)</a>", "$2 $1").replaceAll("(?i)<br\\s*/?>", "\n")
+      .replaceAll("(?i)</(p|h2|tr|div)>", "\n").replaceAll("<[^>]+>", "")
+      .replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&#39;", "'").replace("&amp;", "&")
+      .linesIterator.map(_.trim).filter(_.nonEmpty).mkString("\n")
+  private def note(subject: String, html: String, replyTo: Option[String] = None) =
+    Note(subject, html, text(html), replyTo)
+  private def accent(site: Site) = if site.clothing then "#ff6f91" else site.color
+
+  def trackLink(c: Conf, o: Order): String =
+    s"${c.origin}/${o.lang.code}/track?ref=${okay.http.Query.encode(o.ref)}&k=${okay.http.Query.encode(o.key)}"
+
+  private def handover(h: String) = h match
+    case "self" => "клієнт принесе сам"
+    case "visit" => "візит майстра"
+    case "delivery" => "доставка"
+    case _ => h
+
+  /** to the owner, on each order: every field (in Ukrainian, as busi wrote it) */
+  def owner(c: Conf, o: Order): Note =
+    val site = c.site
+    val item = site.offer(o.offerKey).map(_.name(Lang.pl)).getOrElse("Заявка з сайту")
+    def row(k: String, v: String) = if v.isEmpty then "" else s"<p><b>${e(k)}:</b> ${Html.lines(v)}</p>"
+    note(s"🧵 Нове замовлення ${o.ref} — ${site.name}", page(accent(site),
+      s"<h2 style='color:${accent(site)}'>🧵 Нове замовлення — ${e(site.name)}</h2>" +
+        row("Номер", o.ref) + row("Послуга", item) +
+        row("Ціна", site.offer(o.offerKey).filter(_.priced).map(_.priceShort).getOrElse("")) +
+        row("Клієнт", o.name) + row("Контакт", o.contact) + row("Деталі", o.need) + row("Тканина", o.fabric) +
+        row("Передача", handover(o.handover)) + row("Доставка", o.deliveryMethod) + row("Оплата", o.paymentMethod) +
+        row("Вартість речі", if o.itemValue.isEmpty then "" else o.itemValue + " zł") + row("Мова", o.lang.code) +
+        row("Згода RODO", s"${Day.time(o.consent.at)} · політика ${o.consent.policy}") +
+        s"<p><a href='${e(trackLink(c, o))}'>${e(trackLink(c, o))}</a></p>"),
+      o.email)
+
+  /** to the client whose contact is an email: the confirmation, in the order's language */
+  def confirmation(c: Conf, o: Order): Note =
+    val site = c.site
+    val l = o.lang
+    def w(ru: String, pl: String, en: String, uk: String) = T(ru, pl, en, uk)(l)
+    val offer = site.offer(o.offerKey)
+    val service = offer.map(_.name(l)).getOrElse(w("Заявка с сайта", "Zgłoszenie ze strony", "A request from the site",
+      "Заявка з сайту"))
+    val price = offer.filter(_.priced).map(_.priceShort)
+    val blik = if c.blik.nonEmpty && site.clothing then
+      "<p style='background:#f0faf0;border-radius:8px;padding:12px 16px;margin:16px 0'>" + (price match
+        case Some(p) => s"<b>${e(w("Предоплата ", "Przedpłata ", "Prepayment ", "Передоплата "))}${e(p)}</b> — BLIK: " +
+            s"<b>${e(c.blik)}</b>"
+        case None => e(w(s"Оплата BLIK: ${c.blik} · сумму подтвердит мастер",
+          s"Płatność BLIK: ${c.blik} · kwotę potwierdzi krawcowa",
+          s"Pay via BLIK: ${c.blik} · amount confirmed by the seamstress",
+          s"Оплата BLIK: ${c.blik} · суму підтвердить майстер"))) + "</p>"
+      else ""
+    val inpost = if c.paczkomat.nonEmpty && o.courier then
+      "<p style='background:#f0f4ff;border-radius:8px;padding:12px 16px;margin:16px 0'>" +
+        e(w("Отправьте через InPost — Paczkomat: ", "Wyślij przez InPost — Paczkomat: ", "Send via InPost — " +
+            "Paczkomat: ",
+          "Надішліть через InPost — Paczkomat: ")) + s"<b style='letter-spacing:.06em'>${e(c.paczkomat)}</b></p>"
+      else ""
+    val a = accent(site)
+    def tr(k: String, v: String) =
+      s"<tr><td style='padding:6px 0;color:#666'>${e(k)}</td><td style='padding:6px 0'>$v</td></tr>"
+    note(w("Подтверждение заказа ", "Potwierdzenie zlecenia ", "Order confirmation ", "Підтвердження замовлення ") +
+      s"${o.ref} — ${site.name}", page(a,
+      s"<h2 style='color:$a'>${e(site.name)}</h2>" +
+        s"<p>${e(w("Спасибо! Ваш заказ принят.", "Dziękujemy! Twoje zlecenie zostało przyjęte.",
+          "Thank you! Your order has been received.", "Дякуємо! Ваше замовлення прийнято."))}</p>" +
+        "<table style='border-collapse:collapse;width:100%;margin:16px 0'>" +
+        tr(w("Номер заказа", "Numer zlecenia", "Order number", "Номер замовлення"), s"<b>${e(o.ref)}</b>") +
+        tr(w("Услуга", "Usługa", "Service", "Послуга"), e(service)) +
+        price.map(p => tr(w("Цена", "Cena", "Price", "Ціна"), e(p))).getOrElse("") + "</table>" + blik + inpost +
+        s"<p style='margin-top:20px'><a href='${e(trackLink(c, o))}' style='background:$a;color:#fff;" +
+        "padding:10px 20px;border-radius:8px;text-decoration:none;font-size:14px'>" +
+        e(w("Проверить статус →", "Sprawdź status zlecenia →", "Check order status →", "Перевірити статус →")) +
+        "</a></p>" + questions(c, l)),
+      Some(c.contact))
+
+  private def questions(c: Conf, l: Lang) =
+    s"<p style='color:#888;font-size:13px;margin-top:24px'>${e(T("По вопросам пишите на ", "W razie pytań pisz na ",
+      "For questions write to ", "З питань пишіть на ")(l))}<a href='mailto:${e(c.contact)}'>${e(c.contact)}</a></p>"
+
+  /** to the client, when the order moved: ready, sent with its tracking number — busi's `jobNotificationHtml` */
+  def moved(c: Conf, o: Order): Option[Note] =
+    val l = o.lang
+    def w(ru: String, pl: String, en: String, uk: String) = T(ru, pl, en, uk)(l)
+    val site = c.site
+    val trk = if o.tracking.nonEmpty then s"<br><b style='letter-spacing:.05em'>${e(o.tracking)}</b>" else ""
+    val said: Option[(String, String)] = o.status match
+      case Status.Ready if !site.clothing => Some((w("Готово — ", "Gotowe — ", "Ready — ", "Готово — "),
+        e(w("Ваш заказ готов.", "Twoje zlecenie jest gotowe.", "Your order is ready.", "Ваше замовлення готове."))))
+      case Status.Ready if !o.courier => Some((w("Готово! Можно забирать — ", "Gotowe! Możesz odebrać — ",
+        "Ready! You can pick it up — ", "Готово! Можна забирати — "), e(w("Ваша вещь готова — можно забирать.",
+        "Twoja rzecz jest gotowa — możesz ją odebrać.", "Your item is ready — you can pick it up.",
+        "Ваша річ готова — можна забирати."))))
+      case Status.Ready => Some((w("Готово! Отправляем — ", "Gotowe! Wysyłamy Twoją rzecz — ", "Ready! Shipping " +
+          "your item — ",
+        "Готово! Відправляємо — "), e(w("Ваша вещь готова — отправляем через InPost!",
+        "Twoja rzecz jest gotowa — wysyłamy ją do Ciebie przez InPost!",
+        "Your item is ready — we're shipping it back via InPost!", "Ваша річ готова — відправляємо через InPost!"))))
+      case Status.ParcelOut => Some((w("Отправлено! Ваша вещь в пути — ", "Wysłano! Twoja rzecz jedzie do Ciebie — ",
+        "Shipped! Your item is on its way — ", "Відправлено! Ваша річ їде до вас — "),
+        e(w("Ваша вещь отправлена через InPost!", "Twoja rzecz została wysłana przez InPost!",
+          "Your item has been shipped via InPost!", "Ваша річ відправлена через InPost!")) + trk +
+          "<br><small style='color:#888'>" + e(w("Отслеживайте в приложении InPost.", "Śledź paczkę w aplikacji " +
+              "InPost.",
+          "Track your parcel in the InPost app.", "Відстежуйте посилку в InPost.")) + "</small>"))
+      case _ => None
+    said.map((subject, message) => notice(c, o, subject + site.name, message))
+
+  /** to the client: the workshop's own words */
+  def free(c: Conf, o: Order, subject: String, body: String): Note =
+    notice(c, o, subject, Html.lines(body))
+
+  private def notice(c: Conf, o: Order, subject: String, messageHtml: String): Note =
+    val site = c.site
+    val l = o.lang
+    val a = accent(site)
+    val item = site.offer(o.offerKey).map(_.name(l)).getOrElse("")
+    note(subject, page(a, s"<h2 style='color:$a'>${e(site.name)}</h2><p style='font-size:15px'>$messageHtml</p>" +
+      s"<p style='color:#888;font-size:13px;margin:4px 0 16px'>${e(item)} · ${e(o.ref)}</p>" +
+      s"<p><a href='${e(trackLink(c, o))}' style='background:$a;color:#fff;padding:10px 20px;border-radius:8px;" +
+      "text-decoration:none;font-size:14px'>" + e(T("Проверить статус →", "Sprawdź status zlecenia →",
+      "Check order status →", "Перевірити статус →")(l)) + "</a></p>" + questions(c, l)), Some(c.contact))
+
+  /** to the owner, on an inquiry of /products */
+  def inquiry(c: Conf, i: Inquiry): Note =
+    def row(k: String, v: String) = if v.isEmpty then "" else s"<p><b>${e(k)}:</b> ${Html.lines(v)}</p>"
+    note(s"✉️ Новая заявка ${i.ref}${if i.confidential then " (конфиденциально)" else ""} — ${c.site.name}",
+      page(c.site.color, s"<h2 style='color:${c.site.color}'>✉️ Новая заявка — ${e(c.site.name)}</h2>" +
+        row("Номер", i.ref) + row("Имя", i.name) + row("Контакт", i.contact) + row("Тема", i.subject) +
+        row("Вид", i.kind) + row("Текст", i.body) + row("Конфиденциально", if i.confidential then "да" else "") +
+        row("Язык", i.lang.code) + row("Согласие RODO", s"${Day.time(i.consent.at)} · политика ${i.consent.policy}")),
+      Contact.email(i.contact))
+
+  /** to a staff member: the workshop's sign-in link */
+  def signin(c: Conf, link: String): Note =
+    note(s"Вхід до майстерні · ${c.site.name}", page(accent(c.site),
+      s"<h2 style='color:${accent(c.site)}'>✂️ ${e(c.site.name)}</h2>" +
+        "<p>Натисніть кнопку нижче, щоб увійти до майстерні (посилання діє 15 хвилин, один раз):</p>" +
+        s"<p><a href='${e(link)}' style='display:inline-block;background:${accent(c.site)};color:#fff;" +
+        "padding:12px 24px;border-radius:10px;text-decoration:none;font-size:15px;font-weight:600'>" +
+        "Увійти до майстерні →</a></p>" +
+        "<p style='color:#aaa;font-size:12px;margin-top:24px'>Якщо ви не робили цей запит — просто проігноруйте " +
+            "лист.</p>"))
