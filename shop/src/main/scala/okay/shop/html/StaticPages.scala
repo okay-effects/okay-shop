@@ -14,4 +14,7 @@ object StaticPages:
           Pages.offer(at(l)(s"offer/${o.key}/"), o, look)) ++
         Vector(s"${l.code}/privacy/index.html" -> look.privacy(site, l))
     } ++ look.pages(l => at(l)) ++
-      Vector("404.html" -> Pages.missing(site, look), "workshop/index.html" -> Pages.workshop(site, sitekey))
+      Vector("404.html" -> Pages.missing(site, look), "workshop/index.html" -> Pages.workshop(site, sitekey),
+        // the workshop and the API are not for search engines: robots told, and the workshop's frame says so too
+        "robots.txt" -> "User-agent: *\nDisallow: /workshop/\nDisallow: /api/\n",
+        "_headers" -> "/workshop/*\n  X-Robots-Tag: noindex\n")

@@ -38,7 +38,7 @@ object Privacy:
       s"<h1>${t.title}</h1>\n" +
       s"<p><strong>$name</strong> — ${t.updated}: $version</p>$note\n" +
       sections.mkString("\n") + "\n" +
-      s"""<p style="margin-top:32px;font-size:13px;color:#999">$name · $version</p>""" + "\n" +
+      s"""<p style="margin-top:32px;font-size:13px;color:#999">$name · $version${Pages.staff(using l)}</p>""" + "\n" +
       "</div></body></html>\n"
 
   private def texts(l: Lang, clothing: Boolean, name: String): Texts = l match

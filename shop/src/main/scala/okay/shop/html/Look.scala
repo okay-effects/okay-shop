@@ -23,6 +23,8 @@ trait Look:
   def sections(at: At)(using Lang): String = ""
   /** after the site's name in the foot: links to its siblings */
   def footLinks(using Lang): String = ""
+  /** the workshop's link at the end of every public page's foot (`Pages.staff`): one muted word, not followed */
+  def staffLink: Boolean = true
   /** the privacy policy: by default the engine's (`Privacy`: a sole trader's RODO policy, its kind's processors) */
   def privacy(site: Site, l: Lang): String = Privacy.page(site, l)
   /** the privacy policy's version: a date, stored with every consent */

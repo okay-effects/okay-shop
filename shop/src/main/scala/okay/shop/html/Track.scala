@@ -35,7 +35,7 @@ ${if failed then s"""<p class="err">${e(words.notFoundHint)}</p>""" else ""}
 <div class="cf-turnstile" data-sitekey="${e(sitekey)}" data-appearance="interaction-only"></div>
 <button type="submit">${e(words.check)}</button></form>
 <p style="margin-top:16px;font-size:13px;text-align:center"><a href="/${l.code}/" style="color:$a">${
-      e(words.toSite)}</a></p>
+      e(words.toSite)}</a>${Pages.staff(using l)}</p>
 </div><script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script></body></html>
 """
 

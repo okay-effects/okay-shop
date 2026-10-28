@@ -63,7 +63,12 @@ $switchStyle
 
   def foot(site: Site, look: Look)(using l: Lang): String =
     s"""<p class="foot">${e(site.name)}${look.footLinks} · <span>${t("сделано в busi", "zrobione w busi", "made with busi",
-      "зроблено в busi")}</span></p>"""
+      "зроблено в busi")}</span>${if look.staffLink then staff else ""}</p>"""
+
+  /** the workshop, for its staff: one muted word at the end of a foot, in its colour and size — not followed */
+  def staff(using l: Lang): String =
+    s""" · <a href="/workshop/" rel="nofollow" style="color:inherit;opacity:.65;text-decoration:none">${
+      t("панель", "panel", "staff", "панель")}</a>"""
 
   def serviceCard(o: Offer)(using l: Lang): String =
     val desc = if o.description(l).isEmpty then "" else s"""<span class="offer-desc">${tt(o.description)}</span>"""

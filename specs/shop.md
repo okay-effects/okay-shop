@@ -44,6 +44,14 @@ key, or by the ref and the email or phone; nothing told to a stranger), the rece
 (sign-in, the moves `Workflow` offers, the letters on ready and parcel out, a free letter), the redirects of busi's
 URLs. The tests move with the code and run on fixtures of both sites' content.
 
+## The workshop's link, and search engines (operator, 2026-10-28)
+
+Every public page's foot — the storefront's, an offer's, the privacy policy's, the track search's — ends with one
+muted word in the page's language ("panel", "staff", "панель") leading to `/workshop/`, `rel="nofollow"`, in the
+foot's own colour and size (`Look.staffLink`, on by default; a look's own page puts `Pages.staff` in its foot). The
+workshop is not for search engines: its frame says `noindex`, the static files `_headers` give
+`X-Robots-Tag: noindex` for `/workshop/*`, and `robots.txt` disallows `/workshop/` and `/api/`.
+
 ## Release
 
 Scala 3.3, the JVM and Scala.js, on okay-serverless 0.1.0, okay-ui 0.1.0, okay-scala 0.1.1. A Maven repository on

@@ -17,7 +17,7 @@ class PagesSuite extends munit.FunSuite:
   private val szy = StaticPages.of(Fixtures.site("szykownia"), TestLook, "SITEKEY").toMap
 
   test("every page: four languages of the storefront, each offer, privacy, the look's own; a 404; the workshop") {
-    assertEquals(szy.size, 4 * (1 + 7 + 1 + 1) + 2)
+    assertEquals(szy.size, 4 * (1 + 7 + 1 + 1) + 4)
     assertEquals(szy("pl/extra/index.html"), "extra https://szykownia.pl/pl/extra/")
     assert(szy("workshop/index.html").contains("""data-name="Szykownia""""))
   }
@@ -48,4 +48,21 @@ class PagesSuite extends munit.FunSuite:
     assert(Privacy.page(it, Lang.pl).contains("IT Consulting"))
     assert(!Privacy.page(it, Lang.en).contains("InPost"))
     assert(Privacy.page(Fixtures.site("szykownia"), Lang.en).contains("InPost"))
+  }
+
+  test("the workshop: one muted word at the end of every public foot, not followed; not for search engines") {
+    for (l, word) <- Seq("pl" -> "panel", "en" -> "staff", "uk" -> "панель", "ru" -> "панель") do
+      for page <- Seq(s"$l/index.html", s"$l/offer/hem/index.html") do
+        assert(szy(page).contains(s"""<a href="/workshop/" rel="nofollow" style="color:inherit;opacity:.65;""" +
+          s"""text-decoration:none">$word</a></p>"""), page)
+    assert(Privacy.page(Fixtures.site("it"), Lang.ru).contains("""href="/workshop/" rel="nofollow""""))
+    assert(Track.search(Fixtures.site("it"), Lang.en, "", "k", failed = false).contains("""text-decoration:none">staff</a>"""))
+    assert(szy("workshop/index.html").contains("""<meta name="robots" content="noindex">"""))
+    assertEquals(szy("robots.txt"), "User-agent: *\nDisallow: /workshop/\nDisallow: /api/\n")
+    assert(szy("_headers").contains("X-Robots-Tag: noindex"))
+    val none = new Look:
+      def theme = TestLook.theme
+      def seo(site: Site)(using Lang) = TestLook.seo(site)
+      override def staffLink = false
+    assert(!StaticPages.of(Fixtures.site("szykownia"), none, "K").toMap.apply("pl/index.html").contains("/workshop/\""))
   }
