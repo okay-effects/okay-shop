@@ -8,7 +8,7 @@ Durable Object's SQLite.
 
 ```scala
 // the site's Worker, one line (its own repository): the engine, the site's content and look
-@JSExportTopLevel("worker") val worker = ShopWorker(Szykownia.site, Szykownia.look)
+@JSExportTopLevel("worker") val worker = ShopWorker(Szykownia.site, SzykowniaLook)
 ```
 
 | module | what |
