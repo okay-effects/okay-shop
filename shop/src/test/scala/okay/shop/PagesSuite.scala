@@ -9,8 +9,8 @@ class PagesSuite extends munit.FunSuite:
     def theme = Theme("--void: #fff;", ".bg { }")
     def seo(site: Site)(using l: Lang) = Seo(s"${site.name} ${l.code}", "description")
     override def sections(at: At)(using Lang) = "<section class=\"own\">its own</section>"
-    def privacy(site: Site, l: Lang) = s"privacy ${l.code}"
-    def policy = "2026-10-28"
+    override def privacy(site: Site, l: Lang) = s"privacy ${l.code}"
+    override def policy = "2026-10-28"
     override def pages(at: Lang => (String => At)) =
       Lang.values.toVector.map(l => s"${l.code}/extra/index.html" -> s"extra ${at(l)("extra/").url(l)}")
 
@@ -40,4 +40,12 @@ class PagesSuite extends munit.FunSuite:
     assert(offer.contains("""data-sitekey="SITEKEY""""))
     assert(offer.contains("""name="rodo_consent" required"""))
     assert(offer.contains("""href="/ru/privacy/""""))
+  }
+
+  test("the engine's privacy policy: per site and language, its version shown, InPost only for the atelier") {
+    val it = Fixtures.site("it")
+    assert(Privacy.page(it, Lang.pl).contains(Privacy.version))
+    assert(Privacy.page(it, Lang.pl).contains("IT Consulting"))
+    assert(!Privacy.page(it, Lang.en).contains("InPost"))
+    assert(Privacy.page(Fixtures.site("szykownia"), Lang.en).contains("InPost"))
   }

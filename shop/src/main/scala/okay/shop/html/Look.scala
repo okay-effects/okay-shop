@@ -23,8 +23,9 @@ trait Look:
   def sections(at: At)(using Lang): String = ""
   /** after the site's name in the foot: links to its siblings */
   def footLinks(using Lang): String = ""
-  def privacy(site: Site, l: Lang): String
+  /** the privacy policy: by default the engine's (`Privacy`: a sole trader's RODO policy, its kind's processors) */
+  def privacy(site: Site, l: Lang): String = Privacy.page(site, l)
   /** the privacy policy's version: a date, stored with every consent */
-  def policy: String
+  def policy: String = Privacy.version
   /** pages of its own, by their path under the language (`products/`): each language's */
   def pages(at: Lang => (String => At)): Vector[(String, String)] = Vector.empty
