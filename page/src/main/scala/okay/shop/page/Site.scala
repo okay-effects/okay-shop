@@ -29,6 +29,7 @@ object Site:
     doc.querySelectorAll("form[data-send]").foreach(f => f.addEventListener("submit", (e: dom.Event) =>
       e.preventDefault()
       submit(f.asInstanceOf[HTMLFormElement])))
+    doc.querySelectorAll("[data-slots]").foreach(d => picker(d.asInstanceOf[HTMLElement]))
 
   private def byId(id: String): Option[HTMLElement] =
     Option(dom.document.getElementById(id)).map(_.asInstanceOf[HTMLElement])
@@ -45,22 +46,92 @@ object Site:
     if t.exists(_.nonEmpty) || tries <= 0 || js.isUndefined(js.Dynamic.global.turnstile) then go()
     else js.timers.setTimeout(250)(token(f, tries - 1)(go))
 
+  private def formLang(f: dom.Element): Lang =
+    Option(f.querySelector("[name=lang]")).map(_.asInstanceOf[dom.HTMLInputElement].value).flatMap(Lang.parse)
+      .getOrElse(Lang.pl)
+
+  private def el(tag: String, cls: String, text: String): HTMLElement =
+    val e = dom.document.createElement(tag).asInstanceOf[HTMLElement]
+    e.className = cls
+    e.textContent = text
+    e
+
+  /**
+   * THE SLOT PICKER: a bookable service's free starts from `/api/slots`, the days as buttons, the chosen day's
+   * starts as buttons; the start chosen goes into the form's hidden `start`
+   */
+  private def picker(box: HTMLElement): Unit =
+    val form = box.closest("form")
+    val l = formLang(form)
+    val start = Option(form.querySelector("[name=start]")).map(_.asInstanceOf[dom.HTMLInputElement])
+    val days = Async.start(Port.handle(WebJs.fetch)(Submit.slots[Async + Fetch](dom.window.location.origin,
+      box.getAttribute("data-slots"))))(using queue).future
+    days.recover { case _ => Vector.empty }.foreach { ds =>
+      box.innerHTML = ""
+      if ds.isEmpty then box.appendChild(el("span", "", Submit.noSlots(l)))
+      else
+        val dayRow = el("div", "days", "")
+        val slotRow = el("div", "times", "")
+        box.appendChild(dayRow)
+        box.appendChild(slotRow)
+        def show(d: Submit.Day, b: HTMLElement): Unit =
+          dayRow.querySelectorAll(".day").foreach(_.asInstanceOf[HTMLElement].classList.remove("on"))
+          b.classList.add("on")
+          slotRow.innerHTML = ""
+          start.foreach(_.value = "")
+          d.slots.foreach { (at, label) =>
+            val t = el("button", "slot", label)
+            t.setAttribute("type", "button")
+            t.addEventListener("click", (_: dom.Event) =>
+              slotRow.querySelectorAll(".slot").foreach(_.asInstanceOf[HTMLElement].classList.remove("on"))
+              t.classList.add("on")
+              start.foreach(_.value = at.toString))
+            slotRow.appendChild(t)
+          }
+        ds.zipWithIndex.foreach { (d, i) =>
+          val b = el("button", "day", Submit.dayLabel(l, d))
+          b.setAttribute("type", "button")
+          b.addEventListener("click", (_: dom.Event) => show(d, b))
+          dayRow.appendChild(b)
+          if i == 0 then show(d, b)
+        }
+    }
+
   private def submit(f: HTMLFormElement): Unit =
     val button = Option(f.querySelector(".send")).map(_.asInstanceOf[dom.HTMLButtonElement])
     button.foreach(_.disabled = true)
     token(f, 20) { () =>
       val fs = fields(f)
       val lang = fs.collectFirst { case ("lang", v) => v }.flatMap(Lang.parse).getOrElse(Lang.pl)
-      val sent = Async.start(Port.handle(WebJs.fetch)(Submit.send[Async + Fetch](dom.window.location.origin,
+      val picks = f.querySelector("[data-slots]") != null
+      def sent = Async.start(Port.handle(WebJs.fetch)(Submit.send[Async + Fetch](dom.window.location.origin,
         f.getAttribute("data-send"), fs)))(using queue).future
+      val chosen = !picks || fs.exists((k, v) => k == "start" && v.nonEmpty)
       // no answer at all — the network — is a refusal like the others: the form kept, said why
-      sent.recover { case _ => Outcome.Refused("network") }.foreach {
+      (if chosen then sent else scala.concurrent.Future.successful(Outcome.Refused("start")))
+        .recover { case _ => Outcome.Refused("network") }.foreach {
         case Outcome.Placed(ref, blik, price, paczkomat) => done(f, ref, lang, blik, price, paczkomat)
+        case Outcome.Booked(ref, when, manage) => booked(f, ref, lang, when, manage)
         case Outcome.Refused(why) =>
           button.foreach(_.disabled = false)
           if !js.isUndefined(js.Dynamic.global.turnstile) then js.Dynamic.global.turnstile.reset()
           dom.window.alert(Submit.refusal(lang, why))
       }
+    }
+
+  /** a booking's done panel: the ref, the time, the link that manages it */
+  private def booked(f: HTMLFormElement, ref: String, l: Lang, when: String, manage: String): Unit =
+    byId(f.getAttribute("data-form")).foreach(_.style.display = "none")
+    byId(f.getAttribute("data-done")).foreach { d =>
+      d.style.display = "block"
+      d.appendChild(el("p", "done-ref", "№ " + ref))
+      val p = el("p", "", Submit.booked(l, when) + " ")
+      p.style.cssText = "margin-top:10px;font-size:14px"
+      val a = el("a", "", manage).asInstanceOf[dom.html.Anchor]
+      a.href = manage
+      a.style.cssText = "color:inherit;word-break:break-all"
+      p.appendChild(a)
+      d.appendChild(p)
     }
 
   /** busi's done panel: the form hidden, the thanks shown, the ref, BLIK, the paczkomat */

@@ -108,7 +108,17 @@ border:0;border-radius:12px;background:#2a1f14;color:#fff;cursor:pointer}</style
       case ("POST", List("email")) => letter(c, json(r), now)
       case ("GET", List("inquiries")) => Store.inquiries[R](200).map(is =>
           ok(Json.obj("inquiries" -> Json.Arr(is.map(Codec.inquiry)))))
+      case ("GET", List("bookings")) => Store.bookings[R](now - day, now + 60 * day).map(bs =>
+          ok(Json.obj("bookings" -> Json.Arr(bs.map(b => Json.Obj(Codec.booking(b).fields :+
+            ("serviceName" -> Json.str(c.site.offer(b.service).map(_.name(Lang.pl)).getOrElse(b.service)))))))))
+      case ("POST", List("booking", "cancel")) => Store.cancelBooking[R](json(r).getOrElse("ref", ""), now).flatMap {
+          case None => pure(refused("no such booking", 404))
+          case Some(b) => b.email.fold(pure(false))(to => Mail.toClient[R](to, Letters.unbooked(c, b)))
+              .map(sent => ok(Json.obj("sent" -> Json.bool(sent))))
+        }
       case _ => pure(Response.notFound())
+
+  private val day = 86400000L
 
   /** an order as the workshop shows it: its fields, its service's name and price, where it may go next */
   def described(c: Conf, o: Order): Json.Obj =

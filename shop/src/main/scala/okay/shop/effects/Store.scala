@@ -27,6 +27,16 @@ enum Store[X]:
   case KeepSession(hash: String, signin: Signin) extends Store[Unit]
   case Session(hash: String, now: Long) extends Store[Option[Signin]]
   case EndSession(hash: String) extends Store[Unit]
+  /** a booking taken — if its start is still free for its master, checked in the same step: `Left("taken")` else */
+  case Book(booking: Booking, schedule: Schedule, now: Long) extends Store[Either[String, Booking]]
+  case FindBooking(ref: String) extends Store[Option[Booking]]
+  /** the bookings (any status) starting from `from` to `until` */
+  case Bookings(from: Long, until: Long) extends Store[Vector[Booking]]
+  /** a booking moved to `start`, if free for it (itself not in the way) */
+  case Rebook(ref: String, start: Long, schedule: Schedule, now: Long) extends Store[Either[String, Booking]]
+  case CancelBooking(ref: String, now: Long) extends Store[Option[Booking]]
+  /** the bookings whose reminder is due at `now`, marked reminded; the next reminder's alarm set */
+  case Remind(now: Long) extends Store[Vector[Booking]]
 
 object Store:
   def place[R[_]](o: Order)(using In[Store, R]): Unit ! R = perform[Store](Place(o))
@@ -39,3 +49,13 @@ object Store:
   def inquiries[R[_]](limit: Int)(using In[Store, R]): Vector[Inquiry] ! R = perform[Store](Inquiries(limit))
   def allow[R[_]](key: String, max: Int, window: Long, now: Long)(using In[Store, R]): Boolean ! R =
     perform[Store](Allow(key, max, window, now))
+  def book[R[_]](b: Booking, s: Schedule, now: Long)(using In[Store, R]): Either[String, Booking] ! R =
+    perform[Store](Book(b, s, now))
+  def booking[R[_]](ref: String)(using In[Store, R]): Option[Booking] ! R = perform[Store](FindBooking(ref))
+  def bookings[R[_]](from: Long, until: Long)(using In[Store, R]): Vector[Booking] ! R =
+    perform[Store](Bookings(from, until))
+  def rebook[R[_]](ref: String, start: Long, s: Schedule, now: Long)(using In[Store, R]): Either[String, Booking] ! R =
+    perform[Store](Rebook(ref, start, s, now))
+  def cancelBooking[R[_]](ref: String, now: Long)(using In[Store, R]): Option[Booking] ! R =
+    perform[Store](CancelBooking(ref, now))
+  def remind[R[_]](now: Long)(using In[Store, R]): Vector[Booking] ! R = perform[Store](Remind(now))

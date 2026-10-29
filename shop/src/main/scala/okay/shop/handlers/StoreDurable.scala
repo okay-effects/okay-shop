@@ -3,6 +3,7 @@ package okay.shop.handlers
 import okay.effects.json.{Descent, Json}
 import okay.scala3.*
 import okay.serverless.{Durable, Storage}
+import okay.shop.booking.Slots
 import okay.shop.effects.*
 import okay.shop.model.*
 
@@ -16,6 +17,7 @@ import okay.shop.model.*
  *   site/hit/<key>/<window>      a rate limit's count in a window
  *   site/link/<hash>             a sign-in link not yet used: {email, until}
  *   site/session/<hash>          a session: {email, until}
+ *   site/booking/<ref>           a booking as it is now (its master, start, minutes, status, reminded)
  *
  * A change is ONE `Durable.step`: the event and the order it moves written together or not at all; a reading is a
  * read of what is committed, no step. Only the SHA-256 of a link's or a session's secret is a key
@@ -28,6 +30,8 @@ object StoreDurable:
   private def hits(key: String) = s"$scope/hit/$key/"
   private def link(hash: String) = s"$scope/link/$hash"
   private def session(hash: String) = s"$scope/session/$hash"
+  private def bookingKey(ref: String) = s"$scope/booking/$ref"
+  private val day = 86400000L
 
   def run[R[_], Rest[_], A](p: A ! R)(using Split[Store, R, Rest], In[Storage, Rest]): A ! Rest =
     handle(p, Handler.general[Store, Rest, A, A](pure)([X] => (op: Store[X], k: X => A ! Rest) =>
@@ -53,6 +57,20 @@ object StoreDurable:
   private def append[D[_]: Has[Durable]](ref: String, at: Long, e: Event): Unit ! D =
     Durable.keys[D](events(ref)).flatMap(ks => Durable.put[Json, D](f"${events(ref)}${ks.size + 1}%06d",
       Json.obj("at" -> Json.num(at), "event" -> Codec.event(e))))
+
+  /** every booking, as the step sees them */
+  private def allBookings[D[_]: Has[Durable]]: Vector[Booking] ! D =
+    Durable.keys[D](s"$scope/booking/").flatMap(keys => keys.foldLeft(pure[Vector[Booking], D](Vector.empty))(
+      (acc, k) => acc.flatMap(bs => Durable.get[Json, D](k).map {
+        case Some(j: Json.Obj) => bs :+ Codec.booking(j)
+        case _ => bs
+      })))
+
+  /** the object's alarm at the earliest reminder still due: a day before a booking not yet reminded */
+  private def nextReminder[D[_]: Has[Durable]](all: Vector[Booking], now: Long): Unit ! D =
+    all.filter(b => b.active && !b.reminded && b.start > now).map(_.start - day).minOption match
+      case Some(at) => Durable.wakeAt[D](at.max(now + 1000))
+      case None => unit[D]
 
   private def answer[R[_], X](op: Store[X])(using In[Storage, R]): X ! R =
     type D[Y] = (R + Durable)[Y]
@@ -97,3 +115,39 @@ object StoreDurable:
       case Store.Session(hash, now) => read[R](List(session(hash))).map(_.get(session(hash)).map(signin)
           .filter(_.until >= now))
       case Store.EndSession(hash) => step[Unit](Durable.delete[D](session(hash)))
+      case Store.Book(b, schedule, now) => step[Either[String, Booking]](allBookings[D].flatMap { all =>
+          if !Slots.isFree(schedule, b.minutes, all, now, b.start) then pure(Left("taken"))
+          else
+            // a reminder due already (booked within a day) is not sent: the booking's own letter says the time
+            val kept = b.copy(reminded = b.start - day <= now)
+            Durable.put[Json, D](bookingKey(b.ref), Codec.booking(kept))
+              .andThen(nextReminder[D](all :+ kept, now)).as(Right(kept))
+        })
+      case Store.FindBooking(ref) => read[R](List(bookingKey(ref))).map(_.get(bookingKey(ref)).map(Codec.booking))
+      case Store.Bookings(from, until) => readAll[R](s"$scope/booking/").map(_.map((_, j) => Codec.booking(j))
+          .filter(b => b.start >= from && b.start < until).sortBy(_.start).toVector)
+      case Store.Rebook(ref, start, schedule, now) => step[Either[String, Booking]](allBookings[D].flatMap { all =>
+          all.find(_.ref == ref).filter(_.active) match
+            case None => pure(Left("no such booking"))
+            case Some(b) =>
+              val others = all.filterNot(_.ref == ref)
+              if !Slots.isFree(schedule, b.minutes, others, now, start) then pure(Left("taken"))
+              else
+                val moved = b.copy(start = start, reminded = start - day <= now)
+                Durable.put[Json, D](bookingKey(ref), Codec.booking(moved))
+                  .andThen(nextReminder[D](others :+ moved, now)).as(Right(moved))
+        })
+      case Store.CancelBooking(ref, now) => step[Option[Booking]](allBookings[D].flatMap { all =>
+          all.find(_.ref == ref).filter(_.active) match
+            case None => pure(None)
+            case Some(b) =>
+              val cancelled = b.copy(status = BookingStatus.Cancelled)
+              Durable.put[Json, D](bookingKey(ref), Codec.booking(cancelled))
+                .andThen(nextReminder[D](all.filterNot(_.ref == ref) :+ cancelled, now)).as(Some(cancelled))
+        })
+      case Store.Remind(now) => step[Vector[Booking]](allBookings[D].flatMap { all =>
+          val due = all.filter(b => b.active && !b.reminded && b.start - day <= now && b.start > now)
+          val marked = due.map(_.copy(reminded = true))
+          marked.foldLeft(unit[D])((p, b) => p.andThen(Durable.put[Json, D](bookingKey(b.ref), Codec.booking(b))))
+            .andThen(nextReminder[D](all.filterNot(b => due.exists(_.ref == b.ref)) ++ marked, now)).as(marked)
+        })

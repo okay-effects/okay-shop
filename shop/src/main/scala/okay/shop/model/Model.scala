@@ -26,21 +26,25 @@ object T:
   /** the same in every language */
   def all(s: String): T = T(s, s, s, s)
 
-/** what a site sells: the atelier (things to mend, sent by InPost), or IT work */
+/** what a site sells: the atelier (things to mend, sent by InPost), IT work, or a salon's time (a barber's: booked) */
 enum Kind:
-  case Atelier, It
+  case Atelier, It, Salon
 
 /** AN OFFER: its key, its name and description in the four languages, its price in grosze (0: quoted) */
-final case class Offer(key: String, name: T, description: T, price: Long, order: Int):
+final case class Offer(key: String, name: T, description: T, price: Long, order: Int, minutes: Int = 0):
   def priced: Boolean = price > 0
+  /** booked for a time, not ordered: the service lasts `minutes` */
+  def bookable: Boolean = minutes > 0
   /** «40 zł», as busi's `priceShort` */
   def priceShort: String = Money.zl(price)
 
 /** A SITE: what its pages and letters say of it */
 final case class Site(id: String, slug: String, name: String, tagline: T, lang: Lang, logoText: String,
                       color: String, contact: T, kind: Kind, refPrefix: String, domain: String,
-                      offers: Vector[Offer]):
+                      offers: Vector[Offer], schedule: Option[Schedule] = None):
   def clothing: Boolean = kind == Kind.Atelier
+  /** whether `o` is booked here: it lasts, and the shop has a schedule */
+  def books(o: Offer): Boolean = o.bookable && schedule.isDefined
   def offer(key: String): Option[Offer] = offers.find(_.key == key)
   def origin: String = s"https://$domain"
 
@@ -193,3 +197,42 @@ object Civil:
     val (y, m, d) = ymd(Math.floorDiv(millis, 86400000L))
     val secs = Math.floorMod(millis / 1000, 86400L)
     f"$y%04d-$m%02d-$d%02dT${secs / 3600}%02d:${secs / 60 % 60}%02d:${secs % 60}%02dZ"
+
+/** a span of a day, in minutes from its midnight (Poland's time) */
+final case class Span(from: Int, to: Int)
+
+object Span:
+  /** `10:00` as minutes */
+  def minutes(hhmm: String): Option[Int] = hhmm.trim.split(':') match
+    case Array(h, m) => for hh <- h.toIntOption; mm <- m.toIntOption if hh >= 0 && hh <= 24 && mm >= 0 && mm < 60
+      yield hh * 60 + mm
+    case _ => None
+  def label(minutes: Int): String = f"${minutes / 60}%02d:${minutes % 60}%02d"
+
+/**
+ * WHEN A SHOP TAKES BOOKINGS: its week (each day's spans, 1 Monday … 7 Sunday), its exceptions by date (`2026-12-24`:
+ * no span is closed), the minutes between starts, how many days ahead, how soon from now; its masters (one in v1)
+ */
+final case class Schedule(week: Map[Int, Vector[Span]], exceptions: Map[String, Vector[Span]], step: Int = 15,
+                          horizon: Int = 21, lead: Int = 60, masters: Vector[String] = Vector("main")):
+  def master: String = masters.head
+  /** the spans of a date (`2026-11-03`), its weekday 1–7 */
+  def spans(date: String, weekday: Int): Vector[Span] =
+    exceptions.getOrElse(date, week.getOrElse(weekday, Vector.empty))
+
+enum BookingStatus(val key: String):
+  case Booked extends BookingStatus("booked")
+  case Cancelled extends BookingStatus("cancelled")
+
+object BookingStatus:
+  def parse(s: String): Option[BookingStatus] = values.find(_.key == s)
+
+/** A BOOKING: a service of a master from `start` (a UTC instant) for `minutes`; who, how reached, the consent, its
+ * secret key (the manage link's), whether reminded */
+final case class Booking(ref: String, key: String, service: String, master: String, start: Long, minutes: Int,
+                         name: String, contact: String, lang: Lang, consent: Consent, placed: Long,
+                         status: BookingStatus = BookingStatus.Booked, reminded: Boolean = false):
+  def end: Long = start + minutes * 60000L
+  def active: Boolean = status == BookingStatus.Booked
+  def overlaps(from: Long, until: Long): Boolean = active && start < until && from < end
+  def email: Option[String] = Contact.email(contact)

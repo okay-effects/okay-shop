@@ -27,6 +27,10 @@ enum Staff[X]:
   case Letter(ref: String, subject: String, body: String) extends Staff[Either[String, Boolean]]
   case Inquiries() extends Staff[Either[String, Vector[Inquiry]]]
   case Out() extends Staff[Unit]
+  /** the bookings from a day ago on, each with its service's name */
+  case Bookings() extends Staff[Either[String, Vector[(Booking, String)]]]
+  /** a booking cancelled by the staff: whether its client was mailed */
+  case Unbook(ref: String) extends Staff[Either[String, Boolean]]
 
 object Staff:
   def me[R[_]: Has[Staff]]: Option[String] ! R = perform[Staff](Me())
@@ -39,6 +43,8 @@ object Staff:
     perform[Staff](Letter(ref, subject, body))
   def inquiries[R[_]: Has[Staff]]: Either[String, Vector[Inquiry]] ! R = perform[Staff](Inquiries())
   def out[R[_]: Has[Staff]]: Unit ! R = perform[Staff](Out())
+  def bookings[R[_]: Has[Staff]]: Either[String, Vector[(Booking, String)]] ! R = perform[Staff](Bookings())
+  def unbook[R[_]: Has[Staff]](ref: String): Either[String, Boolean] ! R = perform[Staff](Unbook(ref))
 
 /** A PERSON, NOT A BOT: Turnstile's token for the sign-in form — the page's widget answers it, a test a constant */
 enum Human[X]:

@@ -20,8 +20,8 @@ class WorkshopSuite extends munit.FunSuite:
       case okay.http.Fetch.Call(m, url, h, body, answer) => answer(f(okay.http.Fetch.request(m, url, h, body)))))
 
   private def play(w: World, b: Browser, acts: Act*): Played[Unit] =
-    Play(steps(Human.always("token")(answering(b.fetch)(StaffApi.run(w.conf.origin)(Workshop.main[T](Shown(w.site.name),
-      false))))), acts*)
+    Play(steps(Human.always("token")(answering(b.fetch)(StaffApi.run(w.conf.origin)(Workshop.main[T](
+      Shown(w.site.name, w.site.schedule.isDefined), false))))), acts*)
   private def texts(s: Option[Screen[?]]): String = s.toList.flatMap(_.parts).map(_.toString).mkString("\n")
 
   /** signed in through the screens: the email typed, the link from the letter posted */
@@ -79,4 +79,26 @@ class WorkshopSuite extends munit.FunSuite:
     assertEquals(w.letters.last._1, "anna@example.com")
     val cancelled = play(w, b, open, Act.press("Скасувати"), Act.press("Скасувати замовлення", "reason" -> "duplikat"))
     assertEquals(cancelled.at.map(_.title), Some(s"$ref · ${Status.Cancelled.label(Lang.uk)}"))
+  }
+
+  test("the bookings: listed, opened, cancelled by the staff, the client mailed; a shop without them has no button") {
+    val w = World("salon")
+    val start = w.now + 19 * 3600000L // Friday 10:00 in Warsaw
+    val booked = w.json(w.post("/api/book", "service" -> "cut", "start" -> start.toString, "name" -> "Anna",
+      "contact" -> "anna@example.com", "rodo_consent" -> "on", "lang" -> "pl", "cf-turnstile-response" -> "t"))
+    val ref = booked("ref")
+    val b = Browser(w)
+    signIn(w, b)
+    val list = play(w, b, Act.press("Записи"))
+    assertEquals(list.at.map(_.title), Some("Записи · Test Salon"))
+    val open = Act.choose("Відкрити", ref)
+    assertEquals(play(w, b, Act.press("Записи"), open).at.map(_.title), Some(s"$ref · 2026-10-30 10:00"))
+    val cancelled = play(w, b, Act.press("Записи"), open, Act.press("Скасувати запис"))
+    assert(texts(cancelled.at).contains("клієнту надіслано лист"), texts(cancelled.at))
+    assertEquals(w.letters.last._1, "anna@example.com")
+    assertEquals(w.post("/api/booking/cancel", "ref" -> ref, "k" -> booked("key")).status, 409)
+    val atelier = World()
+    val other = Browser(atelier)
+    signIn(atelier, other)
+    assert(!play(atelier, other).at.toList.flatMap(_.buttons).map(_.toString).exists(_.contains("Записи")))
   }

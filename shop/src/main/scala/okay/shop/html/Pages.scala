@@ -154,14 +154,18 @@ $scripts
     val clothing = site.clothing
     val desc = if o.description(l).isEmpty then "" else s"""<p class="lead">${tt(o.description)}</p>"""
     val pn = o.priceShort
+    val books = site.books(o)
     val priceChip =
-      if !clothing then s"""<span class="chip accent">${t("Цена договорная", "Cena do uzgodnienia",
+      if site.kind == Kind.It then s"""<span class="chip accent">${t("Цена договорная", "Cena do uzgodnienia",
         "Price by agreement", "Ціна договірна")}</span>"""
       else if o.priced then s"""<span class="chip accent">${t("от " + pn, "od " + pn, "from " + pn, "від " +
           "" + pn)}</span>"""
       else s"""<span class="chip accent">${t("Цена по осмотру", "Cena po obejrzeniu", "Price once we see it",
         "Ціна після огляду")}</span>"""
-    val howChip = if clothing then s"""<span class="chip">${t("Принимаем, оцениваем, согласуем — и в работу",
+    val howChip = if books then s"""<span class="chip">${t(s"${o.minutes} мин · запись онлайн",
+        s"${o.minutes} min · rezerwacja online", s"${o.minutes} min · book online",
+        s"${o.minutes} хв · запис онлайн")}</span>"""
+      else if clothing then s"""<span class="chip">${t("Принимаем, оцениваем, согласуем — и в работу",
         "Przyjmujemy, wyceniamy, uzgadniamy — i do pracy", "We take it in, assess, agree — then start",
         "Приймаємо, оцінюємо, узгоджуємо — і в роботу")}</span>"""
       else s"""<span class="chip">${t("Обсудим объём и сроки до старта", "Omówimy zakres i terminy przed startem",
@@ -181,7 +185,7 @@ $scripts
     </section>
     <section class="offers" style="margin-top: 1vh">
       <div class="formcard">
-      <div id="offForm">
+      ${if books then bookingForm(at, o) else s"""<div id="offForm">
         <p class="label">${t("Оформить заказ", "Złóż zamówienie", "Place the order", "Оформити замовлення")}</p>
         <form data-send="order" data-form="offForm" data-done="offDone">
           <input type="hidden" name="offerKey" value="${e(o.key)}">
@@ -189,7 +193,7 @@ $scripts
           ${offerFields(clothing, site.slug, o.key, at.sitekey)}
         </form>
         ${slaNote(clothing)}
-      </div>
+      </div>"""}
       <div class="done" id="offDone" style="display:none; text-align:left; padding:10px 0">
         <div class="big">${t("Спасибо!", "Dziękujemy!", "Thank you!", "Дякуємо!")}</div>
         <p>${t("Заявка принята — отвечу в течение рабочего дня. Без звонков.",
@@ -206,6 +210,28 @@ $scripts
 $scripts
 </body></html>
 """
+
+  /** a bookable service's form: the free starts by day (filled by the pages' script from `/api/slots`), who, the
+   * consent, Turnstile — posted to `/api/book` */
+  def bookingForm(at: At, o: Offer)(using l: Lang): String =
+    s"""<style>.slots .days,.slots .times{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.slots .day,.slots .slot{font:inherit;font-size:14px;padding:7px 11px;border-radius:9px;cursor:pointer;
+background:transparent;color:inherit;border:1px solid rgba(127,127,127,.4)}
+.slots .on{border-color:currentColor;box-shadow:inset 0 0 0 1px currentColor}</style>
+      <div id="offForm">
+        <p class="label">${t("Выберите время", "Wybierz termin", "Choose a time", "Оберіть час")}</p>
+        <form data-send="book" data-form="offForm" data-done="offDone">
+          <input type="hidden" name="service" value="${e(o.key)}">
+          <input type="hidden" name="lang" value="${l.code}">
+          <input type="hidden" name="start" value="">
+          <div class="fld slots" data-slots="${e(o.key)}"><span>${t("Загружаем свободное время…",
+            "Wczytujemy wolne terminy…", "Loading the free times…", "Завантажуємо вільний час…")}</span></div>
+          $contactFields
+          ${rodoConsent(at.site.slug)}
+          ${turnstile(at.sitekey)}
+          <button class="send" type="submit">${t("Записаться", "Zarezerwuj", "Book", "Записатися")}</button>
+        </form>
+      </div>"""
 
   // ---- NOT FOUND: in the site's look, the four languages' way home
 
@@ -234,7 +260,8 @@ $scripts
 <title>Майстерня · ${e(site.name)}</title><link rel="icon" href="data:,"></head><body>
 <header><div class="bar"><span class="brand">Майстерня</span><span class="tag">${e(site.name)}</span></div></header>
 <main id="app" data-name="${e(site.name)}" data-accent="${e(site.color)}"
-  data-deep="${if site.clothing then "#3a2a22" else "#0c1420"}"></main>
+  data-deep="${if site.clothing then "#3a2a22" else "#0c1420"}"${if site.schedule.isDefined then
+    " data-books=\"yes\"" else ""}></main>
 <div class="cf-turnstile" data-sitekey="${e(sitekey)}" data-appearance="interaction-only"
   style="display:flex;justify-content:center;margin:12px 0"></div>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>

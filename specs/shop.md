@@ -55,6 +55,38 @@ foot's own colour and size (`Look.staffLink`, on by default; a look's own page p
 workshop is not for search engines: its frame says `noindex`, the static files `_headers` give
 `X-Robots-Tag: noindex` for `/workshop/*`, and `robots.txt` disallows `/workshop/` and `/api/`.
 
+## Booking (operator, 2026-10-29: a single shop's feature, so it is here)
+
+A shop may take bookings for services that last: a barber's cut, a fitting. One master per shop in v1; the model
+names the master everywhere, so more come without a change of data.
+
+- **The content says it.** A service with `minutes: 30` in `site.md`'s services is bookable; a fenced block
+  ```` ```yaml schedule ```` gives the week (`- day: mon` `from: 10:00` `to: 18:00`, a day may come twice) and the
+  exceptions (`- date: 2026-12-24` `closed: true`, or its own `from`/`to`); the front matter may say `step: 15`
+  (minutes between starts), `horizon: 21` (days ahead, 14–28) and `lead: 60` (minutes from now to the first). Times
+  are Poland's (`Day`), stored as UTC instants.
+- **Slots** (`Slots.free`, pure): each day of the horizon, its hours by the week or its exception, starts every `step`
+  minutes where the service fits before the hours end, from `lead` minutes on, none overlapping an active booking
+  of the master. `GET /api/slots?service=<key>` answers them by day.
+- **A booking** (`POST /api/book {service, start, name, contact, rodo_consent, lang, turnstile}`): Turnstile, 5 per
+  IP in 10 minutes, the consent kept as an order's; `Store.Book` checks the slot against the bookings IN THE SAME
+  `Durable` step — the shop's object is one writer, so two people never get one slot; a slot taken meanwhile is
+  refused (`409 taken`). Answered `{ref, key, start}`; the client mailed (when the contact is an email) with the
+  time and the link to manage it, the owner mailed.
+- **Manage** (`/{lang}/booking?ref=&k=`, the letter's link): the booking, cancel (`POST /api/booking/cancel`), move
+  to another free slot (`POST /api/booking/move`, the slot picker again); the owner mailed of each.
+- **A reminder 24 h before**: every change of the bookings sets the object's alarm (`Durable.wakeAt`) at the earliest
+  reminder due; the alarm (`Actor.alarm`) takes the bookings whose reminder is due, marks them reminded in one step,
+  mails each client, and sets the next alarm.
+- **The master's calendar**: `/calendar/<CALENDAR_KEY>.ics` — the active bookings from a week ago to the horizon as
+  iCalendar events (30 days ahead), to subscribe to from a phone; a wrong key, or none set, is a 404. The
+  reminders' links use the `ORIGIN` var (default `https://<domain>`): an alarm has no request to say it.
+- **The workshop** shows the bookings from a day ago on ("Записи", only when the shop has a schedule): time,
+  service, client, contact; a booking cancelled there mails the client.
+- **The pages**: a bookable service's page has the slot picker (days, then their starts; the pages' script reads
+  `/api/slots`) and the booking form in place of the order form; its done panel shows the ref, the time and the
+  manage link. Tests: `BookingSuite` (the fictional `salon` fixture) and the workshop's `WorkshopSuite`.
+
 ## Open core (operator, 2026-10-29)
 
 okay-shop is public (Apache-2.0) and is the engine of ONE site: its storefront, orders, tracking and workshop — and,

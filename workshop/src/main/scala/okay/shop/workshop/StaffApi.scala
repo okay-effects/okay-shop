@@ -35,6 +35,10 @@ object StaffApi:
       case Staff.Inquiries() => get("inquiries").map(r => read(r)(o =>
         arr(o, "inquiries").collect { case j: Json.Obj => Codec.inquiry(j) }))
       case Staff.Out() => post("out").map(_ => ())
+      case Staff.Bookings() => get("bookings").map(r => read(r)(o => arr(o, "bookings").collect { case j: Json.Obj =>
+        Codec.booking(j) -> str(j, "serviceName") }))
+      case Staff.Unbook(ref) => post("booking/cancel", "ref" -> ref)
+        .map(r => read(r)(o => o.get("sent").contains(Json.Bool(true))))
 
   private def obj(r: Response): Option[Json.Obj] =
     Descent.parse(r.text).toOption.collect { case o: Json.Obj => o }

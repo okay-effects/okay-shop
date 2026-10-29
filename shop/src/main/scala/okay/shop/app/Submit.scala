@@ -2,6 +2,7 @@ package okay.shop.app
 
 import okay.effects.json.{Descent, Json}
 import okay.scala3.*
+import okay.http.Query
 import okay.serverless.cloud.{Fetch, Request, text}
 import okay.shop.model.{Lang, T}
 
@@ -13,6 +14,8 @@ import okay.shop.model.{Lang, T}
 object Submit:
   enum Outcome:
     case Placed(ref: String, blik: Option[String], price: Option[String], paczkomat: Option[String])
+    /** a booking made or moved: its ref, its time as the client reads it, the link that manages it */
+    case Booked(ref: String, when: String, manage: String)
     /** refused, and why: `name`, `contact`, `consent`, `captcha`, `limit`, … — or the network */
     case Refused(why: String)
 
@@ -22,11 +25,42 @@ object Submit:
       .map { r =>
         val j = Descent.parse(r.text).toOption.collect { case o: Json.Obj => o }
         def s(k: String) = j.flatMap(_.get(k)).collect { case Json.Str(v) => v }
-        if r.status == 200 then s("ref").fold(Outcome.Refused("answer"))(ref => Outcome.Placed(ref, s("blik"),
-             s("price"),
-          s("paczkomat")))
-        else Outcome.Refused(s("error").getOrElse(if r.status == 0 then "network" else s"status ${r.status}"))
+        if r.status != 200 then Outcome.Refused(s("error").getOrElse(if r.status == 0 then "network"
+          else s"status ${r.status}"))
+        else (s("ref"), s("manage")) match
+          case (None, _) => Outcome.Refused("answer")
+          case (Some(ref), Some(m)) => Outcome.Booked(ref, s("when").getOrElse(""), m)
+          case (Some(ref), None) => Outcome.Placed(ref, s("blik"), s("price"), s("paczkomat"))
       }
+
+  /** a day of free starts, as `/api/slots` answers it */
+  final case class Day(date: String, weekday: Int, slots: Vector[(Long, String)])
+
+  /** the free starts of a bookable service, by day; none when the shop does not answer */
+  def slots[R[_]](base: String, service: String)(using In[Fetch, R]): Vector[Day] ! R =
+    Fetch[R](base, Request.get("/api/slots?service=" + Query.encode(service))).map { r =>
+      def days(j: Json) = j("days").list.map(d =>
+        Day(d("date").string, d("weekday").int, d("slots").list.map(x => x("start").long -> x("label").string)))
+      if r.status != 200 then Vector.empty
+      else Descent.parse(r.text).toOption.flatMap(j => scala.util.Try(days(j)).toOption).getOrElse(Vector.empty)
+    }
+
+  /** a day's button: the weekday short and the date (`2026-11-03` → `wt 03.11`) */
+  def dayLabel(l: Lang, d: Day): String =
+    val names = T("пн вт ср чт пт сб вс", "pn wt śr cz pt sb nd", "Mon Tue Wed Thu Fri Sat Sun",
+      "пн вт ср чт пт сб нд")(l).split(' ')
+    val w = if d.weekday >= 1 && d.weekday <= 7 then names(d.weekday - 1) else ""
+    d.date.split('-') match
+      case Array(_, m, dd) => s"$w $dd.$m"
+      case _ => d.date
+
+  /** the done panel of a booking: its time, and where it is managed */
+  def booked(l: Lang, when: String): String = T(s"Вы записаны: $when. Ссылка, чтобы перенести или отменить:",
+    s"Zarezerwowano: $when. Link do przeniesienia lub odwołania:", s"Booked: $when. To move or cancel it:",
+    s"Ви записані: $when. Посилання, щоб перенести або скасувати:")(l)
+
+  def noSlots(l: Lang): String = T("Свободного времени пока нет — напишите нам.", "Brak wolnych terminów — napisz do " +
+    "nas.", "No free times yet — write to us.", "Вільного часу поки немає — напишіть нам.")(l)
 
   /** the BLIK line of the done panel: the prepayment when the offer has a price, else the amount to be confirmed */
   def blik(l: Lang, phone: String, price: Option[String]): String = price match
@@ -53,5 +87,8 @@ object Submit:
         "The check did not pass — please try again.", "Перевірку не пройдено — спробуйте ще раз.")(l)
     case "limit" => T("Слишком много заявок — попробуйте через 10 минут.", "Zbyt wiele zgłoszeń — spróbuj za 10 minut.",
         "Too many requests — please try again in 10 minutes.", "Забагато заявок — спробуйте за 10 хвилин.")(l)
+    case "start" => T("Выберите время.", "Wybierz termin.", "Please choose a time.", "Оберіть час.")(l)
+    case "taken" => T("Это время уже заняли — выберите другое.", "Ten termin jest już zajęty — wybierz inny.",
+        "That time was just taken — please choose another.", "Цей час уже зайняли — оберіть інший.")(l)
     case _ => T("Не удалось отправить, попробуйте ещё раз.", "Nie udało się wysłać, spróbuj ponownie.",
         "Could not send, please try again.", "Не вдалося надіслати, спробуйте ще раз.")(l)

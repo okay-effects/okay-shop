@@ -64,3 +64,14 @@ object Codec:
   }
 
   def print(j: Json): String = Json.print(j)
+
+  def booking(b: Booking): Json.Obj = Json.obj("ref" -> Json.str(b.ref), "key" -> Json.str(b.key),
+    "service" -> Json.str(b.service), "master" -> Json.str(b.master), "start" -> Json.num(b.start),
+    "minutes" -> Json.num(b.minutes), "name" -> Json.str(b.name), "contact" -> Json.str(b.contact),
+    "lang" -> Json.str(b.lang.code), "consentAt" -> Json.num(b.consent.at), "policy" -> Json.str(b.consent.policy),
+    "placed" -> Json.num(b.placed), "status" -> Json.str(b.status.key), "reminded" -> Json.bool(b.reminded))
+
+  def booking(j: Json.Obj): Booking = Booking(s(j, "ref"), s(j, "key"), s(j, "service"), s(j, "master"),
+    n(j, "start"), n(j, "minutes").toInt, s(j, "name"), s(j, "contact"), Lang.parse(s(j, "lang")).getOrElse(Lang.pl),
+    Consent(n(j, "consentAt"), s(j, "policy")), n(j, "placed"),
+    BookingStatus.parse(s(j, "status")).getOrElse(BookingStatus.Booked), b(j, "reminded"))

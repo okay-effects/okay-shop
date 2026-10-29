@@ -28,6 +28,12 @@ object Api:
       case ("POST", List(l, "track")) if Lang.parse(l).isDefined => trackForm(c, Lang.parse(l).get, r)
       case ("GET", List(l, "receipt")) if Lang.parse(l).isDefined => receipt(c, r)
       case (_, "workshop" :: "api" :: rest) => Workshop.answer(c, r, rest)
+      case ("GET", List("api", "slots")) => Bookings.slots(c, r)
+      case ("POST", List("api", "book")) => Bookings.book(c, r)
+      case ("POST", List("api", "booking", "cancel")) => Bookings.cancel(c, r)
+      case ("POST", List("api", "booking", "move")) => Bookings.move(c, r)
+      case ("GET", List(l, "booking")) if Lang.parse(l).isDefined => Bookings.page(c, Lang.parse(l).get, r)
+      case ("GET", List("calendar", file)) if file.endsWith(".ics") => Bookings.calendar(c, file.stripSuffix(".ics"))
       case _ => pure(Response.notFound())
 
   def ip(r: Request): String = Web.ip(r)

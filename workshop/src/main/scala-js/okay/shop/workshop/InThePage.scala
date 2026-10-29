@@ -23,7 +23,7 @@ object InThePage:
   def main(args: Array[String]): Unit =
     val root = dom.document.getElementById("app")
     // the site as its page says it: its name, its accent, the deep colour of its bar
-    val site = Shown(root.getAttribute("data-name"))
+    val site = Shown(root.getAttribute("data-name"), root.getAttribute("data-books") == "yes")
     val accent = root.getAttribute("data-accent")
     val deep = root.getAttribute("data-deep")
     val expired = dom.window.location.hash == "#expired"

@@ -6,7 +6,7 @@ import okay.shop.model.*
 /** THE CONFIGURATION a site's program needs beyond its content: where it is answered from (the request's origin —
  * a preview's workers.dev, or the domain), the BLIK phone, the paczkomat, the Turnstile key, who may sign in */
 final case class Conf(site: Site, origin: String, blik: String, paczkomat: String, sitekey: String,
-                      staff: Set[String], contact: String, policy: String)
+                      staff: Set[String], contact: String, policy: String, calendarKey: String = "")
 
 /**
  * THE LETTERS, as busi wrote them (`orders.ssc`, `email.ssc`, `hub.ssc`), fixed: the client's confirmation shows
@@ -162,3 +162,55 @@ object Letters:
         "Увійти до майстерні →</a></p>" +
         "<p style='color:#aaa;font-size:12px;margin-top:24px'>Якщо ви не робили цей запит — просто проігноруйте " +
             "лист.</p>"))
+
+  // ---- BOOKINGS (specs/shop.md "Booking")
+
+  def manageLink(c: Conf, b: Booking): String =
+    s"${c.origin}/${b.lang.code}/booking?ref=${okay.http.Query.encode(b.ref)}&k=${okay.http.Query.encode(b.key)}"
+
+  private def service(c: Conf, b: Booking, l: Lang) = c.site.offer(b.service).map(_.name(l)).getOrElse(b.service)
+
+  /** a letter to the client of a booking: what happened, the time, the service, the link to manage it */
+  private def bookingNote(c: Conf, b: Booking, subject: T, said: T): Note =
+    val l = b.lang
+    val a = accent(c.site)
+    def w(t: T) = t(l)
+    note(s"${w(subject)} — ${c.site.name}", page(a, s"<h2 style='color:$a'>${e(c.site.name)}</h2>" +
+      s"<p>${e(w(said))}</p><table style='border-collapse:collapse;width:100%;margin:16px 0'>" +
+      s"<tr><td style='padding:6px 0;color:#666'>${e(w(T("Когда", "Kiedy", "When", "Коли")))}</td>" +
+      s"<td style='padding:6px 0'><b>${e(Day.time(b.start))}</b> (${b.minutes} min)</td></tr>" +
+      s"<tr><td style='padding:6px 0;color:#666'>${e(w(T("Услуга", "Usługa", "Service", "Послуга")))}</td>" +
+      s"<td style='padding:6px 0'>${e(service(c, b, l))}</td></tr>" +
+      s"<tr><td style='padding:6px 0;color:#666'>№</td><td style='padding:6px 0'>${e(b.ref)}</td></tr></table>" +
+      (if b.active then s"<p><a href='${e(manageLink(c, b))}' style='background:$a;color:#fff;padding:10px 20px;" +
+        "border-radius:8px;text-decoration:none;font-size:14px'>" + e(w(T("Изменить или отменить →",
+        "Zmień lub odwołaj →", "Change or cancel →", "Змінити або скасувати →"))) + "</a></p>" else "") +
+      questions(c, l)), Some(c.contact))
+
+  def booked(c: Conf, b: Booking): Note = bookingNote(c, b,
+    T("Запись подтверждена", "Rezerwacja potwierdzona", "Booking confirmed", "Запис підтверджено"),
+    T("Спасибо! Ждём вас.", "Dziękujemy! Czekamy na Ciebie.", "Thank you! See you then.", "Дякуємо! Чекаємо на вас."))
+  def rebooked(c: Conf, b: Booking): Note = bookingNote(c, b,
+    T("Запись перенесена", "Rezerwacja przeniesiona", "Booking moved", "Запис перенесено"),
+    T("Новое время вашей записи:", "Nowy termin Twojej rezerwacji:", "Your booking's new time:",
+      "Новий час вашого запису:"))
+  def unbooked(c: Conf, b: Booking): Note = bookingNote(c, b,
+    T("Запись отменена", "Rezerwacja odwołana", "Booking cancelled", "Запис скасовано"),
+    T("Ваша запись отменена.", "Twoja rezerwacja została odwołana.", "Your booking is cancelled.",
+      "Ваш запис скасовано."))
+  def reminder(c: Conf, b: Booking): Note = bookingNote(c, b,
+    T("Напоминание: завтра", "Przypomnienie: jutro", "A reminder: tomorrow", "Нагадування: завтра"),
+    T("Напоминаем о вашей записи:", "Przypominamy o Twojej rezerwacji:", "A reminder of your booking:",
+      "Нагадуємо про ваш запис:"))
+
+  /** to the owner: a booking taken, moved, cancelled (in Ukrainian, as the owner's letters are) */
+  private def ownerNote(c: Conf, b: Booking, what: String): Note =
+    def row(k: String, v: String) = if v.isEmpty then "" else s"<p><b>${e(k)}:</b> ${Html.lines(v)}</p>"
+    note(s"📅 $what ${b.ref}: ${Day.time(b.start)} — ${c.site.name}", page(accent(c.site),
+      s"<h2 style='color:${accent(c.site)}'>📅 $what — ${e(c.site.name)}</h2>" + row("Коли", Day.time(b.start)) +
+        row("Послуга", service(c, b, Lang.uk)) + row("Клієнт", b.name) + row("Контакт", b.contact) +
+        row("Номер", b.ref) + row("Згода RODO", s"${Day.time(b.consent.at)} · політика ${b.consent.policy}")),
+      b.email)
+  def bookedOwner(c: Conf, b: Booking): Note = ownerNote(c, b, "Новий запис")
+  def rebookedOwner(c: Conf, b: Booking): Note = ownerNote(c, b, "Запис перенесено")
+  def unbookedOwner(c: Conf, b: Booking): Note = ownerNote(c, b, "Запис скасовано")

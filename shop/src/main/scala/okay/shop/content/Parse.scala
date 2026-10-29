@@ -49,7 +49,8 @@ object Sites:
     val offers = Parse.block(siteMd, "services").map { m =>
       val key = m.getOrElse("key", "")
       Offer(key, words(s"name.$key", m.getOrElse("name", "")), words(s"desc.$key", m.getOrElse("description", "")),
-        Money.parse(m.getOrElse("price", "0")).getOrElse(0L), m.get("order").flatMap(_.toIntOption).getOrElse(0))
+        Money.parse(m.getOrElse("price", "0")).getOrElse(0L), m.get("order").flatMap(_.toIntOption).getOrElse(0),
+        m.get("minutes").flatMap(_.toIntOption).getOrElse(0))
     }.sortBy(_.order)
     val domain = f.getOrElse("domain", s"$id.pl")
     val prefix = f.getOrElse("refPrefix", id.take(3).toUpperCase)
@@ -58,4 +59,25 @@ object Sites:
     Site(id, f.getOrElse("slug", id), f.getOrElse("name", id), words("tagline", tagline),
       f.get("langDefault").flatMap(Lang.parse).getOrElse(Lang.pl), f.getOrElse("logoText", f.getOrElse("name", id)),
       f.getOrElse("color", "#ff6f91"), words("contact", contact),
-      if f.get("lineId").contains("line-atelier") then Kind.Atelier else Kind.It, prefix, domain, offers)
+      f.get("lineId") match
+        case Some("line-atelier") => Kind.Atelier
+        case Some("line-salon") => Kind.Salon
+        case _ => Kind.It,
+      prefix, domain, offers, schedule(f, Parse.block(siteMd, "schedule")))
+
+  private val days = Vector("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+
+  /** the content's schedule: its week and exceptions (a fenced `yaml schedule`), the front matter's step, horizon
+   * and lead; none when the block is not there */
+  def schedule(f: Map[String, String], rows: Vector[Map[String, String]]): Option[Schedule] =
+    Option.when(rows.nonEmpty) {
+      def span(m: Map[String, String]) = for a <- m.get("from").flatMap(Span.minutes); b <- m.get("to")
+        .flatMap(Span.minutes) if a < b yield Span(a, b)
+      val week = rows.flatMap(m => m.get("day").map(d => days.indexOf(d.trim.toLowerCase.take(3)) + 1)
+        .filter(_ > 0).flatMap(d => span(m).map(d -> _))).groupMap(_._1)(_._2)
+      val exceptions = rows.flatMap(m => m.get("date").map(d => d.trim -> (if m.get("closed").contains("true")
+        then None else span(m)))).groupMap(_._1)(_._2).map((d, ss) => d -> ss.flatten)
+      def n(k: String, default: Int, lo: Int, hi: Int) = f.get(k).flatMap(_.toIntOption).map(_.max(lo).min(hi))
+        .getOrElse(default)
+      Schedule(week, exceptions, n("step", 15, 5, 120), n("horizon", 21, 14, 28), n("lead", 60, 0, 2880))
+    }

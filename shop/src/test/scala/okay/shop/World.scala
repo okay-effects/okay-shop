@@ -6,7 +6,7 @@ import okay.scala3.std.Clock
 import okay.http.Query
 import okay.serverless.{Memory, Storage}
 import okay.serverless.cloud.{Request, Response, headerOf, text}
-import okay.shop.app.Api
+import okay.shop.app.{Api, Bookings}
 import okay.shop.effects.*
 import okay.shop.handlers.StoreDurable
 import okay.shop.html.Conf
@@ -21,7 +21,8 @@ final class World(val id: String = "atelier", var human: Boolean = true):
   private var seed = 1L
   val site = Fixtures.site(id)
   val conf = Conf(site, s"https://preview-$id.example.workers.dev", "+48 600 000 000", "TST01A",
-    "1x00000000000000000000AA", Set("staff@example.com"), "atelier@example.com", "2026-10-28")
+    "1x00000000000000000000AA", Set("staff@example.com"), "atelier@example.com", "2026-10-28",
+    "CALENDAR-KEY-0123456789")
 
   type W[X] = (Pure + Storage + Store + Ids + Captcha + Mail + Clock)[X]
 
@@ -31,6 +32,15 @@ final class World(val id: String = "atelier", var human: Boolean = true):
       Clock.virtual(now)(Api.answer[W](conf, r))))))))
     letters ++= kept
     res
+
+  /** the object's alarm, as the cloud fires it: cleared, then the reminders due */
+  def alarm(): Int =
+    storage.alarm = None
+    seed += 1
+    val (kept, (_, n)) = run(storage.handler(StoreDurable.run(Ids.seeded(seed)(Captcha.always(human)(Mail.kept()(
+      Clock.virtual(now)(Bookings.remind[W](conf))))))))
+    letters ++= kept
+    n
 
   private def at(r: Request, headers: (String, String)*): Request =
     r.copy(headers = r.headers ++ (("host" -> conf.origin.stripPrefix("https://")) +: headers).map((k, v) =>

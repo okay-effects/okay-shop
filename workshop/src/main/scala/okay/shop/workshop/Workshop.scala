@@ -11,8 +11,8 @@ import okay.shop.model.*
  * busi's workshop had them. The program asks only `Ui`, `Staff` and `Human`: in the page they are the Laminar face,
  * the site's API and Turnstile; in a test, `Play`, the site's own program on SQLite, a constant
  */
-/** the site as the workshop shows it: its name */
-final case class Shown(name: String)
+/** the site as the workshop shows it: its name, and whether it takes bookings (the «Записи» screen) */
+final case class Shown(name: String, books: Boolean = false)
 
 object Workshop:
   private val uk = Lang.uk
@@ -48,7 +48,7 @@ object Workshop:
 
   private enum OnList:
     case Open(ref: String)
-    case Inquiries, Refresh, Out
+    case Inquiries, Bookings, Refresh, Out
 
   def orders[R[_]: Has[Ui]: Has[Staff]: Has[Human]](site: Shown, said: Option[String]): Unit ! R =
     Staff.orders[R].flatMap {
@@ -62,11 +62,12 @@ object Workshop:
           Column.text[Job]("Послуга")(j => if j.service.nonEmpty then j.service else "заявка з сайту"),
           Column.text[Job]("Ціна")(_.price)).keyedBy(_.order.ref).whenEmpty("Замовлень ще немає.")
         show[OnList, R](Screen[OnList](s"Замовлення · ${site.name}")((said.map(Part.info).toSeq :+ table)*)(
-          Button.select("Відкрити", table)(j => OnList.Open(j.order.ref)),
-          Button("Заявки")(OnList.Inquiries), Button("Оновити")(OnList.Refresh),
-          Button("Вийти", Style.Danger)(OnList.Out))).flatMap {
+          (Seq(Button.select("Відкрити", table)(j => OnList.Open(j.order.ref)), Button("Заявки")(OnList.Inquiries)) ++
+            Option.when(site.books)(Button("Записи")(OnList.Bookings)) ++
+            Seq(Button("Оновити")(OnList.Refresh), Button("Вийти", Style.Danger)(OnList.Out)))*)).flatMap {
           case OnList.Open(ref) => order[R](site, ref, None)
           case OnList.Inquiries => inquiries[R](site)
+          case OnList.Bookings => bookings[R](site, None)
           case OnList.Refresh => orders[R](site, None)
           case OnList.Out => Staff.out[R].flatMap(_ => signIn[R](site, expired = false))
         }
@@ -221,12 +222,55 @@ object Workshop:
         }
     }
 
+  // ---- THE BOOKINGS
+
+  private enum OnBookings:
+    case Open(b: (Booking, String))
+    case Back
+
+  def bookings[R[_]: Has[Ui]: Has[Staff]: Has[Human]](site: Shown, said: Option[Part]): Unit ! R =
+    Staff.bookings[R].flatMap {
+      case Left(why) => orders[R](site, Some(refusal(why)))
+      case Right(bs) =>
+        type B = (Booking, String)
+        val table = Table(bs.toList)(Column.text[B]("Коли")(b => Day.time(b._1.start)),
+          Column.text[B]("Послуга")(b => s"${b._2} · ${b._1.minutes} хв"), Column.text[B]("Клієнт")(_._1.name),
+          Column.text[B]("Контакт")(_._1.contact),
+          Column.text[B]("Стан")(b => if b._1.active then "записано" else "скасовано"),
+          Column.text[B]("№")(_._1.ref)).keyedBy(_._1.ref).whenEmpty("Записів немає.")
+        show[OnBookings, R](Screen[OnBookings](s"Записи · ${site.name}")((said.toSeq :+ table)*)(
+          Button.select("Відкрити", table)(OnBookings.Open(_)), Button("Назад")(OnBookings.Back))).flatMap {
+          case OnBookings.Back => orders[R](site, None)
+          case OnBookings.Open((b, service)) => booking[R](site, b, service)
+        }
+    }
+
+  private enum OnBooking:
+    case Cancel, Back
+
+  private def booking[R[_]: Has[Ui]: Has[Staff]: Has[Human]](site: Shown, b: Booking, service: String): Unit ! R =
+    val details = Part.details(Seq("Коли" -> Day.time(b.start), "Послуга" -> s"$service · ${b.minutes} хв",
+      "Клієнт" -> b.name, "Контакт" -> b.contact, "Мова" -> b.lang.code,
+      "Стан" -> (if b.active then "записано" else "скасовано"),
+      "Згода RODO" -> s"${Day.time(b.consent.at)} · політика ${b.consent.policy}").filter(_._2.nonEmpty)*)
+    val cancel = Option.when(b.active)(Button("Скасувати запис", Style.Danger)(OnBooking.Cancel)).toSeq
+    show[OnBooking, R](Screen[OnBooking](s"${b.ref} · ${Day.time(b.start)}")(details)(
+      (cancel :+ Button("Назад")(OnBooking.Back))*)).flatMap {
+      case OnBooking.Back => bookings[R](site, None)
+      case OnBooking.Cancel => Staff.unbook[R](b.ref).flatMap {
+        case Right(sent) => bookings[R](site, Some(Part.info(if sent then "Запис скасовано, клієнту надіслано лист."
+          else "Запис скасовано.")))
+        case Left(why) => bookings[R](site, Some(Part.problem(refusal(why))))
+      }
+    }
+
   /** the server's word for a refusal, in the workshop's */
   def refusal(why: String): String = why match
     case "captcha" => "Перевірка Turnstile не пройдена — спробуйте ще раз."
     case "limit" => "Забагато спроб — зачекайте 10 хвилин."
     case "sign in" => "Сесія закінчилась — увійдіть знову."
     case "no such order" => "Такого замовлення немає."
+    case "no such booking" => "Такого запису немає (або його вже скасовано)."
     case "no email" => "У клієнта немає email."
     case "no connection" => "Немає зв'язку з сервером."
     case other => s"Відмова: $other"
