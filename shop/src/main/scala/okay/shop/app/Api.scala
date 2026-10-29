@@ -30,6 +30,7 @@ object Api:
       case ("POST", List(l, "track")) if Lang.parse(l).isDefined => trackForm(c, Lang.parse(l).get, r)
       case ("GET", List(l, "receipt")) if Lang.parse(l).isDefined => receipt(c, r)
       case ("GET", List("api", "slots")) => Bookings.slots(c, r)
+      case ("GET", List("api", "area")) => pure(Bookings.area(c, r))
       case ("POST", List("api", "book")) => Bookings.book(c, r)
       case ("POST", List("api", "booking", "cancel")) => Bookings.cancel(c, r)
       case ("POST", List("api", "booking", "move")) => Bookings.move(c, r)

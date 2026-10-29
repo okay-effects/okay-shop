@@ -19,7 +19,9 @@ object Slots:
   /** a local time of Poland (milliseconds of its wall clock since the epoch) as the instant it is */
   def instant(local: Long): Long = local - Day.offset(local - Day.offset(local))
 
-  def free(schedule: Schedule, minutes: Int, taken: Vector[Booking], now: Long): Vector[SlotDay] =
+  /** `before` and `after`: the new booking's own buffer (the master's travel), kept free of others around it */
+  def free(schedule: Schedule, minutes: Int, taken: Vector[Booking], now: Long, before: Int = 0, after: Int = 0)
+    : Vector[SlotDay] =
     val today = Math.floorDiv(now + Day.offset(now), day)
     val earliest = now + schedule.lead * 60000L
     val busy = taken.filter(b => b.active && b.master == schedule.master)
@@ -32,11 +34,12 @@ object Slots:
         span <- schedule.spans(date, weekday)
         t <- span.from to (span.to - minutes) by schedule.step
         start = instant(days * day + t * 60000L)
-        if start >= earliest && !busy.exists(_.overlaps(start, start + minutes * 60000L))
+        if start >= earliest && !busy.exists(_.overlaps(start - before * 60000L, start + (minutes + after) * 60000L))
       yield Slot(start, Span.label(t))
       SlotDay(date, weekday, starts)
     }
 
   /** whether `start` is one of the free starts of the service now: a booking's check, again, in its step */
-  def isFree(schedule: Schedule, minutes: Int, taken: Vector[Booking], now: Long, start: Long): Boolean =
-    free(schedule, minutes, taken, now).exists(_.slots.exists(_.start == start))
+  def isFree(schedule: Schedule, minutes: Int, taken: Vector[Booking], now: Long, start: Long, before: Int = 0,
+             after: Int = 0): Boolean =
+    free(schedule, minutes, taken, now, before, after).exists(_.slots.exists(_.start == start))

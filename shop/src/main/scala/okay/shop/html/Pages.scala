@@ -172,7 +172,8 @@ $scripts
           "" + pn)}</span>"""
       else s"""<span class="chip accent">${t("Цена по осмотру", "Cena po obejrzeniu", "Price once we see it",
         "Ціна після огляду")}</span>"""
-    val howChip = if books then s"""<span class="chip">${t(s"${o.minutes} мин · запись онлайн",
+    val howChip = if site.work.isDefined then workChips(site, o)
+      else if books then s"""<span class="chip">${t(s"${o.minutes} мин · запись онлайн",
         s"${o.minutes} min · rezerwacja online", s"${o.minutes} min · book online",
         s"${o.minutes} хв · запис онлайн")}</span>"""
       else if clothing then s"""<span class="chip">${t("Принимаем, оцениваем, согласуем — и в работу",
@@ -195,7 +196,7 @@ $scripts
     </section>
     <section class="offers" style="margin-top: 1vh">
       <div class="formcard">
-      ${if books then bookingForm(at, o) else s"""<div id="offForm">
+      ${if site.work.isDefined then modesForm(at, o) else if books then bookingForm(at, o) else s"""<div id="offForm">
         <p class="label">${t("Оформить заказ", "Złóż zamówienie", "Place the order", "Оформити замовлення")}</p>
         <form data-send="order" data-form="offForm" data-done="offDone">
           <input type="hidden" name="offerKey" value="${e(o.key)}">
@@ -242,6 +243,143 @@ background:transparent;color:inherit;border:1px solid rgba(127,127,127,.4)}
           <button class="send" type="submit">${t("Записаться", "Zarezerwuj", "Book", "Записатися")}</button>
         </form>
       </div>"""
+
+  // ---- HOW THE WORK HAPPENS (specs/shop.md "How the work happens"): only for a site with its work
+
+  /** an offer's chips of its modes: its minutes when booked, then each mode it allows */
+  def workChips(site: Site, o: Offer)(using l: Lang): String =
+    val w = site.work.get
+    (if site.books(o) then s"""<span class="chip">${e(s"${o.minutes} min")}</span>""" else "") +
+      w.modesOf(o.key).map(m => s"""<span class="chip">${tt(m.label)}</span>""").mkString
+
+  /** the price of `o` in mode `m`: its own, the mode's difference, the travel fee at the client's */
+  def priceIn(site: Site, o: Offer, m: Mode): Long =
+    val w = site.work.get
+    o.price + w.extra(o.key, m) + (if m == Mode.AtClient then w.area.fold(0L)(_.fee) else 0L)
+
+  /** a location as the client reads it: its name, address, notes, hours, map link */
+  def placeText(site: Site, loc: Location)(using l: Lang): String =
+    val a = loc.address
+    val hours = Work.hoursText(if loc.hours.nonEmpty then loc.hours else site.schedule.fold(Map.empty)(_.week), l)
+    s"""<b>${e(a.name)}</b><br>${e(Vector(a.street, s"${a.postcode} ${a.city}".trim).filter(_.nonEmpty)
+      .mkString(", "))}${if a.notes.isEmpty then "" else s"<br><small>${e(a.notes)}</small>"}${
+      if hours.isEmpty then "" else s"<br><small>${e(hours)}</small>"} · <a href="${e(a.mapLink)}" target="_blank"
+      rel="noopener" style="color:inherit">${t("карта", "mapa", "map", "мапа")}</a>"""
+
+  /** where the master goes, as the client reads it: the places and prefixes, the fee */
+  def areaText(a: Area)(using l: Lang): String =
+    val where = (a.places ++ a.postcodes.map(p => t("индекс ", "kod ", "postcode ", "індекс ") + p + "…"))
+      .mkString(", ")
+    e(where) + (if a.fee > 0 then " · " + t("выезд +", "dojazd +", "travel +", "виїзд +") + e(Money.zl(a.fee))
+      else "")
+
+  /** a service's form with the modes: how (when more than one), then where, then the time — or the order form for a
+   * parcel. The pages' script shows the panel of the mode chosen and asks for its slots */
+  def modesForm(at: At, o: Offer)(using l: Lang): String =
+    val site = at.site
+    val w = site.work.get
+    val booked = site.bookedModes(o)
+    val mail = w.modesOf(o.key).contains(Mode.ByMail) || booked.isEmpty
+    val ways = booked ++ (if mail then Vector(Mode.ByMail) else Vector.empty)
+    val first = ways.head
+    def price(m: Mode) = if o.priced then s""" <small>· ${e(Money.zl(priceIn(site, o, m)))}</small>""" else ""
+    val chooser = if ways.size < 2 then "" else
+      s"""<div class="fld ways"><span>${t("Как?", "Jak?", "How?", "Як?")}</span><div class="opts">${ways.map(m =>
+        s"""<label class="opt"><input type="radio" name="how" value="${m.key}"${if m == first then " checked"
+          else ""}><span>${tt(m.label)}${price(m)}</span></label>""").mkString}</div></div>"""
+    def block(m: Mode, body: String) =
+      s"""<div data-for="${m.key}"${if m == first then "" else " hidden"}>$body</div>"""
+    def dis(m: Mode) = if m == first then "" else " disabled"
+    val shop = if !booked.contains(Mode.AtShop) then "" else
+      val locs = w.locations.filter(x => site.plan(o, Mode.AtShop, x.key).isDefined)
+      block(Mode.AtShop, if locs.size == 1 then
+        s"""<p class="fld where">${placeText(site, locs.head)}<input type="hidden" name="place" value="${
+          e(locs.head.key)}"${dis(Mode.AtShop)}></p>"""
+      else s"""<div class="fld"><span>${t("Где", "Gdzie", "Where", "Де")}</span><div class="opts places">${
+        locs.zipWithIndex.map((x, i) => s"""<label class="opt"><input type="radio" name="place" value="${e(x.key)}"${
+          if i == 0 then " checked" else ""}${dis(Mode.AtShop)}><span>${placeText(site, x)}</span></label>""")
+          .mkString}</div></div>""")
+    val client = if !booked.contains(Mode.AtClient) then "" else
+      val d = dis(Mode.AtClient)
+      block(Mode.AtClient, s"""<p class="fld where">${t("Приезжаем: ", "Dojeżdżamy: ", "We come to: ",
+        "Приїжджаємо: ")}${areaText(w.area.get)}</p>
+          <label class="fld"><span>${t("Улица и номер", "Ulica i numer", "Street and number", "Вулиця і номер")
+          }</span><input name="street" autocomplete="street-address" maxlength="120" required$d></label>
+          <div class="fld" style="display:flex;gap:10px"><label style="flex:1"><span class="sub-l">${t("Индекс",
+          "Kod pocztowy", "Postcode", "Індекс")}</span><input name="postcode" autocomplete="postal-code"
+          placeholder="00-000" pattern="[0-9]{2}-[0-9]{3}" maxlength="6" required$d></label>
+          <label style="flex:2"><span class="sub-l">${t("Город", "Miasto", "City", "Місто")}</span><input name="city"
+          autocomplete="address-level2" maxlength="60" required$d></label></div>
+          <label class="fld"><span>${t("Этаж, домофон, подъезд", "Piętro, domofon, klatka", "Floor, intercom, entrance",
+          "Поверх, домофон, підʼїзд")}</span><input name="notes" maxlength="200"$d></label>
+          <p class="fld area-said" data-area-said role="status" aria-live="polite"></p>""")
+    val online = if !booked.contains(Mode.Online) then "" else block(Mode.Online,
+      s"""<p class="fld where">${w.online.fold("")(x => if x.how == "phone" then t("Мы позвоним вам в выбранное " +
+        "время.", "Zadzwonimy do Ciebie o wybranej porze.", "We call you at the time chosen.", "Ми зателефонуємо " +
+        "вам у вибраний час.") else t("Видеозвонок: ссылку пришлём в подтверждении.", "Rozmowa wideo: link " +
+        "wyślemy w potwierdzeniu.", "A video call: the link comes in the confirmation.", "Відеодзвінок: посилання " +
+        "надішлемо в підтвердженні."))}</p>""")
+    val book = if booked.isEmpty then "" else
+      s"""<style>.slots .days,.slots .times{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.slots .day,.slots .slot{font:inherit;font-size:14px;padding:7px 11px;border-radius:9px;cursor:pointer;
+background:transparent;color:inherit;border:1px solid rgba(127,127,127,.4)}
+.slots .on{border-color:currentColor;box-shadow:inset 0 0 0 1px currentColor}
+.where{font-size:15px;line-height:1.5}.places .opt{align-items:flex-start}
+.sub-l{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+color:var(--mist);margin:0 0 6px}</style>
+      <div data-how-panel="book"${if first == Mode.ByMail then " hidden" else ""}><div id="offForm">
+        <form data-send="book" data-form="offForm" data-done="offDone">
+          <input type="hidden" name="service" value="${e(o.key)}">
+          <input type="hidden" name="lang" value="${l.code}">
+          <input type="hidden" name="start" value="">
+          <input type="hidden" name="mode" value="${(if first == Mode.ByMail then booked.head else first).key}">
+          $shop$client$online
+          <p class="label">${t("Выберите время", "Wybierz termin", "Choose a time", "Оберіть час")}</p>
+          <div class="fld slots" data-slots="${e(o.key)}"><span>${t("Загружаем свободное время…",
+            "Wczytujemy wolne terminy…", "Loading the free times…", "Завантажуємо вільний час…")}</span></div>
+          $contactFields
+          ${rodoConsent(site.slug)}
+          ${turnstile(at.sitekey)}
+          <button class="send" type="submit">${t("Записаться", "Zarezerwuj", "Book", "Записатися")}</button>
+        </form>
+      </div></div>"""
+    val order = if !mail then "" else
+      s"""<div data-how-panel="byMail"${if first == Mode.ByMail then "" else " hidden"}><div id="mailForm">
+        <p class="label">${t("Оформить заказ", "Złóż zamówienie", "Place the order", "Оформити замовлення")}</p>
+        <form data-send="order" data-form="mailForm" data-done="offDone">
+          <input type="hidden" name="offerKey" value="${e(o.key)}">
+          <input type="hidden" name="lang" value="${l.code}">
+          ${offerFields(site.clothing, site.slug, o.key, at.sitekey)}
+        </form>
+        ${slaNote(site.clothing)}
+      </div></div>"""
+    chooser + book + order
+
+  /** a storefront's section of the ways it works, one card a mode: at the shop (its locations), at the client's
+   * (the area), by parcel, online — for a look to put among its sections */
+  def ways(site: Site)(using l: Lang): String = site.work.fold("") { w =>
+    def card(n: Int, m: Mode, text: String) = s"""<div class="step"><span class="snum">$n</span><span class="stxt">${
+      tt(m.label)}</span><span class="sdesc">$text</span></div>"""
+    val cards = w.modes.zipWithIndex.map((m, i) => card(i + 1, m, m match
+      case Mode.AtShop => w.locations.map(placeText(site, _)).mkString("<br><br>")
+      case Mode.AtClient => t("Приезжаем: ", "Dojeżdżamy: ", "We come to: ", "Приїжджаємо: ") +
+        w.area.fold("")(areaText) + w.area.filter(a => a.hours.nonEmpty).fold("")(a => "<br><small>" +
+          e(Work.hoursText(a.hours, l)) + "</small>")
+      case Mode.ByMail => t("Отправьте вещь через InPost или курьером — вернём так же.", "Wyślij rzecz przez " +
+        "InPost lub kurierem — odeślemy tak samo.", "Send the item by InPost or courier — it comes back the same " +
+        "way.", "Надішліть річ через InPost або курʼєром — повернемо так само.")
+      case Mode.Online => if w.online.exists(_.how == "phone") then t("Консультация по телефону в выбранное время.",
+        "Konsultacja telefoniczna o wybranej porze.", "A phone consultation at the time chosen.", "Консультація " +
+        "телефоном у вибраний час.") else t("Видеозвонок в выбранное время — ссылка в подтверждении.", "Rozmowa " +
+        "wideo o wybranej porze — link w potwierdzeniu.", "A video call at the time chosen — the link in the " +
+        "confirmation.", "Відеодзвінок у вибраний час — посилання в підтвердженні.")))
+    s"""<section class="how-courier ways" id="ways">
+    <p class="label">${t("Как мы работаем", "Jak pracujemy", "How we work", "Як ми працюємо")}</p>
+    <div class="steps">${cards.mkString}</div>${if w.has(Mode.ByMail) then s"""
+    <a class="track-link" href="/${l.code}/track">${t("Проверить статус заказа →", "Sprawdź status zamówienia →",
+      "Check order status →", "Перевірити статус замовлення →")}</a>""" else ""}
+  </section>"""
+  }
 
   // ---- NOT FOUND: in the site's look, the four languages' way home
 

@@ -37,13 +37,29 @@ object Submit:
   final case class Day(date: String, weekday: Int, slots: Vector[(Long, String)])
 
   /** the free starts of a bookable service, by day; none when the shop does not answer */
-  def slots[R[_]](base: String, service: String)(using In[Fetch, R]): Vector[Day] ! R =
-    Fetch[R](base, Request.get("/api/slots?service=" + Query.encode(service))).map { r =>
+  def slots[R[_]](base: String, service: String, mode: String = "", place: String = "")(using In[Fetch, R])
+    : Vector[Day] ! R =
+    val how = (if mode.isEmpty then "" else "&mode=" + Query.encode(mode)) +
+      (if place.isEmpty then "" else "&place=" + Query.encode(place))
+    Fetch[R](base, Request.get("/api/slots?service=" + Query.encode(service) + how)).map { r =>
       def days(j: Json) = j("days").list.map(d =>
         Day(d("date").string, d("weekday").int, d("slots").list.map(x => x("start").long -> x("label").string)))
       if r.status != 200 then Vector.empty
       else Descent.parse(r.text).toOption.flatMap(j => scala.util.Try(days(j)).toOption).getOrElse(Vector.empty)
     }
+
+  /** whether an address is inside the shop's area; none when the shop does not answer */
+  def area[R[_]](base: String, city: String, postcode: String)(using In[Fetch, R]): Option[Boolean] ! R =
+    Fetch[R](base, Request.get("/api/area?city=" + Query.encode(city) + "&postcode=" + Query.encode(postcode)))
+      .map(r => if r.status != 200 then None else Descent.parse(r.text).toOption.flatMap(j =>
+        scala.util.Try(j("inside").boolean).toOption))
+
+  def outside(l: Lang): String = T("Этот адрес вне зоны выезда — выберите другой способ или напишите нам.",
+    "Ten adres jest poza obszarem dojazdu — wybierz inny sposób albo napisz do nas.",
+    "That address is outside the area we come to — choose another way or write to us.",
+    "Ця адреса поза зоною виїзду — оберіть інший спосіб або напишіть нам.")(l)
+  def inside(l: Lang): String = T("Приедем по этому адресу.", "Dojedziemy pod ten adres.", "We come to this address.",
+    "Приїдемо за цією адресою.")(l)
 
   /** a day's button: the weekday short and the date (`2026-11-03` → `wt 03.11`) */
   def dayLabel(l: Lang, d: Day): String =
@@ -90,5 +106,8 @@ object Submit:
     case "start" => T("Выберите время.", "Wybierz termin.", "Please choose a time.", "Оберіть час.")(l)
     case "taken" => T("Это время уже заняли — выберите другое.", "Ten termin jest już zajęty — wybierz inny.",
         "That time was just taken — please choose another.", "Цей час уже зайняли — оберіть інший.")(l)
+    case "area" => outside(l)
+    case "address" => T("Укажите улицу, индекс (00-000) и город.", "Podaj ulicę, kod pocztowy (00-000) i miasto.",
+        "Please give the street, postcode (00-000) and city.", "Вкажіть вулицю, індекс (00-000) і місто.")(l)
     case _ => T("Не удалось отправить, попробуйте ещё раз.", "Nie udało się wysłać, spróbuj ponownie.",
         "Could not send, please try again.", "Не вдалося надіслати, спробуйте ще раз.")(l)

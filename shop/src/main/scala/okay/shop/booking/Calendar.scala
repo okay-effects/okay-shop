@@ -30,7 +30,9 @@ object Calendar:
       val service = site.offer(b.service).map(_.name(site.lang)).getOrElse(b.service)
       Vector("BEGIN:VEVENT", s"UID:${b.ref}@${site.domain}", s"DTSTAMP:${stamp(now)}", s"DTSTART:${stamp(b.start)}",
         s"DTEND:${stamp(b.end)}", s"SUMMARY:${text(s"$service — ${b.name}")}",
-        s"DESCRIPTION:${text(s"${b.ref} · ${b.contact}")}", "END:VEVENT")
+        s"DESCRIPTION:${text(s"${b.ref} · ${b.contact}" + b.mode.fold("")(m => s" · ${m.label(site.lang)}"))}") ++
+        b.address.map(a => s"LOCATION:${text(a.line + (if a.notes.isEmpty then "" else s" (${a.notes})"))}") :+
+        "END:VEVENT"
     }
     (Vector("BEGIN:VCALENDAR", "VERSION:2.0", s"PRODID:-//okay-shop//${text(site.name)}//EN",
       s"X-WR-CALNAME:${text(site.name)}") ++ events.flatten :+ "END:VCALENDAR").map(fold).mkString("", "\r\n", "\r\n")

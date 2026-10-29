@@ -69,9 +69,17 @@ object Codec:
     "service" -> Json.str(b.service), "master" -> Json.str(b.master), "start" -> Json.num(b.start),
     "minutes" -> Json.num(b.minutes), "name" -> Json.str(b.name), "contact" -> Json.str(b.contact),
     "lang" -> Json.str(b.lang.code), "consentAt" -> Json.num(b.consent.at), "policy" -> Json.str(b.consent.policy),
-    "placed" -> Json.num(b.placed), "status" -> Json.str(b.status.key), "reminded" -> Json.bool(b.reminded))
+    "placed" -> Json.num(b.placed), "status" -> Json.str(b.status.key), "reminded" -> Json.bool(b.reminded),
+    "mode" -> Json.str(b.mode.fold("")(_.key)), "place" -> Json.str(b.place),
+    "address" -> b.address.fold(Json.Null)(a => Json.obj("name" -> Json.str(a.name), "street" -> Json.str(a.street),
+      "postcode" -> Json.str(a.postcode), "city" -> Json.str(a.city), "notes" -> Json.str(a.notes),
+      "map" -> Json.str(a.map))),
+    "before" -> Json.num(b.before), "after" -> Json.num(b.after), "price" -> Json.num(b.price))
 
   def booking(j: Json.Obj): Booking = Booking(s(j, "ref"), s(j, "key"), s(j, "service"), s(j, "master"),
     n(j, "start"), n(j, "minutes").toInt, s(j, "name"), s(j, "contact"), Lang.parse(s(j, "lang")).getOrElse(Lang.pl),
     Consent(n(j, "consentAt"), s(j, "policy")), n(j, "placed"),
-    BookingStatus.parse(s(j, "status")).getOrElse(BookingStatus.Booked), b(j, "reminded"))
+    BookingStatus.parse(s(j, "status")).getOrElse(BookingStatus.Booked), b(j, "reminded"), Mode.parse(s(j, "mode")),
+    s(j, "place"), j.get("address").collect { case a: Json.Obj => Address(s(a, "name"), s(a, "street"),
+      s(a, "postcode"), s(a, "city"), s(a, "notes"), s(a, "map")) }, n(j, "before").toInt, n(j, "after").toInt,
+    n(j, "price"))

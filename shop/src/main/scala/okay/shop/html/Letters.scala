@@ -186,11 +186,28 @@ object Letters:
       s"<td style='padding:6px 0'><b>${e(Day.time(b.start))}</b> (${b.minutes} min)</td></tr>" +
       s"<tr><td style='padding:6px 0;color:#666'>${e(w(T("Услуга", "Usługa", "Service", "Послуга")))}</td>" +
       s"<td style='padding:6px 0'>${e(service(c, b, l))}</td></tr>" +
+      where(c, b, l).map((k, v) => s"<tr><td style='padding:6px 0;color:#666'>${e(k)}</td>" +
+        s"<td style='padding:6px 0'>$v</td></tr>").mkString +
       s"<tr><td style='padding:6px 0;color:#666'>№</td><td style='padding:6px 0'>${e(b.ref)}</td></tr></table>" +
       (if b.active then s"<p><a href='${e(manageLink(c, b))}' style='background:$a;color:#fff;padding:10px 20px;" +
         "border-radius:8px;text-decoration:none;font-size:14px'>" + e(w(T("Изменить или отменить →",
         "Zmień lub odwołaj →", "Change or cancel →", "Змінити або скасувати →"))) + "</a></p>" else "") +
       questions(c, l)), Some(c.contact))
+
+  /** how and where a booking meets, for its letters and its page (none before the modes): the mode, the address
+   * with its map link, its notes, the online call's details, the price — each a label and its HTML */
+  def where(c: Conf, b: Booking, l: Lang): Vector[(String, String)] = b.mode.fold(Vector.empty) { m =>
+    def w(t: T) = t(l)
+    val online = c.site.work.flatMap(_.online).filter(_ => m == Mode.Online)
+    Vector(w(T("Как", "Jak", "How", "Як")) -> e(m.label(l) + online.fold("")(o => " · " + (if o.how == "phone"
+      then w(T("по телефону", "telefonicznie", "by phone", "телефоном")) else w(T("видеозвонок", "rozmowa wideo",
+      "video call", "відеодзвінок")))))) ++
+      b.address.map(a => w(T("Где", "Gdzie", "Where", "Де")) -> (s"<a href='${e(a.mapLink)}'>${e(a.line)}</a>" +
+        (if a.notes.isEmpty then "" else s"<br><small>${e(a.notes)}</small>"))) ++
+      online.filter(_.details.nonEmpty).map(o => w(T("Связь", "Połączenie", "The call", "Зв'язок")) ->
+        Html.lines(o.details)) ++
+      Option.when(b.price > 0)(w(T("Цена", "Cena", "Price", "Ціна")) -> e(Money.zl(b.price)))
+  }
 
   def booked(c: Conf, b: Booking): Note = bookingNote(c, b,
     T("Запись подтверждена", "Rezerwacja potwierdzona", "Booking confirmed", "Запис підтверджено"),
@@ -213,7 +230,11 @@ object Letters:
     def row(k: String, v: String) = if v.isEmpty then "" else s"<p><b>${e(k)}:</b> ${Html.lines(v)}</p>"
     note(s"📅 $what ${b.ref}: ${Day.time(b.start)} — ${c.site.name}", page(accent(c.site),
       s"<h2 style='color:${accent(c.site)}'>📅 $what — ${e(c.site.name)}</h2>" + row("Коли", Day.time(b.start)) +
-        row("Послуга", service(c, b, Lang.uk)) + row("Клієнт", b.name) + row("Контакт", b.contact) +
+        row("Послуга", service(c, b, Lang.uk)) + b.mode.fold("")(m => row("Як", m.label(Lang.uk))) +
+        b.address.fold("")(a => row("Адреса", a.line) + row("Примітки", a.notes) +
+          s"<p><a href='${e(a.mapLink)}'>${e(a.mapLink)}</a></p>") +
+        (if b.price > 0 then row("Ціна", Money.zl(b.price)) else "") +
+        row("Клієнт", b.name) + row("Контакт", b.contact) +
         row("Номер", b.ref) + row("Згода RODO", s"${Day.time(b.consent.at)} · політика ${b.consent.policy}")),
       b.email)
   def bookedOwner(c: Conf, b: Booking): Note = ownerNote(c, b, "Новий запис")

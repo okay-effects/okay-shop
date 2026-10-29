@@ -30,6 +30,7 @@ object Site:
       e.preventDefault()
       submit(f.asInstanceOf[HTMLFormElement])))
     doc.querySelectorAll("[data-slots]").foreach(d => picker(d.asInstanceOf[HTMLElement]))
+    modes()
 
   private def byId(id: String): Option[HTMLElement] =
     Option(dom.document.getElementById(id)).map(_.asInstanceOf[HTMLElement])
@@ -60,6 +61,58 @@ object Site:
     e.textContent = text
     e
 
+  private def input(f: dom.Element, sel: String): Option[dom.HTMLInputElement] =
+    Option(f.querySelector(sel)).map(_.asInstanceOf[dom.HTMLInputElement])
+
+  private def hide(e: HTMLElement, off: Boolean): Unit =
+    if off then e.setAttribute("hidden", "") else e.removeAttribute("hidden")
+
+  /** a form asked to show its slots again: the mode or the place changed */
+  private val reload = "okay-reload"
+
+  /**
+   * HOW THE WORK HAPPENS (specs/shop.md): the mode chosen (`how`) shows its panel — the booking form or the order
+   * form —, in the booking form its block (the location, the address, the call) with the others' fields off, and
+   * asks for its slots; a place chosen asks again; an address typed is checked against the area
+   */
+  private def modes(): Unit =
+    val doc = dom.document
+    def choose(m: String): Unit =
+      doc.querySelectorAll("[data-how-panel]").foreach { p =>
+        val e = p.asInstanceOf[HTMLElement]
+        hide(e, e.getAttribute("data-how-panel") != (if m == "byMail" then "byMail" else "book"))
+      }
+      if m != "byMail" then doc.querySelectorAll("form[data-send=book]").foreach { f =>
+        input(f, "[name=mode]").foreach(_.value = m)
+        f.querySelectorAll("[data-for]").foreach { b =>
+          val e = b.asInstanceOf[HTMLElement]
+          val off = e.getAttribute("data-for") != m
+          hide(e, off)
+          e.querySelectorAll("input").foreach(_.asInstanceOf[dom.HTMLInputElement].disabled = off)
+        }
+        f.dispatchEvent(new dom.Event(reload))
+      }
+    doc.querySelectorAll("input[name=how]").foreach(r => r.addEventListener("change", (_: dom.Event) =>
+      choose(r.asInstanceOf[dom.HTMLInputElement].value)))
+    doc.querySelectorAll("input[name=place][type=radio]").foreach(r => r.addEventListener("change",
+      (_: dom.Event) => Option(r.closest("form")).foreach(_.dispatchEvent(new dom.Event(reload)))))
+    doc.querySelectorAll("[data-area-said]").foreach { said =>
+      val form = said.closest("form")
+      val l = formLang(form)
+      def check(): Unit =
+        val city = input(form, "[name=city]").map(_.value.trim).getOrElse("")
+        val code = input(form, "[name=postcode]").map(_.value.trim).getOrElse("")
+        if city.nonEmpty && code.matches("[0-9]{2}-[0-9]{3}") then
+          Async.start(Port.handle(WebJs.fetch)(Submit.area[Async + Fetch](dom.window.location.origin, city, code)))(
+            using queue).future.recover { case _ => None }.foreach {
+            case Some(true) => said.textContent = Submit.inside(l)
+            case Some(false) => said.textContent = Submit.outside(l)
+            case None => said.textContent = ""
+          }
+      Seq("[name=city]", "[name=postcode]").foreach(sel => input(form, sel).foreach(_.addEventListener("change",
+        (_: dom.Event) => check())))
+    }
+
   /**
    * THE SLOT PICKER: a bookable service's free starts from `/api/slots`, the days as buttons, the chosen day's
    * starts as buttons; the start chosen goes into the form's hidden `start`
@@ -68,38 +121,47 @@ object Site:
     val form = box.closest("form")
     val l = formLang(form)
     val start = Option(form.querySelector("[name=start]")).map(_.asInstanceOf[dom.HTMLInputElement])
-    val days = Async.start(Port.handle(WebJs.fetch)(Submit.slots[Async + Fetch](dom.window.location.origin,
-      box.getAttribute("data-slots"))))(using queue).future
-    days.recover { case _ => Vector.empty }.foreach { ds =>
-      box.innerHTML = ""
-      if ds.isEmpty then box.appendChild(el("span", "", Submit.noSlots(l)))
-      else
-        val dayRow = el("div", "days", "")
-        val slotRow = el("div", "times", "")
-        box.appendChild(dayRow)
-        box.appendChild(slotRow)
-        def show(d: Submit.Day, b: HTMLElement): Unit =
-          dayRow.querySelectorAll(".day").foreach(_.asInstanceOf[HTMLElement].classList.remove("on"))
-          b.classList.add("on")
-          slotRow.innerHTML = ""
-          start.foreach(_.value = "")
-          d.slots.foreach { (at, label) =>
-            val t = el("button", "slot", label)
-            t.setAttribute("type", "button")
-            t.addEventListener("click", (_: dom.Event) =>
-              slotRow.querySelectorAll(".slot").foreach(_.asInstanceOf[HTMLElement].classList.remove("on"))
-              t.classList.add("on")
-              start.foreach(_.value = at.toString))
-            slotRow.appendChild(t)
+    form.addEventListener(reload, (_: dom.Event) => load())
+    load()
+    // the mode and the place the form says now (none: a shop before the modes)
+    def load(): Unit =
+      val mode = input(form, "[name=mode]").map(_.value).getOrElse("")
+      val place = Option(form.querySelector("[name=place]:checked")).orElse(Option(form.querySelector(
+        "input[type=hidden][name=place]"))).map(_.asInstanceOf[dom.HTMLInputElement].value).getOrElse("")
+      start.foreach(_.value = "")
+      shown(Async.start(Port.handle(WebJs.fetch)(Submit.slots[Async + Fetch](dom.window.location.origin,
+        box.getAttribute("data-slots"), mode, place)))(using queue).future)
+    def shown(days: scala.concurrent.Future[Vector[Submit.Day]]): Unit =
+      days.recover { case _ => Vector.empty }.foreach { ds =>
+        box.innerHTML = ""
+        if ds.isEmpty then box.appendChild(el("span", "", Submit.noSlots(l)))
+        else
+          val dayRow = el("div", "days", "")
+          val slotRow = el("div", "times", "")
+          box.appendChild(dayRow)
+          box.appendChild(slotRow)
+          def show(d: Submit.Day, b: HTMLElement): Unit =
+            dayRow.querySelectorAll(".day").foreach(_.asInstanceOf[HTMLElement].classList.remove("on"))
+            b.classList.add("on")
+            slotRow.innerHTML = ""
+            start.foreach(_.value = "")
+            d.slots.foreach { (at, label) =>
+              val t = el("button", "slot", label)
+              t.setAttribute("type", "button")
+              t.addEventListener("click", (_: dom.Event) =>
+                slotRow.querySelectorAll(".slot").foreach(_.asInstanceOf[HTMLElement].classList.remove("on"))
+                t.classList.add("on")
+                start.foreach(_.value = at.toString))
+              slotRow.appendChild(t)
+            }
+          ds.zipWithIndex.foreach { (d, i) =>
+            val b = el("button", "day", Submit.dayLabel(l, d))
+            b.setAttribute("type", "button")
+            b.addEventListener("click", (_: dom.Event) => show(d, b))
+            dayRow.appendChild(b)
+            if i == 0 then show(d, b)
           }
-        ds.zipWithIndex.foreach { (d, i) =>
-          val b = el("button", "day", Submit.dayLabel(l, d))
-          b.setAttribute("type", "button")
-          b.addEventListener("click", (_: dom.Event) => show(d, b))
-          dayRow.appendChild(b)
-          if i == 0 then show(d, b)
-        }
-    }
+      }
 
   private def submit(f: HTMLFormElement): Unit =
     val button = Option(f.querySelector(".send")).map(_.asInstanceOf[dom.HTMLButtonElement])

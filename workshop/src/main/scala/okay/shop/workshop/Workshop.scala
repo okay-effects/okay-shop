@@ -237,7 +237,7 @@ object Workshop:
         type B = (Booking, String)
         val table = Table(bs.toList)(Column.text[B]("Коли")(b => Day.time(b._1.start)),
           Column.text[B]("Послуга")(b => s"${b._2} · ${b._1.minutes} хв"), Column.text[B]("Клієнт")(_._1.name),
-          Column.text[B]("Контакт")(_._1.contact),
+          Column.text[B]("Контакт")(_._1.contact), Column.text[B]("Де")(b => where(b._1)),
           Column.text[B]("Стан")(b => if b._1.active then "записано" else "скасовано"),
           Column.text[B]("№")(_._1.ref)).keyedBy(_._1.ref).whenEmpty("Записів немає.")
         show[OnBookings, R](Screen[OnBookings](s"Записи · ${site.name}")((said.toSeq :+ table)*)(
@@ -252,6 +252,9 @@ object Workshop:
 
   private def booking[R[_]: Has[Ui]: Has[Staff]: Has[Human]](site: Shown, b: Booking, service: String): Unit ! R =
     val details = Part.details(Seq("Коли" -> Day.time(b.start), "Послуга" -> s"$service · ${b.minutes} хв",
+      "Як" -> b.mode.fold("")(_.label(Lang.uk)), "Адреса" -> b.address.fold("")(_.line),
+      "Примітки" -> b.address.fold("")(_.notes), "Карта" -> b.address.fold("")(_.mapLink),
+      "Ціна" -> (if b.price > 0 then Money.zl(b.price) else ""),
       "Клієнт" -> b.name, "Контакт" -> b.contact, "Мова" -> b.lang.code,
       "Стан" -> (if b.active then "записано" else "скасовано"),
       "Згода RODO" -> s"${Day.time(b.consent.at)} · політика ${b.consent.policy}").filter(_._2.nonEmpty)*)
@@ -265,6 +268,10 @@ object Workshop:
         case Left(why) => bookings[R](site, Some(Part.problem(refusal(why))))
       }
     }
+
+  /** how and where a booking meets, short: the mode and the address (none before the modes) */
+  def where(b: Booking): String = b.mode.fold("")(m => (m.label(Lang.uk) +: b.address.map(_.line).toSeq)
+    .mkString(" · "))
 
   /** the server's word for a refusal, in the workshop's */
   def refusal(why: String): String = why match

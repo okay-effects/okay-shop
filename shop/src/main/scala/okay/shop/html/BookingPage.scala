@@ -47,7 +47,9 @@ button.go{background:$a;color:#fff;border-color:$a;width:100%;padding:12px;margi
       s"""<div class="card"><div class="label">${w(T("Перенести", "Przenieś", "Move", "Перенести"))}</div>
 <form data-send="booking/move" data-form="moveForm" data-done="moveDone" id="moveForm">
 <input type="hidden" name="ref" value="${e(b.ref)}"><input type="hidden" name="k" value="${e(b.key)}">
-<input type="hidden" name="lang" value="${l.code}"><input type="hidden" name="start" value="">
+<input type="hidden" name="lang" value="${l.code}"><input type="hidden" name="start" value="">${b.mode.fold("")(m =>
+        s"""<input type="hidden" name="mode" value="${m.key}"><input type="hidden" name="place" value="${
+          e(b.place)}">""")}
 <div class="slots" data-slots="${e(b.service)}"></div>
 <button class="go send" type="submit">${w(T("Перенести на выбранное время", "Przenieś na wybrany termin",
         "Move to the time chosen", "Перенести на обраний час"))}</button></form>
@@ -65,7 +67,8 @@ button.go{background:$a;color:#fff;border-color:$a;width:100%;padding:12px;margi
     <div class="status">$status</div>
     <div class="label">${w(T("Когда", "Kiedy", "When", "Коли"))}</div><div class="val">${e(Day.time(b.start))}</div>
     <div class="label" style="margin-top:10px">${w(T("Услуга", "Usługa", "Service", "Послуга"))}</div>
-    <div class="val">${e(service)} · ${b.minutes} min</div>
+    <div class="val">${e(service)} · ${b.minutes} min</div>${Letters.where(c, b, l).map((k, v) =>
+      s"""\n    <div class="label" style="margin-top:10px">${e(k)}</div><div class="val">$v</div>""").mkString}
     <div class="ref" style="margin-top:4px">${e(b.ref)}</div>
   </div>
 $manage

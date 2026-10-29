@@ -23,7 +23,10 @@ object Privacy:
     val accent = site.color
     val t = texts(l, site.clothing, name, contact)
     val note = t.note.fold("")(n => s"\n<p><em>$n</em></p>")
-    val sections = t.sections.zipWithIndex.map { case ((h, body), i) => s"<h2>${i + 1}. $h</h2>\n$body" }
+    // a shop that comes to its clients keeps their addresses: said after what is collected
+    val visits = site.work.filter(_.has(Mode.AtClient)).fold(t.sections)(_ =>
+      t.sections.take(2) ++ (visit(l) +: t.sections.drop(2)))
+    val sections = visits.zipWithIndex.map { case ((h, body), i) => s"<h2>${i + 1}. $h</h2>\n$body" }
     s"""<!doctype html><html lang="${l.code}"><head><meta charset="utf-8">""" +
       """<meta name="viewport" content="width=device-width,initial-scale=1">""" + "\n" +
       s"<title>${t.title} · $name</title>\n" +
@@ -50,6 +53,23 @@ object Privacy:
     case Lang.ru => ru(clothing, name, contact)
 
   private def p(s: String): String = s"<p>$s</p>"
+
+  /** the section of a shop that comes to its clients (specs/shop.md "How the work happens": privacy) */
+  private def visit(l: Lang): (String, String) = l match
+    case Lang.pl => "Adres wizyty" -> p("Gdy rezerwujesz wizytę u siebie, podajesz adres (ulica, kod, miasto, " +
+        "uwagi o wejściu). Używamy go wyłącznie, by dojechać na umówioną wizytę: widzą go tylko nasi pracownicy " +
+        "i Ty pod linkiem z potwierdzenia; nigdy nie jest publikowany. Przechowujemy go z rezerwacją.")
+    case Lang.en => "The visit's address" -> p("When you book a visit at your place, you give its address (street, " +
+        "postcode, city, notes on the entrance). We use it only to come to the visit booked: only our staff see it, " +
+        "and you, by your confirmation's link; it is never published. We keep it with the booking.")
+    case Lang.uk => "Адреса візиту" -> p("Коли ви бронюєте візит до себе, ви вказуєте адресу (вулиця, індекс, " +
+        "місто, примітки щодо входу). Ми використовуємо її лише, щоб приїхати на домовлений візит: її бачать " +
+        "тільки наші працівники і ви за посиланням з підтвердження; вона ніколи не публікується. Ми зберігаємо " +
+        "її разом із записом.")
+    case Lang.ru => "Адрес визита" -> p("Когда вы бронируете визит к себе, вы указываете адрес (улица, индекс, " +
+        "город, заметки о входе). Мы используем его только, чтобы приехать на назначенный визит: его видят только " +
+        "наши сотрудники и вы по ссылке из подтверждения; он никогда не публикуется. Мы храним его вместе с " +
+        "записью.")
 
   /** the recipients: Cloudflare (hosting, Turnstile), Brevo, and InPost for the atelier */
   private def recipients(intro: String, items: Vector[String], inpost: Option[String], outro: String): String =

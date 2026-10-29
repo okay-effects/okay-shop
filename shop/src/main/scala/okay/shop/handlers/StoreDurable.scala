@@ -17,7 +17,8 @@ import okay.shop.model.*
  *   site/hit/<key>/<window>      a rate limit's count in a window
  *   site/link/<hash>             a sign-in link not yet used: {email, until}
  *   site/session/<hash>          a session: {email, until}
- *   site/booking/<ref>           a booking as it is now (its master, start, minutes, status, reminded)
+ *   site/booking/<ref>           a booking as it is now (its master, start, minutes, status, reminded; its mode,
+ *                                place, address, buffers, price)
  *
  * A change is ONE `Durable.step`: the event and the order it moves written together or not at all; a reading is a
  * read of what is committed, no step. Only the SHA-256 of a link's or a session's secret is a key
@@ -116,7 +117,7 @@ object StoreDurable:
           .filter(_.until >= now))
       case Store.EndSession(hash) => step[Unit](Durable.delete[D](session(hash)))
       case Store.Book(b, schedule, now) => step[Either[String, Booking]](allBookings[D].flatMap { all =>
-          if !Slots.isFree(schedule, b.minutes, all, now, b.start) then pure(Left("taken"))
+          if !Slots.isFree(schedule, b.minutes, all, now, b.start, b.before, b.after) then pure(Left("taken"))
           else
             // a reminder due already (booked within a day) is not sent: the booking's own letter says the time
             val kept = b.copy(reminded = b.start - day <= now)
@@ -131,7 +132,7 @@ object StoreDurable:
             case None => pure(Left("no such booking"))
             case Some(b) =>
               val others = all.filterNot(_.ref == ref)
-              if !Slots.isFree(schedule, b.minutes, others, now, start) then pure(Left("taken"))
+              if !Slots.isFree(schedule, b.minutes, others, now, start, b.before, b.after) then pure(Left("taken"))
               else
                 val moved = b.copy(start = start, reminded = start - day <= now)
                 Durable.put[Json, D](bookingKey(ref), Codec.booking(moved))

@@ -87,6 +87,57 @@ names the master everywhere, so more come without a change of data.
   `/api/slots`) and the booking form in place of the order form; its done panel shows the ref, the time and the
   manage link. Tests: `BookingSuite` (the fictional `salon` fixture) and the workshop's `WorkshopSuite`.
 
+## How the work happens: service modes (operator, 2026-10-29)
+
+Where and how a service meets its client is the business's nature: by mail, in person, or both. A shop says which
+of four MODES it works in; each service may narrow them. Data (`Work`, in `Site.work`), read from the content or
+given by the host; with none (`work: None`, every config before this) every page, letter and answer is as it was,
+byte for byte — the atelier is `byMail` by its courier flow, a salon with a schedule `atShop` with its hours.
+
+- **The modes** (`Mode`): `atShop` — the client comes to the master: one or more LOCATIONS (a key, name, street,
+  city, postcode, an optional map link, notes like the floor or the entrance, its own hours — else the shop's);
+  `atClient` — the master comes to the client: the client gives the address at booking, the shop its SERVICE AREA
+  (`Area`: cities or districts by name — the client's city equal to one, or starting with it and a space or a
+  hyphen, diacritics and case aside — and/or postcode prefixes like `02-` or `05-5`; either matching is inside), an
+  optional travel fee, a TRAVEL BUFFER (minutes before and after, reserved by the calendar) and the visits' own hours
+  — else the shop's; `byMail` — a parcel (InPost paczkomat, courier): the order flow as it is, no slot; `online` — a
+  video call or a phone call (`Online`: how, and its details — a link, "we call you" — given in the confirmation).
+  No radius from a base address: that would need geocoding.
+- **Per service** (`Work.services`, by the offer's key): the modes it allows (default: all the shop's), a price
+  difference per mode (an at-client surcharge), and its minutes when the content gives none (a service the host makes
+  bookable). A service with minutes is booked in `atShop`, `atClient`, `online`; `byMail` is always the order form.
+  The price of a booking: the service's, plus its mode's difference, plus the travel fee at the client's.
+- **The content says it** (a single site): a fenced ```` ```json work ```` block in `site.md`, the same JSON as a host
+  gives (`Work.fromJson`; `Work.toJson` writes it back): `{"modes":[…], "locations":[{key, name, street, city,
+  postcode, map, notes, hours:[{day, from, to}]}], "area":{places, postcodes, fee, before, after, hours},
+  "online":{how: video|phone, details}, "services":{<key>:{modes, extra:{<mode>: "20"}, minutes}}}`; amounts in zł
+  as text. `Work.check(w, offers)` refuses by the name of the first wrong field: no mode or an unknown one, atShop
+  with no location, a location without a name or city, a bad postcode (`NN-NNN`) or map link (`https://` only), a
+  bad hour, atClient with no place or prefix, a fee or difference out of 0–10000 zł, a buffer out of 0–240, online
+  without `how`, a service restricted to modes the shop has not, unknown services, texts too long.
+- **Booking respects the mode**: the service's page asks how (only the modes it allows; one — no question), then for
+  atShop the location (one — shown, not asked), for atClient the address (street, postcode, city, notes), for online
+  nothing more; then the free starts. `GET /api/slots?service=&mode=&place=` (mode and place default to the first
+  allowed): the hours of the location, of the visits (atClient) or the shop's; the shop's exceptions, step, horizon
+  and lead; the active bookings of the master in the way — each with its own buffer around it, and the new one's
+  buffer (atClient) around it too; the service itself fits the hours, a buffer may lie outside them. `GET
+  /api/area?city=&postcode=` says whether an address is inside (the page tells the client before the slots).
+  `POST /api/book` takes `mode`, `place`, `street`, `postcode`, `city`, `notes`: a mode the service does not allow,
+  an unknown location, an address outside the area (`409 area`) or incomplete (`address`) refused; the store checks
+  the slot with the buffers in its step as before. The booking keeps its mode, its location's key, the ADDRESS of
+  the meeting (the location's, copied; or the client's), its buffer and its price; a move keeps them.
+- **Shown**: the confirmation, the reminder, the move and cancel letters, the booking's page (its link) and the
+  owner's letter and the workshop's list say the mode and the address — the location's with its map link, the
+  client's with a map search link (`https://www.google.com/maps/search/?api=1&query=…`, no key), online its
+  details; the master's calendar its `LOCATION`. The storefront's offer page says the modes and the locations'
+  addresses (public: the shop's own).
+- **Privacy**: a client's address is personal data — kept in the booking, shown only to the shop's staff (the
+  workshop, the owner's letter, the calendar by its key) and on the client's own link; never on a public page. The
+  privacy policy says so when the shop works at its clients'.
+- **Tests**: `ModesSuite` (the fictional `visits` fixture: two locations, an area with a fee and a buffer, an
+  online call, services narrowed), `OldPagesSuite` (the three older fixtures' pages, a booking's letters, its page
+  and its calendar by their SHA-256 taken before the modes: unchanged).
+
 ## The host's own workshop pages (operator, 2026-10-29)
 
 A site built on the engine may add pages of its own to the workshop (the mall's "Appearance" screen) without the

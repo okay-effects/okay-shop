@@ -30,6 +30,12 @@ object Parse:
         else acc
       }
 
+  /** the text of the fenced block whose info string is `info` (```` ```json work ````), as it is */
+  def raw(md: String, info: String): Option[String] =
+    val lines = md.linesIterator.toVector
+    val start = lines.indexWhere(_.trim == s"```$info")
+    Option.when(start >= 0)(lines.drop(start + 1).takeWhile(_.trim != "```").mkString("\n"))
+
   private def pair(line: String): Option[(String, String)] =
     line.indexOf(':') match
       case -1 => None
@@ -56,7 +62,7 @@ object Sites:
     val prefix = f.getOrElse("refPrefix", id.take(3).toUpperCase)
     val tagline = f.getOrElse("tagline", "")
     val contact = f.getOrElse("contact", "")
-    Site(id, f.getOrElse("slug", id), f.getOrElse("name", id), words("tagline", tagline),
+    val site = Site(id, f.getOrElse("slug", id), f.getOrElse("name", id), words("tagline", tagline),
       f.get("langDefault").flatMap(Lang.parse).getOrElse(Lang.pl), f.getOrElse("logoText", f.getOrElse("name", id)),
       f.getOrElse("color", "#ff6f91"), words("contact", contact),
       f.get("lineId") match
@@ -64,6 +70,12 @@ object Sites:
         case Some("line-salon") => Kind.Salon
         case _ => Kind.It,
       prefix, domain, offers, schedule(f, Parse.block(siteMd, "schedule")))
+    // how it works (specs/shop.md "How the work happens"): a ```json work``` block, checked; a wrong one is the
+    // content's mistake, said by its field
+    Parse.raw(siteMd, "json work").fold(site)(text => okay.effects.json.Descent.parse(text).left.map(_ => "json")
+      .flatMap(Work.fromJson(_, offers.map(_.key).toSet)) match
+      case Right(w) => site.working(w)
+      case Left(why) => throw IllegalArgumentException(s"$id: work: $why"))
 
   private val days = Vector("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 

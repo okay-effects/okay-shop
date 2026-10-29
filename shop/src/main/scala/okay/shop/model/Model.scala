@@ -41,10 +41,31 @@ final case class Offer(key: String, name: T, description: T, price: Long, order:
 /** A SITE: what its pages and letters say of it */
 final case class Site(id: String, slug: String, name: String, tagline: T, lang: Lang, logoText: String,
                       color: String, contact: T, kind: Kind, refPrefix: String, domain: String,
-                      offers: Vector[Offer], schedule: Option[Schedule] = None):
+                      offers: Vector[Offer], schedule: Option[Schedule] = None, work: Option[Work] = None):
   def clothing: Boolean = kind == Kind.Atelier
-  /** whether `o` is booked here: it lasts, and the shop has a schedule */
-  def books(o: Offer): Boolean = o.bookable && schedule.isDefined
+  /** whether `o` is booked here: it lasts, and the shop has a schedule — or, by its work, a mode with hours */
+  def books(o: Offer): Boolean = work match
+    case None => o.bookable && schedule.isDefined
+    case Some(_) => bookedModes(o).nonEmpty
+  /** the modes `o` is booked in (specs/shop.md "How the work happens"): allowed, with a time, and hours somewhere */
+  def bookedModes(o: Offer): Vector[Mode] = work.fold(Vector.empty[Mode])(w => w.modesOf(o.key).filter(m =>
+    m.booked && places(m).exists(p => plan(o, m, p).isDefined)))
+  /** the places a mode is met in: the locations' keys at the shop, else one unnamed */
+  def places(m: Mode): Vector[String] =
+    if m == Mode.AtShop then work.fold(Vector(""))(_.locations.map(_.key)) else Vector("")
+  /** the schedule of `o` in mode `m` at place `p`: the shop's, its week the location's or the visits' own when
+   * they have one; none when `o` does not last or nothing is open */
+  def plan(o: Offer, m: Mode, p: String): Option[Schedule] =
+    val base = schedule.getOrElse(Schedule(Map.empty, Map.empty))
+    val own = m match
+      case Mode.AtShop => work.flatMap(_.location(p)).map(_.hours)
+      case Mode.AtClient => work.flatMap(_.area).map(_.hours)
+      case _ => None
+    val s = own.filter(_.nonEmpty).fold(base)(w => base.copy(week = w))
+    Option.when(o.bookable && m.booked && s.week.values.exists(_.nonEmpty))(s)
+  /** the site with its work: a service with no minutes in the content takes the work's */
+  def working(w: Work): Site = copy(work = Some(w), offers = offers.map(o =>
+    w.services.get(o.key).filter(s => o.minutes == 0 && s.minutes > 0).fold(o)(s => o.copy(minutes = s.minutes))))
   def offer(key: String): Option[Offer] = offers.find(_.key == key)
   def origin: String = s"https://$domain"
 
@@ -228,11 +249,17 @@ object BookingStatus:
   def parse(s: String): Option[BookingStatus] = values.find(_.key == s)
 
 /** A BOOKING: a service of a master from `start` (a UTC instant) for `minutes`; who, how reached, the consent, its
- * secret key (the manage link's), whether reminded */
+ * secret key (the manage link's), whether reminded; how it meets (none: before the modes) — at which location, at
+ * which address (the location's, copied; or the client's), the minutes kept free before and after it (the master's
+ * travel), its price (grosze; 0: not said) */
 final case class Booking(ref: String, key: String, service: String, master: String, start: Long, minutes: Int,
                          name: String, contact: String, lang: Lang, consent: Consent, placed: Long,
-                         status: BookingStatus = BookingStatus.Booked, reminded: Boolean = false):
+                         status: BookingStatus = BookingStatus.Booked, reminded: Boolean = false,
+                         mode: Option[Mode] = None, place: String = "", address: Option[Address] = None,
+                         before: Int = 0, after: Int = 0, price: Long = 0):
   def end: Long = start + minutes * 60000L
   def active: Boolean = status == BookingStatus.Booked
-  def overlaps(from: Long, until: Long): Boolean = active && start < until && from < end
+  /** whether its time, with its buffers, meets `from`–`until` */
+  def overlaps(from: Long, until: Long): Boolean =
+    active && start - before * 60000L < until && from < end + after * 60000L
   def email: Option[String] = Contact.email(contact)
