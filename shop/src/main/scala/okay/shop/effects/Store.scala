@@ -35,6 +35,13 @@ enum Store[X]:
   /** a booking moved to `start`, if free for it (itself not in the way) */
   case Rebook(ref: String, start: Long, schedule: Schedule, now: Long) extends Store[Either[String, Booking]]
   case CancelBooking(ref: String, now: Long) extends Store[Option[Booking]]
+  /** a booking taken by the first of `candidates` (a master's key and schedule) free at its start, checked in the
+   * same step — the bookings of no master in `masters` keeping every master busy: `Left("taken")` when none is */
+  case BookWith(booking: Booking, candidates: Vector[(String, Schedule)], masters: Set[String], now: Long)
+    extends Store[Either[String, Booking]]
+  /** a booking moved to `start` by the first of `candidates` free then (itself not in the way) */
+  case RebookWith(ref: String, start: Long, candidates: Vector[(String, Schedule)], masters: Set[String], now: Long)
+    extends Store[Either[String, Booking]]
   /** the bookings whose reminder is due at `now`, marked reminded; the next reminder's alarm set */
   case Remind(now: Long) extends Store[Vector[Booking]]
 
@@ -58,4 +65,9 @@ object Store:
     perform[Store](Rebook(ref, start, s, now))
   def cancelBooking[R[_]](ref: String, now: Long)(using In[Store, R]): Option[Booking] ! R =
     perform[Store](CancelBooking(ref, now))
+  def bookWith[R[_]](b: Booking, candidates: Vector[(String, Schedule)], masters: Set[String], now: Long)(
+    using In[Store, R]): Either[String, Booking] ! R = perform[Store](BookWith(b, candidates, masters, now))
+  def rebookWith[R[_]](ref: String, start: Long, candidates: Vector[(String, Schedule)], masters: Set[String],
+                       now: Long)(using In[Store, R]): Either[String, Booking] ! R =
+    perform[Store](RebookWith(ref, start, candidates, masters, now))
   def remind[R[_]](now: Long)(using In[Store, R]): Vector[Booking] ! R = perform[Store](Remind(now))

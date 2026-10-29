@@ -201,7 +201,7 @@ class BookingSuite extends munit.FunSuite:
     val fields = Vector("service" -> "cut", "lang" -> "pl", "start" -> fri10.toString, "name" -> "Anna",
       "contact" -> "anna@example.com", "rodo_consent" -> "on", "cf-turnstile-response" -> "t")
     answering(w)(Submit.send[Pure + Fetch](w.conf.origin, "book", fields)) match
-      case Submit.Outcome.Booked(ref, when, manage) =>
+      case Submit.Outcome.Booked(ref, when, manage, _) =>
         assert(ref.startsWith("TSLB-"))
         assertEquals(when, "2026-10-30 10:00")
         assert(manage.startsWith(s"${w.conf.origin}/pl/booking?ref=$ref&k="))

@@ -196,7 +196,13 @@ object Letters:
 
   /** how and where a booking meets, for its letters and its page (none before the modes): the mode, the address
    * with its map link, its notes, the online call's details, the price — each a label and its HTML */
-  def where(c: Conf, b: Booking, l: Lang): Vector[(String, String)] = b.mode.fold(Vector.empty) { m =>
+  def where(c: Conf, b: Booking, l: Lang): Vector[(String, String)] =
+    master(c, b).toVector.map(n => T("Мастер", "Specjalista", "Master", "Майстер")(l) -> e(n)) ++ how(c, b, l)
+
+  /** the name of a booking's master, when the shop has masters (specs/shop.md "Masters") */
+  def master(c: Conf, b: Booking): Option[String] = c.site.masters.find(_.key == b.master).map(_.name)
+
+  private def how(c: Conf, b: Booking, l: Lang): Vector[(String, String)] = b.mode.fold(Vector.empty) { m =>
     def w(t: T) = t(l)
     val online = c.site.work.flatMap(_.online).filter(_ => m == Mode.Online)
     Vector(w(T("Как", "Jak", "How", "Як")) -> e(m.label(l) + online.fold("")(o => " · " + (if o.how == "phone"
@@ -230,7 +236,8 @@ object Letters:
     def row(k: String, v: String) = if v.isEmpty then "" else s"<p><b>${e(k)}:</b> ${Html.lines(v)}</p>"
     note(s"📅 $what ${b.ref}: ${Day.time(b.start)} — ${c.site.name}", page(accent(c.site),
       s"<h2 style='color:${accent(c.site)}'>📅 $what — ${e(c.site.name)}</h2>" + row("Коли", Day.time(b.start)) +
-        row("Послуга", service(c, b, Lang.uk)) + b.mode.fold("")(m => row("Як", m.label(Lang.uk))) +
+        row("Послуга", service(c, b, Lang.uk)) + master(c, b).fold("")(row("Майстер", _)) +
+        b.mode.fold("")(m => row("Як", m.label(Lang.uk))) +
         b.address.fold("")(a => row("Адреса", a.line) + row("Примітки", a.notes) +
           s"<p><a href='${e(a.mapLink)}'>${e(a.mapLink)}</a></p>") +
         (if b.price > 0 then row("Ціна", Money.zl(b.price)) else "") +

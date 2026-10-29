@@ -123,9 +123,14 @@ border:0;border-radius:12px;background:#2a1f14;color:#fff;cursor:pointer}</style
       case ("POST", List("email")) => letter(c, json(r), now)
       case ("GET", List("inquiries")) => Store.inquiries[R](200).map(is =>
           ok(Json.obj("inquiries" -> Json.Arr(is.map(Codec.inquiry)))))
-      case ("GET", List("bookings")) => Store.bookings[R](now - day, now + 60 * day).map(bs =>
-          ok(Json.obj("bookings" -> Json.Arr(bs.map(b => Json.Obj(Codec.booking(b).fields :+
-            ("serviceName" -> Json.str(c.site.offer(b.service).map(_.name(Lang.pl)).getOrElse(b.service)))))))))
+      case ("GET", List("bookings")) => Store.bookings[R](now - day, now + 60 * day).map { bs =>
+          // the masters' (specs/shop.md "Masters"): each booking's master's name, and whether it is the person's
+          val me = c.site.masters.find(m => m.email.nonEmpty && m.email == email).map(_.key).getOrElse("")
+          ok(Json.obj("bookings" -> Json.Arr(bs.map(b => Json.Obj(Codec.booking(b).fields ++ Vector(
+            "serviceName" -> Json.str(c.site.offer(b.service).map(_.name(Lang.pl)).getOrElse(b.service)),
+            "masterName" -> Json.str(Letters.master(c, b).getOrElse("")),
+            "mine" -> Json.bool(me.nonEmpty && b.master == me))))), "me" -> Json.str(me)))
+        }
       case ("POST", List("booking", "cancel")) => Store.cancelBooking[R](json(r).getOrElse("ref", ""), now).flatMap {
           case None => pure(refused("no such booking", 404))
           case Some(b) => b.email.fold(pure(false))(to => Mail.toClient[R](to, Letters.unbooked(c, b)))

@@ -138,6 +138,36 @@ byte for byte — the atelier is `byMail` by its courier flow, a salon with a sc
   online call, services narrowed), `OldPagesSuite` (the three older fixtures' pages, a booking's letters, its page
   and its calendar by their SHA-256 taken before the modes: unchanged).
 
+## Masters: each with a calendar of their own (operator, 2026-10-29)
+
+A shop with more than one master books each of them, not the shop. Data (`Site.masters`; none, every shop before
+this: one calendar, the master `main`, exactly as before).
+
+- **A master** (`Master`): a key, a display name, initials (from the name when not given), an optional email (a team
+  member who signs in to the workshop; none: a master without a login, a name only), the services they do, the
+  modes they work in and the locations (all of each when none), their own week (none: the place's or the shop's
+  hours) and their days off (date ranges, both ends included).
+- **The content says it** (a single site): a fenced ```` ```json masters ```` block in `site.md` — a list, the same
+  JSON a host gives (`Masters.fromJson`, checked by field against the services, the modes and the locations:
+  `master.key`, `master.name`, `master.email`, `master.services`, `master.modes`, `master.places`, `master.hours`,
+  `master.off`, `masters.twice`, `masters.size` — at most 30).
+- **Eligible**: for a service in a mode at a place, the masters who do that service in that mode there. **Slots**:
+  with `master=<key>` that master's free starts (their week, their days off as closed days, their bookings with
+  their buffers); without one ("any free master", the default), the union of the eligible masters' free starts.
+  A booking made or moved before the masters (master `main`, or any key no longer a master's) keeps every master
+  busy at its time: no double booking across the change.
+- **A booking** is always a concrete master's: `POST /api/book` takes `master` (empty: any); the store chooses, IN
+  ITS STEP, the asked master if free, else (any) the first eligible master free at that start, in the masters'
+  order (`Store.BookWith`), or refuses (`409 taken`). A move (`/api/booking/move`, `master` as well) keeps the master
+  when free, or takes the one asked, or (any) the first free (`Store.RebookWith`).
+- **Shown**: the master's name in the confirmation, the reminder, the move and cancel letters, the booking's page
+  (its move form offers the masters again), the owner's letter, the calendar's event, and the workshop's list (a
+  "master" column; the bookings endpoint says each booking's master's name and whether it is the signed-in
+  person's; a master who signs in sees their own first — "mine", with "all" a click away).
+- **The pages**: a bookable service's form has a master picker (any free master first, then each master doing the
+  service; the pages' script shows only those eligible for the mode and place chosen) when the shop has masters.
+- **Tests**: `MastersSuite` (the fictional `crew` fixture: the visits' work and three masters).
+
 ## The host's own workshop pages (operator, 2026-10-29)
 
 A site built on the engine may add pages of its own to the workshop (the mall's "Appearance" screen) without the

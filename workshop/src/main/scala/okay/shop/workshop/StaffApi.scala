@@ -35,8 +35,9 @@ object StaffApi:
       case Staff.Inquiries() => get("inquiries").map(r => read(r)(o =>
         arr(o, "inquiries").collect { case j: Json.Obj => Codec.inquiry(j) }))
       case Staff.Out() => post("out").map(_ => ())
-      case Staff.Bookings() => get("bookings").map(r => read(r)(o => arr(o, "bookings").collect { case j: Json.Obj =>
-        Codec.booking(j) -> str(j, "serviceName") }))
+      case Staff.Bookings() => get("bookings").map(r => read(r)(o => (arr(o, "bookings").collect {
+        case j: Json.Obj => Booked(Codec.booking(j), str(j, "serviceName"), str(j, "masterName"),
+          j.get("mine").contains(Json.Bool(true))) }, str(o, "me").nonEmpty)))
       case Staff.Unbook(ref) => post("booking/cancel", "ref" -> ref)
         .map(r => read(r)(o => o.get("sent").contains(Json.Bool(true))))
       case Staff.More() => get("more").map(r => read(r)(o => arr(o, "more").collect { case j: Json.Obj =>

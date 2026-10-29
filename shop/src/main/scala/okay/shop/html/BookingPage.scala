@@ -43,6 +43,7 @@ button.go{background:$a;color:#fff;border-color:$a;width:100%;padding:12px;margi
     val service = site.offer(b.service).map(_.name(l)).getOrElse(b.service)
     val status = if b.active then w(T("Записаны", "Zarezerwowane", "Booked", "Записано"))
       else w(T("Отменено", "Odwołane", "Cancelled", "Скасовано"))
+    val picker = site.offer(b.service).fold("")(o => Pages.masterPicker(site, o, b.master)(using l))
     val manage = if !b.active then "" else
       s"""<div class="card"><div class="label">${w(T("Перенести", "Przenieś", "Move", "Перенести"))}</div>
 <form data-send="booking/move" data-form="moveForm" data-done="moveDone" id="moveForm">
@@ -50,7 +51,7 @@ button.go{background:$a;color:#fff;border-color:$a;width:100%;padding:12px;margi
 <input type="hidden" name="lang" value="${l.code}"><input type="hidden" name="start" value="">${b.mode.fold("")(m =>
         s"""<input type="hidden" name="mode" value="${m.key}"><input type="hidden" name="place" value="${
           e(b.place)}">""")}
-<div class="slots" data-slots="${e(b.service)}"></div>
+$picker<div class="slots" data-slots="${e(b.service)}"></div>
 <button class="go send" type="submit">${w(T("Перенести на выбранное время", "Przenieś na wybrany termin",
         "Move to the time chosen", "Перенести на обраний час"))}</button></form>
 <div id="moveDone" style="display:none"><p class="status">${w(T("Перенесено", "Przeniesiono", "Moved",

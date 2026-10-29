@@ -22,6 +22,19 @@ object Bookings:
   final case class Plan(offer: Offer, mode: Option[Mode], place: String, address: Option[Address], schedule: Schedule,
                         before: Int, after: Int, price: Long)
 
+  /** WHO MAY TAKE IT (specs/shop.md "Masters"): the eligible masters — the one asked (`master`), else all of them in
+   * their order, `first` (a booking's own) put before the rest — each with their schedule; and every master's key.
+   * None: a shop without masters (its one calendar); `Left("master")`: the one asked does not do it */
+  def masters(c: Conf, p: Plan, master: String, first: String = ""): Either[String,
+    Option[(Vector[(String, Schedule)], Set[String])]] =
+    if c.site.masters.isEmpty then Right(None)
+    else
+      val eligible = c.site.eligible(p.offer, p.mode, p.place)
+      val asked = if master.isEmpty then eligible.filter(_.key == first) ++ eligible.filterNot(_.key == first)
+        else eligible.filter(_.key == master)
+      if asked.isEmpty then Left("master")
+      else Right(Some(asked.map(m => m.key -> Masters.schedule(p.schedule, m)) -> c.site.masters.map(_.key).toSet))
+
   private def bookable(c: Conf, key: String): Option[(Offer, Schedule)] =
     c.site.offer(key).filter(c.site.books).flatMap(o => c.site.schedule.map(o -> _))
 
@@ -60,13 +73,26 @@ object Bookings:
     case None => c.site.schedule
     case Some(m) => c.site.offer(b.service).flatMap(o => c.site.plan(o, m, b.place))
 
+  /** who may take a booking moved: its master kept when free (none asked), or the one asked */
+  private def moving(c: Conf, b: Booking, s: Schedule, master: String)
+    : Either[String, Option[(Vector[(String, Schedule)], Set[String])]] =
+    c.site.offer(b.service).fold(Right(None))(o =>
+      masters(c, Plan(o, b.mode, b.place, b.address, s, b.before, b.after, b.price), master, b.master))
+
   def slots[R[_]](c: Conf, r: Request)(using In[Store, R], In[Clock, R]): Response ! R =
-    plan(c, r.param("service").getOrElse(""), r.param("mode").getOrElse(""), r.param("place").getOrElse("")) match
+    plan(c, r.param("service").getOrElse(""), r.param("mode").getOrElse(""), r.param("place").getOrElse(""))
+      .flatMap(p => masters(c, p, r.param("master").getOrElse("")).map(p -> _)) match
       case Left(why) => pure(Web.refused(why, 404))
-      case Right(p) =>
+      case Right((p, who)) =>
         val (o, s) = (p.offer, p.schedule)
         Clock.now[R].flatMap(now => Store.bookings[R](now - day, now + (s.horizon + 1) * day).map { taken =>
-          val days = Slots.free(s, o.minutes, taken, now, p.before, p.after).filter(_.slots.nonEmpty).map(d =>
+          // one calendar, or the union of the masters' (each their own week, days off and bookings)
+          val free = who match
+            case None => Slots.free(s, o.minutes, taken, now, p.before, p.after)
+            case Some((cs, keys)) => cs.map((k, sch) => Slots.free(sch, o.minutes, Masters.taken(taken, k, keys), now,
+              p.before, p.after)).transpose.map(ds => ds.head.copy(slots = ds.flatMap(_.slots).distinctBy(_.start)
+              .sortBy(_.start)))
+          val days = free.filter(_.slots.nonEmpty).map(d =>
             Json.obj("date" -> Json.str(d.date), "weekday" -> Json.num(d.weekday),
               "slots" -> Json.Arr(d.slots.map(x =>
                 Json.obj("start" -> Json.num(x.start), "label" -> Json.str(x.label))))))
@@ -89,7 +115,7 @@ object Bookings:
     else if !Contact.valid(contact) then pure(Web.refused("contact"))
     else if !f.get("rodo_consent").exists(v => v.nonEmpty && v != "false") then pure(Web.refused("consent"))
     else (plan(c, f.getOrElse("service", ""), f.getOrElse("mode", ""), f.getOrElse("place", ""))
-      .flatMap(addressed(c, _, f)), start) match
+      .flatMap(addressed(c, _, f)).flatMap(p => masters(c, p, f.getOrElse("master", "")).map(_ => p)), start) match
       case (Left(why), _) => pure(Web.refused(why, if why == "area" then 409 else 400))
       case (_, None) => pure(Web.refused("start"))
       case (Right(p), Some(at)) => Clock.now[R].flatMap { now =>
@@ -110,9 +136,12 @@ object Bookings:
     for
       ref <- Ids.ref[R](c.site.refPrefix + "B")
       key <- Ids.secret[R]
-      made <- Store.book[R](Booking(ref, key, p.offer.key, s.master, at, p.offer.minutes, name, contact, lang,
+      b = Booking(ref, key, p.offer.key, s.master, at, p.offer.minutes, name, contact, lang,
         Consent(now, c.policy), now, mode = p.mode, place = p.place, address = p.address, before = p.before,
-        after = p.after, price = if p.mode.isDefined then p.price else 0L), s, now)
+        after = p.after, price = if p.mode.isDefined then p.price else 0L)
+      made <- masters(c, p, f.getOrElse("master", "")) match
+        case Right(Some((cs, keys))) => Store.bookWith[R](b, cs, keys, now)
+        case _ => Store.book[R](b, s, now)
       res <- made match
         case Left(why) => pure(Web.refused(why, 409))
         case Right(b) => told(c, b, Letters.booked(c, b), Letters.bookedOwner(c, b)).as(answer(c, b))
@@ -122,9 +151,11 @@ object Bookings:
   private def told[R[_]](c: Conf, b: Booking, client: Note, owner: Note)(using In[Mail, R]): Unit ! R =
     Mail.toOwner[R](owner).flatMap(_ => b.email.fold(unit[R])(to => Mail.toClient[R](to, client).map(_ => ())))
 
-  private def answer(c: Conf, b: Booking): Response = Web.json(Json.obj("ok" -> Json.bool(true),
+  private def answer(c: Conf, b: Booking): Response = Web.json(Json.Obj(Vector("ok" -> Json.bool(true),
     "ref" -> Json.str(b.ref), "key" -> Json.str(b.key), "start" -> Json.num(b.start),
-    "when" -> Json.str(Day.time(b.start)), "manage" -> Json.str(Letters.manageLink(c, b))))
+    "when" -> Json.str(Day.time(b.start)), "manage" -> Json.str(Letters.manageLink(c, b))) ++
+    // whose it is, when the shop has masters
+    Letters.master(c, b).toVector.flatMap(n => Vector("master" -> Json.str(b.master), "masterName" -> Json.str(n)))))
 
   /** the booking of the request's ref, when its key is right; else none — the same as no such booking */
   private def owned[R[_]](f: Map[String, String])(using In[Store, R]): Option[Booking] ! R =
@@ -149,7 +180,10 @@ object Bookings:
       case Some(b) => (planOf(c, b), f.getOrElse("start", "").toLongOption) match
         case (None, _) => pure(Web.refused("no schedule"))
         case (_, None) => pure(Web.refused("start"))
-        case (Some(s), Some(at)) => Clock.now[R].flatMap(now => Store.rebook[R](b.ref, at, s, now)).flatMap {
+        case (Some(s), Some(at)) => Clock.now[R].flatMap(now => moving(c, b, s, f.getOrElse("master", "")) match
+            case Left(why) => pure(Left(why))
+            case Right(Some((cs, keys))) => Store.rebookWith[R](b.ref, at, cs, keys, now)
+            case Right(None) => Store.rebook[R](b.ref, at, s, now)).flatMap {
             case Left(why) => pure(Web.refused(why, 409))
             case Right(x) => told(c, x, Letters.rebooked(c, x), Letters.rebookedOwner(c, x)).as(answer(c, x))
           }

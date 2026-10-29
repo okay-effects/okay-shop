@@ -90,12 +90,21 @@ object Site:
           hide(e, off)
           e.querySelectorAll("input").foreach(_.asInstanceOf[dom.HTMLInputElement].disabled = off)
         }
+        masters(f)
         f.dispatchEvent(new dom.Event(reload))
       }
     doc.querySelectorAll("input[name=how]").foreach(r => r.addEventListener("change", (_: dom.Event) =>
       choose(r.asInstanceOf[dom.HTMLInputElement].value)))
     doc.querySelectorAll("input[name=place][type=radio]").foreach(r => r.addEventListener("change",
-      (_: dom.Event) => Option(r.closest("form")).foreach(_.dispatchEvent(new dom.Event(reload)))))
+      (_: dom.Event) => Option(r.closest("form")).foreach { f =>
+        masters(f)
+        f.dispatchEvent(new dom.Event(reload))
+      }))
+    doc.querySelectorAll("select[name=master]").foreach { s =>
+      Option(s.closest("form")).foreach(masters)
+      s.addEventListener("change", (_: dom.Event) => Option(s.closest("form")).foreach(_.dispatchEvent(
+        new dom.Event(reload))))
+    }
     doc.querySelectorAll("[data-area-said]").foreach { said =>
       val form = said.closest("form")
       val l = formLang(form)
@@ -113,6 +122,24 @@ object Site:
         (_: dom.Event) => check())))
     }
 
+  /** the masters a form offers: only those working in its mode and place (specs/shop.md "Masters"); one no longer
+   * offered gives way to any free master */
+  private def masters(f: dom.Element): Unit =
+    Option(f.querySelector("select[name=master]")).map(_.asInstanceOf[dom.HTMLSelectElement]).foreach { s =>
+      val mode = input(f, "[name=mode]").map(_.value).getOrElse("")
+      val place = Option(f.querySelector("[name=place]:checked")).orElse(Option(f.querySelector(
+        "input[type=hidden][name=place]"))).map(_.asInstanceOf[dom.HTMLInputElement].value).getOrElse("")
+      s.querySelectorAll("option").foreach { o =>
+        val e = o.asInstanceOf[dom.HTMLOptionElement]
+        def has(attr: String, v: String) = Option(e.getAttribute(attr)).map(_.split(' ').filter(_.nonEmpty))
+          .forall(xs => xs.isEmpty || v.isEmpty || xs.contains(v))
+        val ok = e.value.isEmpty || (has("data-modes", mode) && (mode != "atShop" || has("data-places", place)))
+        hide(e, !ok)
+        e.disabled = !ok
+        if !ok && e.selected then s.value = ""
+      }
+    }
+
   /**
    * THE SLOT PICKER: a bookable service's free starts from `/api/slots`, the days as buttons, the chosen day's
    * starts as buttons; the start chosen goes into the form's hidden `start`
@@ -128,9 +155,11 @@ object Site:
       val mode = input(form, "[name=mode]").map(_.value).getOrElse("")
       val place = Option(form.querySelector("[name=place]:checked")).orElse(Option(form.querySelector(
         "input[type=hidden][name=place]"))).map(_.asInstanceOf[dom.HTMLInputElement].value).getOrElse("")
+      val master = Option(form.querySelector("select[name=master]")).map(_.asInstanceOf[dom.HTMLSelectElement].value)
+        .getOrElse("")
       start.foreach(_.value = "")
       shown(Async.start(Port.handle(WebJs.fetch)(Submit.slots[Async + Fetch](dom.window.location.origin,
-        box.getAttribute("data-slots"), mode, place)))(using queue).future)
+        box.getAttribute("data-slots"), mode, place, master)))(using queue).future)
     def shown(days: scala.concurrent.Future[Vector[Submit.Day]]): Unit =
       days.recover { case _ => Vector.empty }.foreach { ds =>
         box.innerHTML = ""
@@ -177,7 +206,8 @@ object Site:
       (if chosen then sent else scala.concurrent.Future.successful(Outcome.Refused("start")))
         .recover { case _ => Outcome.Refused("network") }.foreach {
         case Outcome.Placed(ref, blik, price, paczkomat) => done(f, ref, lang, blik, price, paczkomat)
-        case Outcome.Booked(ref, when, manage) => booked(f, ref, lang, when, manage)
+        case Outcome.Booked(ref, when, manage, master) =>
+          booked(f, ref, lang, if master.isEmpty then when else s"$when · $master", manage)
         case Outcome.Refused(why) =>
           button.foreach(_.disabled = false)
           turnstile.foreach(_.reset())

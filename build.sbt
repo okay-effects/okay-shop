@@ -32,8 +32,8 @@ lazy val fixtures = Def.task {
   val file = (Test / sourceManaged).value / "okay" / "shop" / "Fixtures.scala"
   IO.write(file, "package okay.shop\n\n/** written by the build: the two sites' content, for the tests */\n" +
     "object Fixtures:\n  val content: Map[String, (String, String)] = Map(\n" +
-    Seq("atelier", "studio", "salon", "visits").map(id => "    \"" + id + "\" -> (" + lit(base / id / "site.md") +
-      ", " + lit(base / id / "i18n.md") + ")").mkString(",\n") + ")\n" +
+    Seq("atelier", "studio", "salon", "visits", "crew").map(id => "    \"" + id + "\" -> (" +
+      lit(base / id / "site.md") + ", " + lit(base / id / "i18n.md") + ")").mkString(",\n") + ")\n" +
     "  def site(id: String): okay.shop.model.Site =\n" +
     "    okay.shop.content.Sites.of(id, content(id)._1, content(id)._2)\n")
   Seq(file)

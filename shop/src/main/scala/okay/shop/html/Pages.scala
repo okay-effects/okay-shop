@@ -222,6 +222,19 @@ $scripts
 </body></html>
 """
 
+  /** the master picker of a bookable service (specs/shop.md "Masters"): any free master first, then each master doing
+   * it, their modes and places said for the pages' script; nothing for a shop without masters */
+  def masterPicker(site: Site, o: Offer, chosen: String = "")(using l: Lang): String =
+    val ms = site.masters.filter(m => m.services.isEmpty || m.services.contains(o.key))
+    if ms.isEmpty then "" else
+      s"""<label class="fld"><span>${t("Мастер", "Specjalista", "Master", "Майстер")}</span><select name="master"
+        class="mpick" style="width:100%;font:inherit;padding:10px 12px;border-radius:10px;background:transparent;
+        color:inherit;border:1px solid rgba(127,127,127,.4)"><option value="">${t("Любой свободный мастер",
+        "Dowolny wolny specjalista", "Any free master", "Будь-який вільний майстер")}</option>${ms.map(m =>
+        s"""<option value="${e(m.key)}" data-modes="${m.modes.map(_.key).mkString(" ")}" data-places="${
+          e(m.places.mkString(" "))}"${if m.key == chosen then " selected" else ""}>${e(m.name)}</option>""")
+        .mkString}</select></label><style>.mpick option{color:#111;background:#fff}</style>"""
+
   /** a bookable service's form: the free starts by day (filled by the pages' script from `/api/slots`), who, the
    * consent, Turnstile — posted to `/api/book` */
   def bookingForm(at: At, o: Offer)(using l: Lang): String =
@@ -234,7 +247,7 @@ background:transparent;color:inherit;border:1px solid rgba(127,127,127,.4)}
         <form data-send="book" data-form="offForm" data-done="offDone">
           <input type="hidden" name="service" value="${e(o.key)}">
           <input type="hidden" name="lang" value="${l.code}">
-          <input type="hidden" name="start" value="">
+          <input type="hidden" name="start" value="">${masterPicker(at.site, o)}
           <div class="fld slots" data-slots="${e(o.key)}"><span>${t("Загружаем свободное время…",
             "Wczytujemy wolne terminy…", "Loading the free times…", "Завантажуємо вільний час…")}</span></div>
           $contactFields
@@ -333,7 +346,7 @@ color:var(--mist);margin:0 0 6px}</style>
           <input type="hidden" name="lang" value="${l.code}">
           <input type="hidden" name="start" value="">
           <input type="hidden" name="mode" value="${(if first == Mode.ByMail then booked.head else first).key}">
-          $shop$client$online
+          $shop$client$online${masterPicker(site, o)}
           <p class="label">${t("Выберите время", "Wybierz termin", "Choose a time", "Оберіть час")}</p>
           <div class="fld slots" data-slots="${e(o.key)}"><span>${t("Загружаем свободное время…",
             "Wczytujemy wolne terminy…", "Loading the free times…", "Завантажуємо вільний час…")}</span></div>

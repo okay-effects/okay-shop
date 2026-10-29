@@ -15,7 +15,7 @@ object Submit:
   enum Outcome:
     case Placed(ref: String, blik: Option[String], price: Option[String], paczkomat: Option[String])
     /** a booking made or moved: its ref, its time as the client reads it, the link that manages it */
-    case Booked(ref: String, when: String, manage: String)
+    case Booked(ref: String, when: String, manage: String, master: String = "")
     /** refused, and why: `name`, `contact`, `consent`, `captcha`, `limit`, … — or the network */
     case Refused(why: String)
 
@@ -29,7 +29,7 @@ object Submit:
           else s"status ${r.status}"))
         else (s("ref"), s("manage")) match
           case (None, _) => Outcome.Refused("answer")
-          case (Some(ref), Some(m)) => Outcome.Booked(ref, s("when").getOrElse(""), m)
+          case (Some(ref), Some(m)) => Outcome.Booked(ref, s("when").getOrElse(""), m, s("masterName").getOrElse(""))
           case (Some(ref), None) => Outcome.Placed(ref, s("blik"), s("price"), s("paczkomat"))
       }
 
@@ -37,10 +37,11 @@ object Submit:
   final case class Day(date: String, weekday: Int, slots: Vector[(Long, String)])
 
   /** the free starts of a bookable service, by day; none when the shop does not answer */
-  def slots[R[_]](base: String, service: String, mode: String = "", place: String = "")(using In[Fetch, R])
-    : Vector[Day] ! R =
+  def slots[R[_]](base: String, service: String, mode: String = "", place: String = "", master: String = "")(
+    using In[Fetch, R]): Vector[Day] ! R =
     val how = (if mode.isEmpty then "" else "&mode=" + Query.encode(mode)) +
-      (if place.isEmpty then "" else "&place=" + Query.encode(place))
+      (if place.isEmpty then "" else "&place=" + Query.encode(place)) +
+      (if master.isEmpty then "" else "&master=" + Query.encode(master))
     Fetch[R](base, Request.get("/api/slots?service=" + Query.encode(service) + how)).map { r =>
       def days(j: Json) = j("days").list.map(d =>
         Day(d("date").string, d("weekday").int, d("slots").list.map(x => x("start").long -> x("label").string)))
@@ -107,6 +108,9 @@ object Submit:
     case "taken" => T("Это время уже заняли — выберите другое.", "Ten termin jest już zajęty — wybierz inny.",
         "That time was just taken — please choose another.", "Цей час уже зайняли — оберіть інший.")(l)
     case "area" => outside(l)
+    case "master" => T("Этот мастер не делает эту услугу так — выберите другого.", "Ten specjalista nie wykonuje " +
+        "tej usługi w ten sposób — wybierz innego.", "That master does not do this service this way — choose another.",
+        "Цей майстер не робить цю послугу так — оберіть іншого.")(l)
     case "address" => T("Укажите улицу, индекс (00-000) и город.", "Podaj ulicę, kod pocztowy (00-000) i miasto.",
         "Please give the street, postcode (00-000) and city.", "Вкажіть вулицю, індекс (00-000) і місто.")(l)
     case _ => T("Не удалось отправить, попробуйте ещё раз.", "Nie udało się wysłać, spróbuj ponownie.",

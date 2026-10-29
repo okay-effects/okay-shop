@@ -124,6 +124,29 @@ object StoreDurable:
             Durable.put[Json, D](bookingKey(b.ref), Codec.booking(kept))
               .andThen(nextReminder[D](all :+ kept, now)).as(Right(kept))
         })
+      case Store.BookWith(b, candidates, masters, now) => step[Either[String, Booking]](allBookings[D].flatMap { all =>
+          candidates.find((k, sch) => Slots.isFree(sch, b.minutes, Masters.taken(all, k, masters), now, b.start,
+            b.before, b.after)) match
+            case None => pure(Left("taken"))
+            case Some((k, _)) =>
+              val kept = b.copy(master = k, reminded = b.start - day <= now)
+              Durable.put[Json, D](bookingKey(b.ref), Codec.booking(kept))
+                .andThen(nextReminder[D](all :+ kept, now)).as(Right(kept))
+        })
+      case Store.RebookWith(ref, start, candidates, masters, now) => step[Either[String, Booking]](
+        allBookings[D].flatMap { all =>
+          all.find(_.ref == ref).filter(_.active) match
+            case None => pure(Left("no such booking"))
+            case Some(b) =>
+              val others = all.filterNot(_.ref == ref)
+              candidates.find((k, sch) => Slots.isFree(sch, b.minutes, Masters.taken(others, k, masters), now, start,
+                b.before, b.after)) match
+                case None => pure(Left("taken"))
+                case Some((k, _)) =>
+                  val moved = b.copy(start = start, master = k, reminded = start - day <= now)
+                  Durable.put[Json, D](bookingKey(ref), Codec.booking(moved))
+                    .andThen(nextReminder[D](others :+ moved, now)).as(Right(moved))
+        })
       case Store.FindBooking(ref) => read[R](List(bookingKey(ref))).map(_.get(bookingKey(ref)).map(Codec.booking))
       case Store.Bookings(from, until) => readAll[R](s"$scope/booking/").map(_.map((_, j) => Codec.booking(j))
           .filter(b => b.start >= from && b.start < until).sortBy(_.start).toVector)

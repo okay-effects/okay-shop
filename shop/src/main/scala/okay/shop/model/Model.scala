@@ -41,7 +41,8 @@ final case class Offer(key: String, name: T, description: T, price: Long, order:
 /** A SITE: what its pages and letters say of it */
 final case class Site(id: String, slug: String, name: String, tagline: T, lang: Lang, logoText: String,
                       color: String, contact: T, kind: Kind, refPrefix: String, domain: String,
-                      offers: Vector[Offer], schedule: Option[Schedule] = None, work: Option[Work] = None):
+                      offers: Vector[Offer], schedule: Option[Schedule] = None, work: Option[Work] = None,
+                      masters: Vector[Master] = Vector.empty):
   def clothing: Boolean = kind == Kind.Atelier
   /** whether `o` is booked here: it lasts, and the shop has a schedule — or, by its work, a mode with hours */
   def books(o: Offer): Boolean = work match
@@ -63,6 +64,8 @@ final case class Site(id: String, slug: String, name: String, tagline: T, lang: 
       case _ => None
     val s = own.filter(_.nonEmpty).fold(base)(w => base.copy(week = w))
     Option.when(o.bookable && m.booked && s.week.values.exists(_.nonEmpty))(s)
+  /** the masters who do `o` in mode `m` at place `p` (specs/shop.md "Masters"), in their order */
+  def eligible(o: Offer, m: Option[Mode], p: String): Vector[Master] = masters.filter(_.does(o.key, m, p))
   /** the site with its work: a service with no minutes in the content takes the work's */
   def working(w: Work): Site = copy(work = Some(w), offers = offers.map(o =>
     w.services.get(o.key).filter(s => o.minutes == 0 && s.minutes > 0).fold(o)(s => o.copy(minutes = s.minutes))))

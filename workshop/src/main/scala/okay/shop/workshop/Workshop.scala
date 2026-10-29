@@ -227,31 +227,45 @@ object Workshop:
   // ---- THE BOOKINGS
 
   private enum OnBookings:
-    case Open(b: (Booking, String))
+    case Open(b: Booked)
+    case Mine, All
     case Back
 
-  def bookings[R[_]: Has[Ui]: Has[Staff]: Has[Human]](site: Shown, said: Option[Part]): Unit ! R =
+  /** the bookings: all of them, or — for a master signed in, by default — their own (specs/shop.md "Masters") */
+  def bookings[R[_]: Has[Ui]: Has[Staff]: Has[Human]](site: Shown, said: Option[Part], all: Boolean = false)
+    : Unit ! R =
     Staff.bookings[R].flatMap {
       case Left(why) => orders[R](site, Some(refusal(why)))
-      case Right(bs) =>
-        type B = (Booking, String)
-        val table = Table(bs.toList)(Column.text[B]("Коли")(b => Day.time(b._1.start)),
-          Column.text[B]("Послуга")(b => s"${b._2} · ${b._1.minutes} хв"), Column.text[B]("Клієнт")(_._1.name),
-          Column.text[B]("Контакт")(_._1.contact), Column.text[B]("Де")(b => where(b._1)),
-          Column.text[B]("Стан")(b => if b._1.active then "записано" else "скасовано"),
-          Column.text[B]("№")(_._1.ref)).keyedBy(_._1.ref).whenEmpty("Записів немає.")
-        show[OnBookings, R](Screen[OnBookings](s"Записи · ${site.name}")((said.toSeq :+ table)*)(
-          Button.select("Відкрити", table)(OnBookings.Open(_)), Button("Назад")(OnBookings.Back))).flatMap {
+      case Right((list, master)) =>
+        val mine = master && !all
+        val shown = if mine then list.filter(_.mine) else list
+        val masters = list.exists(_.master.nonEmpty)
+        val table = Table(shown.toList)((Seq(Column.text[Booked]("Коли")(b => Day.time(b.booking.start)),
+          Column.text[Booked]("Послуга")(b => s"${b.service} · ${b.booking.minutes} хв")) ++
+          Option.when(masters)(Column.text[Booked]("Майстер")(_.master)).toSeq ++ Seq(
+          Column.text[Booked]("Клієнт")(_.booking.name), Column.text[Booked]("Контакт")(_.booking.contact),
+          Column.text[Booked]("Де")(b => where(b.booking)),
+          Column.text[Booked]("Стан")(b => if b.booking.active then "записано" else "скасовано"),
+          Column.text[Booked]("№")(_.booking.ref)))*).keyedBy(_.booking.ref).whenEmpty("Записів немає.")
+        val filter = if !master then Seq.empty else if mine then Seq(Button("Усі записи")(OnBookings.All))
+          else Seq(Button("Мої записи")(OnBookings.Mine))
+        show[OnBookings, R](Screen[OnBookings](s"${if mine then "Мої записи" else "Записи"} · ${site.name}")(
+          (said.toSeq :+ table)*)((Button.select("Відкрити", table)(OnBookings.Open(_)) +: filter :+
+          Button("Назад")(OnBookings.Back))*)).flatMap {
           case OnBookings.Back => orders[R](site, None)
-          case OnBookings.Open((b, service)) => booking[R](site, b, service)
+          case OnBookings.Mine => bookings[R](site, None)
+          case OnBookings.All => bookings[R](site, None, all = true)
+          case OnBookings.Open(b) => booking[R](site, b)
         }
     }
 
   private enum OnBooking:
     case Cancel, Back
 
-  private def booking[R[_]: Has[Ui]: Has[Staff]: Has[Human]](site: Shown, b: Booking, service: String): Unit ! R =
+  private def booking[R[_]: Has[Ui]: Has[Staff]: Has[Human]](site: Shown, listed: Booked): Unit ! R =
+    val (b, service) = (listed.booking, listed.service)
     val details = Part.details(Seq("Коли" -> Day.time(b.start), "Послуга" -> s"$service · ${b.minutes} хв",
+      "Майстер" -> listed.master,
       "Як" -> b.mode.fold("")(_.label(Lang.uk)), "Адреса" -> b.address.fold("")(_.line),
       "Примітки" -> b.address.fold("")(_.notes), "Карта" -> b.address.fold("")(_.mapLink),
       "Ціна" -> (if b.price > 0 then Money.zl(b.price) else ""),

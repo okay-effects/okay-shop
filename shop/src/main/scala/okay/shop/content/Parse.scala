@@ -72,10 +72,15 @@ object Sites:
       prefix, domain, offers, schedule(f, Parse.block(siteMd, "schedule")))
     // how it works (specs/shop.md "How the work happens"): a ```json work``` block, checked; a wrong one is the
     // content's mistake, said by its field
-    Parse.raw(siteMd, "json work").fold(site)(text => okay.effects.json.Descent.parse(text).left.map(_ => "json")
-      .flatMap(Work.fromJson(_, offers.map(_.key).toSet)) match
+    val worked = Parse.raw(siteMd, "json work").fold(site)(text => okay.effects.json.Descent.parse(text).left
+      .map(_ => "json").flatMap(Work.fromJson(_, offers.map(_.key).toSet)) match
       case Right(w) => site.working(w)
       case Left(why) => throw IllegalArgumentException(s"$id: work: $why"))
+    // its masters (specs/shop.md "Masters"): a ```json masters``` block, checked against the services and the work
+    Parse.raw(siteMd, "json masters").fold(worked)(text => okay.effects.json.Descent.parse(text).left
+      .map(_ => "json").flatMap(Masters.fromJson(_, offers.map(_.key).toSet, worked.work)) match
+      case Right(ms) => worked.copy(masters = ms)
+      case Left(why) => throw IllegalArgumentException(s"$id: masters: $why"))
 
   private val days = Vector("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 
