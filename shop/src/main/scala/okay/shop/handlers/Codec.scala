@@ -104,3 +104,23 @@ object Codec:
     Lang.parse(s(j, "lang")).getOrElse(Lang.pl), Consent(n(j, "consentAt"), s(j, "policy")), n(j, "placed"),
     QuoteStatus.parse(s(j, "status")).getOrElse(QuoteStatus.Asked), n(j, "price"), n(j, "priceTo"), n(j, "start"),
     s(j, "note"), s(j, "result"))
+
+  // ---- a payment (specs/shop.md "Money")
+
+  private def log(l: PayLog): Json = Json.obj("at" -> Json.num(l.at), "by" -> Json.str(l.by),
+    "what" -> Json.str(l.what),
+    "amount" -> Json.num(l.amount), "method" -> Json.str(l.method.key), "day" -> Json.str(l.day))
+
+  def payment(p: Payment): Json.Obj = Json.obj("of" -> Json.str(p.of.key), "ref" -> Json.str(p.ref),
+    "amount" -> Json.num(p.amount), "method" -> Json.str(p.method.key), "day" -> Json.str(p.day),
+    "state" -> Json.str(p.state.key), "by" -> Json.str(p.by), "at" -> Json.num(p.at), "note" -> Json.str(p.note),
+    "refunded" -> Json.str(p.refunded), "description" -> Json.str(p.description), "service" -> Json.str(p.service),
+    "master" -> Json.str(p.master), "receipt" -> Json.str(p.receipt), "log" -> Json.Arr(p.log.map(log)))
+
+  def payment(j: Json.Obj): Payment = Payment(Of.parse(s(j, "of")).getOrElse(Of.Order), s(j, "ref"), n(j, "amount"),
+    Method.parse(s(j, "method")).getOrElse(Method.Other), s(j, "day"),
+    PayState.parse(s(j, "state")).getOrElse(PayState.Unpaid), s(j, "by"), n(j, "at"), s(j, "note"), s(j, "refunded"),
+    s(j, "description"), s(j, "service"), s(j, "master"), s(j, "receipt"),
+    j.get("log").collect { case Json.Arr(xs) => xs.collect { case l: Json.Obj => PayLog(n(l, "at"), s(l, "by"),
+      s(l, "what"), n(l, "amount"), Method.parse(s(l, "method")).getOrElse(Method.Other), s(l, "day")) } }
+      .getOrElse(Vector.empty))

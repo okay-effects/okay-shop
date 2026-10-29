@@ -45,6 +45,12 @@ object StaffApi:
       case Staff.Reply(ref, price, priceTo, start, note) => post("quote/reply", "ref" -> ref, "price" -> price,
         "priceTo" -> priceTo, "start" -> start, "note" -> note)
         .map(r => read(r)(o => o.get("sent").contains(Json.Bool(true))))
+      case Staff.Paying(of, ref) => get(s"payment?of=${of.key}&ref=" + Query.encode(ref)).map(r => read(r)(o =>
+        (o.get("payment").collect { case j: Json.Obj => Codec.payment(j) }, o.get("owner").contains(Json.Bool(true)))))
+      case Staff.Pay(of, ref, action, amount, method, day, note) => post("pay", "of" -> of.key, "ref" -> ref,
+        "action" -> action, "amount" -> amount, "method" -> method, "day" -> day, "note" -> note).map(r =>
+        read(r)(o => o.get("payment").collect { case j: Json.Obj => Codec.payment(j) }.get))
+      case Staff.NoShow(ref) => post("booking/noshow", "ref" -> ref).map(r => read(r)(_ => ()))
       case Staff.More() => get("more").map(r => read(r)(o => arr(o, "more").collect { case j: Json.Obj =>
         str(j, "text") -> str(j, "href") }.filter((t, h) => t.nonEmpty && h.nonEmpty)).getOrElse(Vector.empty))
 

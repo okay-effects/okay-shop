@@ -82,6 +82,7 @@ object Workshop:
 
   private enum OnOrder:
     case To(status: Status)
+    case Paying(action: String)
     case Letter, Back
 
   /** the button that moves an order to `s`, in the workshop's words */
@@ -103,7 +104,8 @@ object Workshop:
     }
 
   private def shown[R[_]: Has[Ui]: Has[Staff]: Has[Human]](site: Shown, opened: Opened, said: Option[Part])
-    : Unit ! R =
+    : Unit ! R = Staff.paying[R](Of.Order, opened.job.order.ref).flatMap { paying =>
+    val (pay, owner) = paying.getOrElse((None, false))
     val o = opened.job.order
     val emailed = opened.emailed match
       case "sent" => Some(Part.info("Клієнту надіслано лист."))
@@ -116,13 +118,17 @@ object Workshop:
       else Style.Primary)(OnOrder.To(s)))
     val letter = o.email.map(_ => Button("Лист клієнту")(OnOrder.Letter)).toSeq
     // the client's own receipt, as the track page links it
-    val receipt = Option.when(o.status == Status.Paid)(Part.link("Квитанція (rachunek) клієнта",
-      s"/${o.lang.code}/receipt?ref=${o.ref}&k=${o.key}")).toSeq
+    val receipt = Option.when(o.status == Status.Paid || pay.exists(_.paid))(Part.link(
+      "Квитанція (rachunek) клієнта", s"/${o.lang.code}/receipt?ref=${o.ref}&k=${o.key}")).toSeq
     show[OnOrder, R](Screen[OnOrder](s"${o.ref} · ${o.status.label(uk)}")(
-      (said.toSeq ++ emailed.toSeq ++ Seq(details(opened.job)) ++ receipt :+ Part.section("Історія")(history))*)(
-      (moves ++ letter :+ Button("Назад")(OnOrder.Back))*)).flatMap {
+      (said.toSeq ++ emailed.toSeq ++ Seq(details(opened.job), paymentPart(pay)) ++ receipt :+
+        Part.section("Історія")(history))*)(
+      (moves ++ payButtons(pay, owner).map((t, a) => Button(t)(OnOrder.Paying(a))) ++ letter :+
+        Button("Назад")(OnOrder.Back))*)).flatMap {
       case OnOrder.Back => orders[R](site, None)
       case OnOrder.Letter => write[R](site, opened)
+      case OnOrder.Paying(action) => paid[R](Of.Order, o.ref, pay, o.amount max offerPrice(opened.job), action)
+          .flatMap(told => order[R](site, o.ref, told))
       case OnOrder.To(s) => asked[R](opened.job, s).flatMap {
         case None => shown[R](site, opened.copy(emailed = ""), None)
         case Some(m) => Staff.move[R](o.ref, m).flatMap {
@@ -131,6 +137,54 @@ object Workshop:
         }
       }
     }
+  }
+
+  // ---- MONEY (specs/shop.md "Money")
+
+  /** a payment, in the workshop's words */
+  def paymentPart(pay: Option[Payment]): Part = Part.details("Оплата" -> (pay match
+    case Some(p) if p.paid => (Seq(Money.zl(p.amount), method(p.method), p.day) ++ Option.when(p.receipt.nonEmpty)(
+      p.receipt) ++ Option.when(p.note.nonEmpty)(p.note)).mkString(" · ")
+    case Some(p) if p.state == PayState.Refunded => s"повернено ${p.refunded} · ${Money.zl(p.amount)}"
+    case _ => "не оплачено"))
+
+  def method(m: Method): String = m.label(uk)
+
+  /** what may be done with a payment: marked paid; the owner's change, undo and refund */
+  def payButtons(pay: Option[Payment], owner: Boolean): Seq[(String, String)] = pay match
+    case Some(p) if p.paid => if owner then Seq("Змінити оплату" -> "paid", "Не оплачено" -> "unpaid",
+      "Повернення коштів" -> "refund") else Nil
+    case Some(_) if owner => Seq("Оплачено" -> "paid")
+    case Some(_) => Nil
+    case None => Seq("Оплачено" -> "paid")
+
+  private val methods = Seq("Готівка (cash)" -> Method.Cash, "Картка (card)" -> Method.Card, "BLIK" -> Method.Blik,
+    "Переказ (transfer)" -> Method.Transfer, "Інше (other)" -> Method.Other)
+
+  /** a payment marked: `paid` asks the amount (`suggested` to start with), the method, the day (blank: today), a
+   * note; what was done, or why not */
+  private def paid[R[_]: Has[Ui]: Has[Staff]](of: Of, ref: String, pay: Option[Payment], suggested: Long,
+                                              action: String): Option[Part] ! R =
+    val done: Either[String, Payment] => Option[Part] = {
+      case Right(p) => Some(Part.info("Оплата: " + (p.state match
+        case PayState.Paid => s"${Money.zl(p.amount)} · ${method(p.method)} · ${p.day}"
+        case PayState.Refunded => s"повернено ${Money.zl(p.amount)}"
+        case PayState.Unpaid => "не оплачено")))
+      case Left(why) => Some(Part.problem(refusal(why)))
+    }
+    if action != "paid" then Staff.pay[R](of, ref, action).map(done)
+    else
+      val amount = BigDecimal(pay.filter(_.amount > 0).fold(suggested)(_.amount)) / 100
+      val f = Form((Field.money("Сума, zł", "PLN").keyed("amount").check("більше нуля")(_ > 0)
+          .initially(amount.setScale(2)),
+        Field.choice("Спосіб", methods*).keyed("method").initially(pay.fold(Method.Cash)(_.method)),
+        Field.text("Дата (2026-10-29; порожньо — сьогодні)").keyed("day").optional,
+        Field.text("Примітка").keyed("note").optional))
+      ask[(BigDecimal, Method, Option[String], Option[String]), R]("Оплата", f, "Записати").flatMap {
+        case None => pure(None)
+        case Some((a, m, d, n)) => Staff.pay[R](of, ref, "paid", a.bigDecimal.toPlainString, m.key, d.getOrElse(""),
+          n.getOrElse("")).map(done)
+      }
 
   /** what a move needs asked first: the amount paid, the tracking number, the reason to cancel */
   private def asked[R[_]: Has[Ui]](job: Job, to: Status): Option[Move] ! R = to match
@@ -248,7 +302,7 @@ object Workshop:
           Option.when(masters)(Column.text[Booked]("Майстер")(_.master)).toSeq ++ Seq(
           Column.text[Booked]("Клієнт")(_.booking.name), Column.text[Booked]("Контакт")(_.booking.contact),
           Column.text[Booked]("Де")(b => where(b.booking)),
-          Column.text[Booked]("Стан")(b => if b.booking.active then "записано" else "скасовано"),
+          Column.text[Booked]("Стан")(b => state(b.booking)),
           Column.text[Booked]("№")(_.booking.ref)))*).keyedBy(_.booking.ref).whenEmpty("Записів немає.")
         val filter = if !master then Seq.empty else if mine then Seq(Button("Усі записи")(OnBookings.All))
           else Seq(Button("Мої записи")(OnBookings.Mine))
@@ -263,9 +317,12 @@ object Workshop:
     }
 
   private enum OnBooking:
-    case Cancel, Back
+    case Paying(action: String)
+    case Cancel, NoShow, Back
 
-  private def booking[R[_]: Has[Ui]: Has[Staff]: Has[Human]](site: Shown, listed: Booked): Unit ! R =
+  private def booking[R[_]: Has[Ui]: Has[Staff]: Has[Human]](site: Shown, listed: Booked, said: Option[Part] = None)
+    : Unit ! R = Staff.paying[R](Of.Booking, listed.booking.ref).flatMap { paying =>
+    val (pay, owner) = paying.getOrElse((None, false))
     val (b, service) = (listed.booking, listed.service)
     val details = Part.details(Seq("Коли" -> Day.time(b.start), "Послуга" -> s"$service · ${b.minutes} хв",
       "Майстер" -> listed.master,
@@ -273,18 +330,36 @@ object Workshop:
       "Примітки" -> b.address.fold("")(_.notes), "Карта" -> b.address.fold("")(_.mapLink),
       "Ціна" -> (if b.price > 0 then Money.zl(b.price) else ""),
       "Клієнт" -> b.name, "Контакт" -> b.contact, "Мова" -> b.lang.code,
-      "Стан" -> (if b.active then "записано" else "скасовано"),
+      "Стан" -> state(b),
       "Згода RODO" -> s"${Day.time(b.consent.at)} · політика ${b.consent.policy}").filter(_._2.nonEmpty)*)
     val cancel = Option.when(b.active)(Button("Скасувати запис", Style.Danger)(OnBooking.Cancel)).toSeq
-    show[OnBooking, R](Screen[OnBooking](s"${b.ref} · ${Day.time(b.start)}")(details)(
-      (cancel :+ Button("Назад")(OnBooking.Back))*)).flatMap {
+    val missed = Option.when(b.active)(Button("Не прийшов")(OnBooking.NoShow)).toSeq
+    val receipt = Option.when(pay.exists(_.paid))(Part.link("Квитанція (rachunek) клієнта",
+      s"/${b.lang.code}/receipt?ref=${b.ref}&k=${b.key}")).toSeq
+    show[OnBooking, R](Screen[OnBooking](s"${b.ref} · ${Day.time(b.start)}")((said.toSeq ++ Seq(details,
+      paymentPart(pay)) ++ receipt)*)((payButtons(pay, owner).map((t, a) => Button(t)(OnBooking.Paying(a))) ++
+      missed ++ cancel :+ Button("Назад")(OnBooking.Back))*)).flatMap {
       case OnBooking.Back => bookings[R](site, None)
+      case OnBooking.Paying(action) => paid[R](Of.Booking, b.ref, pay, b.price, action)
+          .flatMap(told => booking[R](site, listed, told))
+      case OnBooking.NoShow => Staff.noShow[R](b.ref).flatMap {
+        case Right(()) => bookings[R](site, Some(Part.info("Позначено: клієнт не прийшов.")))
+        case Left(why) => booking[R](site, listed, Some(Part.problem(if why == "no such booking" then
+          "Лише запис, час якого вже минув." else refusal(why))))
+      }
       case OnBooking.Cancel => Staff.unbook[R](b.ref).flatMap {
         case Right(sent) => bookings[R](site, Some(Part.info(if sent then "Запис скасовано, клієнту надіслано лист."
           else "Запис скасовано.")))
         case Left(why) => bookings[R](site, Some(Part.problem(refusal(why))))
       }
     }
+  }
+
+  /** a booking's state, in the workshop's words */
+  def state(b: Booking): String = b.status match
+    case BookingStatus.Booked => "записано"
+    case BookingStatus.Cancelled => "скасовано"
+    case BookingStatus.NoShow => "не прийшов"
 
   // ---- THE INQUIRIES FOR A QUOTE (specs/shop.md "Inquiry and quote")
 
@@ -349,5 +424,10 @@ object Workshop:
     case "no such quote" => "Такого запиту немає (або на нього вже відповіли)."
     case "no such booking" => "Такого запису немає (або його вже скасовано)."
     case "no email" => "У клієнта немає email."
+    case "owner" => "Лише власник може змінити, скасувати чи повернути оплату."
+    case "state" => "Стан оплати вже інший — оновіть сторінку."
+    case "amount" => "Сума — більше нуля, до 1 000 000 zł."
+    case "day" => "Дата — у формі 2026-10-29, не пізніше сьогодні."
+    case "method" => "Оберіть спосіб оплати."
     case "no connection" => "Немає зв'язку з сервером."
     case other => s"Відмова: $other"

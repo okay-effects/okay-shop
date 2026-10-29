@@ -44,6 +44,13 @@ enum Staff[X]:
     extends Staff[Either[String, Boolean]]
   /** the host's own pages for the person signed in: their text and address (none when the host has none) */
   case More() extends Staff[Vector[(String, String)]]
+  /** the payment of an order or a booking as it counts (none: unpaid), and whether the person is the owner */
+  case Paying(of: Of, ref: String) extends Staff[Either[String, (Option[Payment], Boolean)]]
+  /** a payment marked (specs/shop.md "Money"): `paid` with its amount (zł), method, day, note; `unpaid`; `refund` */
+  case Pay(of: Of, ref: String, action: String, amount: String, method: String, day: String, note: String)
+    extends Staff[Either[String, Payment]]
+  /** a past booking marked a no-show */
+  case NoShow(ref: String) extends Staff[Either[String, Unit]]
 
 object Staff:
   def me[R[_]: Has[Staff]]: Option[String] ! R = perform[Staff](Me())
@@ -62,6 +69,12 @@ object Staff:
   def reply[R[_]: Has[Staff]](ref: String, price: String, priceTo: String, start: String, note: String)
     : Either[String, Boolean] ! R = perform[Staff](Reply(ref, price, priceTo, start, note))
   def more[R[_]: Has[Staff]]: Vector[(String, String)] ! R = perform[Staff](More())
+  def paying[R[_]: Has[Staff]](of: Of, ref: String): Either[String, (Option[Payment], Boolean)] ! R =
+    perform[Staff](Paying(of, ref))
+  def pay[R[_]: Has[Staff]](of: Of, ref: String, action: String, amount: String = "", method: String = "",
+                            day: String = "", note: String = ""): Either[String, Payment] ! R =
+    perform[Staff](Pay(of, ref, action, amount, method, day, note))
+  def noShow[R[_]: Has[Staff]](ref: String): Either[String, Unit] ! R = perform[Staff](NoShow(ref))
 
 /** A PERSON, NOT A BOT: Turnstile's token for the sign-in form — the page's widget answers it, a test a constant */
 enum Human[X]:

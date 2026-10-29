@@ -20,6 +20,8 @@ import okay.shop.model.*
  *   site/quote/<ref>             an inquiry for a quote, as it is now (asked, quoted, decided)
  *   site/booking/<ref>           a booking as it is now (its master, start, minutes, status, reminded; its mode,
  *                                place, address, buffers, price)
+ *   site/pay/<of>/<ref>          a payment of an order, a booking or manual income, with its log
+ *   site/receipts/<year>         the last receipt number given in a year
  *
  * A change is ONE `Durable.step`: the event and the order it moves written together or not at all; a reading is a
  * read of what is committed, no step. Only the SHA-256 of a link's or a session's secret is a key
@@ -34,6 +36,7 @@ object StoreDurable:
   private def session(hash: String) = s"$scope/session/$hash"
   private def bookingKey(ref: String) = s"$scope/booking/$ref"
   private def quoteKey(ref: String) = s"$scope/quote/$ref"
+  private def payKey(of: Of, ref: String) = s"$scope/pay/${of.key}/$ref"
   private val day = 86400000L
 
   def run[R[_], Rest[_], A](p: A ! R)(using Split[Store, R, Rest], In[Storage, Rest]): A ! Rest =
@@ -210,6 +213,29 @@ object StoreDurable:
               val cancelled = b.copy(status = BookingStatus.Cancelled)
               Durable.put[Json, D](bookingKey(ref), Codec.booking(cancelled))
                 .andThen(nextReminder[D](all.filterNot(_.ref == ref) :+ cancelled, now)).as(Some(cancelled))
+        })
+      case Store.Pay(m, start, who, owner, cancelled, today, now) => step[Either[String, Payment]](
+        Durable.get[Json, D](payKey(m.of, m.ref)).flatMap { kept =>
+          val current = kept.collect { case j: Json.Obj => Codec.payment(j) }.orElse(start)
+          Payments.mark(current, m, who, owner, cancelled, today, now) match
+            case Left(why) => pure(Left(why))
+            // the first time paid: the year's next number, in this step
+            case Right(p) if p.paid && p.receipt.isEmpty =>
+              val counter = s"$scope/receipts/${p.day.take(4)}"
+              Durable.get[Long, D](counter).flatMap { n =>
+                val numbered = p.copy(receipt = Payments.receipt(p.day.take(4), n.getOrElse(0L) + 1))
+                Durable.put[Long, D](counter, n.getOrElse(0L) + 1)
+                  .andThen(Durable.put[Json, D](payKey(m.of, m.ref), Codec.payment(numbered))).as(Right(numbered))
+              }
+            case Right(p) => Durable.put[Json, D](payKey(m.of, m.ref), Codec.payment(p)).as(Right(p))
+        })
+      case Store.FindPayment(of, ref) => read[R](List(payKey(of, ref))).map(_.get(payKey(of, ref)).map(Codec.payment))
+      case Store.Payments() => readAll[R](s"$scope/pay/").map(_.map((_, j) => Codec.payment(j)).toVector)
+      case Store.NoShow(ref, now) => step[Option[Booking]](Durable.get[Json, D](bookingKey(ref)).flatMap {
+          case Some(j: Json.Obj) if Codec.booking(j).active && Codec.booking(j).start < now =>
+            val missed = Codec.booking(j).copy(status = BookingStatus.NoShow)
+            Durable.put[Json, D](bookingKey(ref), Codec.booking(missed)).as(Some(missed))
+          case _ => pure(None)
         })
       case Store.Remind(now) => step[Vector[Booking]](allBookings[D].flatMap { all =>
           val due = all.filter(b => b.active && !b.reminded && b.start - day <= now && b.start > now)

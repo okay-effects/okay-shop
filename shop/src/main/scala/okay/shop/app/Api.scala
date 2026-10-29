@@ -5,7 +5,7 @@ import okay.scala3.*
 import okay.scala3.std.Clock
 import okay.serverless.cloud.{Request, Response}
 import okay.shop.effects.*
-import okay.shop.html.{Conf, Letters, Track}
+import okay.shop.html.{Conf, Letters, Receipt, Track}
 import okay.shop.model.*
 
 /**
@@ -24,6 +24,8 @@ object Api:
     val desk = c.desk.path.split('/').toList.filter(_.nonEmpty) :+ "api"
     (r.method, parts) match
       case (_, ps) if ps.startsWith(desk) => Workshop.answer(c, r, ps.drop(desk.size))
+      // the owner's reports (specs/shop.md "Reports"): pages beside the workshop's
+      case ("GET", ps) if ps.startsWith(desk.init :+ "reports") => Accounts.pages(c, r, ps.drop(desk.size))
       case ("POST", List("api", "order")) => order(c, r)
       case ("POST", List("api", "inquiry")) => inquiry(c, r)
       case ("GET", List(l, "track")) if Lang.parse(l).isDefined => trackLink(c, Lang.parse(l).get, r)
@@ -145,9 +147,10 @@ object Api:
     val ref = r.param("ref").getOrElse("").take(40)
     val key = r.param("k").getOrElse("")
     if key.isEmpty then pure(page(Track.search(c.site, l, ref, c.sitekey, failed = false)))
-    else found[R](ref)(o => same(o.key, key)).map {
-      case Some(o) => page(Track.status(c.site, l, o))
-      case None => page(Track.search(c.site, l, ref, c.sitekey, failed = true))
+    else found[R](ref)(o => same(o.key, key)).flatMap {
+      case Some(o) => Store.payment[R](Of.Order, o.ref).map(p =>
+          page(Track.status(c.site, l, o, p.exists(_.paid))))
+      case None => pure(page(Track.search(c.site, l, ref, c.sitekey, failed = true)))
     }
 
   def trackForm[R[_]](c: Conf, l: Lang, r: Request)(using In[Store, R], In[Captcha, R], In[Clock, R])
@@ -160,16 +163,32 @@ object Api:
       human <- if allowed then Captcha.verify[R](f.getOrElse("cf-turnstile-response", ""), ip(r)) else pure(false)
       o <- if allowed && human then found[R](ref)(o => Contact.matches(field(f, "contact"), o.contact))
         else pure(None)
+      paid <- o.fold(pure[Option[Payment], R](None))(x => Store.payment[R](Of.Order, x.ref))
     yield o match
-      case Some(o) => page(Track.status(c.site, l, o))
+      case Some(o) => page(Track.status(c.site, l, o, paid.exists(_.paid)))
       case None => page(Track.search(c.site, l, ref, c.sitekey, failed = true))
 
+  /** the receipt of a paid order or booking (specs/shop.md "Money"): by its payment's record, numbered; an order the
+   * old workflow moved to `paid` by the old receipt, as it was */
   def receipt[R[_]](c: Conf, r: Request)(using In[Store, R]): Response ! R =
-    found[R](r.param("ref").getOrElse(""))(o => same(o.key, r.param("k").getOrElse("")) && o.status == Status.Paid)
-      .map {
-        case Some(o) => page(Track.receipt(c.site, o, c.contact))
-        case None => Web.page("Rachunek dostępny po opłaceniu zamówienia.", 404)
-      }
+    val ref = r.param("ref").getOrElse("").trim
+    val key = r.param("k").getOrElse("")
+    val none = Web.page("Rachunek dostępny po opłaceniu zamówienia.", 404)
+    found[R](ref)(o => same(o.key, key)).flatMap {
+      case Some(o) => Store.payment[R](Of.Order, o.ref).map {
+          case Some(p) if p.paid => page(Receipt.page(c, p, o.name, o.offerKey, Day.of(o.placed)))
+          case Some(_) => none
+          case None if o.status == Status.Paid => page(Track.receipt(c.site, o, c.contact))
+          case None => none
+        }
+      case None => if ref.isEmpty then pure(none) else Store.booking[R](ref.toUpperCase).flatMap {
+          case Some(b) if same(b.key, key) => Store.payment[R](Of.Booking, b.ref).map {
+              case Some(p) if p.paid => page(Receipt.page(c, p, b.name, b.service, Day.of(b.start)))
+              case _ => none
+            }
+          case _ => pure(none)
+        }
+    }
 
   /** equal, in a time that does not tell where they differ */
   def same(a: String, b: String): Boolean =

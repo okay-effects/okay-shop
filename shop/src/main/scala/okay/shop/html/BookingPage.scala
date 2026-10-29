@@ -40,12 +40,17 @@ button.go{background:$a;color:#fff;border-color:$a;width:100%;padding:12px;margi
 
   private val title = T("Ваша запись", "Twoja rezerwacja", "Your booking", "Ваш запис")
 
-  def page(c: Conf, l: Lang, b: Booking): String =
+  /** a booking's page; `receipt` when it is paid (specs/shop.md "Money": the receipt linked) */
+  def page(c: Conf, l: Lang, b: Booking, receipt: Boolean = false): String =
     def w(t: T) = e(t(l))
     val site = c.site
     val service = site.offer(b.service).map(_.name(l)).getOrElse(b.service)
     val status = if b.active then w(T("Записаны", "Zarezerwowane", "Booked", "Записано"))
+      else if b.status == BookingStatus.NoShow then w(T("Неявка", "Nieobecność", "Not attended", "Неявка"))
       else w(T("Отменено", "Odwołane", "Cancelled", "Скасовано"))
+    val paid = if !receipt then "" else s"""<div class="card"><a href="/${l.code}/receipt?ref=${e(b.ref)}&amp;k=${
+      e(b.key)}">${w(T("Квитанция (скачать / печать) →", "Rachunek (pobierz / drukuj) →", "Receipt (download / " +
+      "print) →", "Квитанція (завантажити / друк) →"))}</a></div>\n"""
     val picker = site.offer(b.service).fold("")(o => Pages.masterPicker(site, o, b.master)(using l))
     val manage = if !b.active then "" else
       s"""<div class="card"><div class="label">${w(T("Перенести", "Przenieś", "Move", "Перенести"))}</div>
@@ -75,7 +80,7 @@ $picker<div class="slots" data-slots="${e(b.service)}"></div>
       s"""\n    <div class="label" style="margin-top:10px">${e(k)}</div><div class="val">$v</div>""").mkString}
     <div class="ref" style="margin-top:4px">${e(b.ref)}</div>
   </div>
-$manage
+$paid$manage
 </div><script src="/site.js" defer></script></body></html>
 """
 

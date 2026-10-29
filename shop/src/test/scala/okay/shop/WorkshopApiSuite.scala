@@ -50,7 +50,9 @@ class WorkshopApiSuite extends munit.FunSuite:
     val w = World(more = email => if email == staff then Vector("Wygląd" -> "/workshop/look/") else Vector.empty)
     assertEquals(Browser(w).get("/workshop/api/more").status, 401)
     val b = signedIn(w)
-    assertEquals(b.get("/workshop/api/more").text, """{"more":[{"text":"Wygląd","href":"/workshop/look/"}]}""")
+    // the host's, then the engine's reports for the owner (a site that names none: every staff member)
+    assertEquals(b.get("/workshop/api/more").text, """{"more":[{"text":"Wygląd","href":"/workshop/look/"},""" +
+      """{"text":"Raporty · Звіти · Reports","href":"/workshop/reports/"}]}""")
     assertEquals(World().get("/workshop/api/more").status, 401)
     import okay.scala3.*
     import okay.serverless.cloud.Request

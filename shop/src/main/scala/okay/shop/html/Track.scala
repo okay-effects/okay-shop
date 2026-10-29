@@ -40,7 +40,7 @@ ${if failed then s"""<p class="err">${e(words.notFoundHint)}</p>""" else ""}
 """
 
   /** an order's status: the service, the ref, the status, the delivery, the tracking number, the hints */
-  def status(site: Site, l: Lang, o: Order): String =
+  def status(site: Site, l: Lang, o: Order, paid: Boolean = false): String =
     val a = accent(site)
     val words = Words(l)
     val item = site.offer(o.offerKey).map(_.name(l)).getOrElse(words.fromSite)
@@ -50,7 +50,8 @@ ${if failed then s"""<p class="err">${e(words.notFoundHint)}</p>""" else ""}
     val hint =
       if o.status == Status.Accepted && o.courier then s"""<div class="hint">${e(words.sendHint)}</div>"""
       else if o.status == Status.ParcelOut then s"""<div class="hint">${e(words.inpostHint)}</div>"""
-      else if o.status == Status.Paid then s"""<div class="hint"><a href="/${l.code}/receipt?ref=${e(o.ref)}&amp;k=""" +
+      else if o.status == Status.Paid || paid then
+        s"""<div class="hint"><a href="/${l.code}/receipt?ref=${e(o.ref)}&amp;k=""" +
         s"""${e(o.key)}">${e(words.receiptLink)}</a></div>"""
       else ""
     s"""<!doctype html><html lang="${l.code}"><head><meta charset="utf-8">

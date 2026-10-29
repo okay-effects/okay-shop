@@ -58,6 +58,15 @@ enum Store[X]:
   case Decide(ref: String, accepted: Boolean, result: String) extends Store[Option[Quote]]
   /** the bookings whose reminder is due at `now`, marked reminded; the next reminder's alarm set */
   case Remind(now: Long) extends Store[Vector[Booking]]
+  /** a payment changed as `mark` asks (specs/shop.md "Money"), by the rules, in one step: `start` the payment as it
+   * counts before (its record, or an old paid order's); a receipt numbered when it is first paid */
+  case Pay(mark: Mark, start: Option[Payment], who: String, owner: Boolean, cancelled: Boolean, today: String,
+           now: Long) extends Store[Either[String, Payment]]
+  case FindPayment(of: Of, ref: String) extends Store[Option[Payment]]
+  /** every payment record */
+  case Payments() extends Store[Vector[Payment]]
+  /** a past booking kept marked a no-show: none when it is not such */
+  case NoShow(ref: String, now: Long) extends Store[Option[Booking]]
 
 object Store:
   def place[R[_]](o: Order)(using In[Store, R]): Unit ! R = perform[Store](Place(o))
@@ -96,3 +105,9 @@ object Store:
   def decide[R[_]](ref: String, accepted: Boolean, result: String)(using In[Store, R]): Option[Quote] ! R =
     perform[Store](Decide(ref, accepted, result))
   def remind[R[_]](now: Long)(using In[Store, R]): Vector[Booking] ! R = perform[Store](Remind(now))
+  def pay[R[_]](m: Mark, start: Option[Payment], who: String, owner: Boolean, cancelled: Boolean, today: String,
+                now: Long)(using In[Store, R]): Either[String, Payment] ! R =
+    perform[Store](Pay(m, start, who, owner, cancelled, today, now))
+  def payment[R[_]](of: Of, ref: String)(using In[Store, R]): Option[Payment] ! R = perform[Store](FindPayment(of, ref))
+  def payments[R[_]](using In[Store, R]): Vector[Payment] ! R = perform[Store](Payments())
+  def noShow[R[_]](ref: String, now: Long)(using In[Store, R]): Option[Booking] ! R = perform[Store](NoShow(ref, now))

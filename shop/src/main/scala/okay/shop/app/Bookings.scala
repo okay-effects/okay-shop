@@ -206,9 +206,11 @@ object Bookings:
     }
 
   def page[R[_]](c: Conf, l: Lang, r: Request)(using In[Store, R]): Response ! R =
-    owned[R](Map("ref" -> r.param("ref").getOrElse(""), "k" -> r.param("k").getOrElse(""))).map {
-      case Some(b) => Web.page(BookingPage.page(c, l, b))
-      case None => Web.page(BookingPage.missing(c, l), 404)
+    owned[R](Map("ref" -> r.param("ref").getOrElse(""), "k" -> r.param("k").getOrElse(""))).flatMap {
+      // a paid booking links its receipt (specs/shop.md "Money")
+      case Some(b) => Store.payment[R](Of.Booking, b.ref).map(p => Web.page(BookingPage.page(c, l, b,
+        receipt = p.exists(_.paid))))
+      case None => pure(Web.page(BookingPage.missing(c, l), 404))
     }
 
   /** the master's calendar: the bookings from a week ago to the horizon, by the shop's calendar key */

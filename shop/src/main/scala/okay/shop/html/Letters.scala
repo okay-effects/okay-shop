@@ -7,7 +7,8 @@ import okay.shop.model.*
  * a preview's workers.dev, or the domain), the BLIK phone, the paczkomat, the Turnstile key, who may sign in */
 final case class Conf(site: Site, origin: String, blik: String, paczkomat: String, sitekey: String,
                       staff: Set[String], contact: String, policy: String, calendarKey: String = "",
-                      more: String => Vector[(String, String)] = _ => Vector.empty, desk: Desk = Desk())
+                      more: String => Vector[(String, String)] = _ => Vector.empty, desk: Desk = Desk(),
+                      owner: String => Boolean = _ => true)
 
 /** where a workshop's sign-in lives (specs/shop.md "The host's own workshop pages"): its path — its API under
  * `<path>/api/`, its page `<path>/` — and its session's cookie. A host may sign its own people in elsewhere */

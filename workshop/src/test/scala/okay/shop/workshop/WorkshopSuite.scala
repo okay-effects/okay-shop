@@ -72,7 +72,8 @@ class WorkshopSuite extends munit.FunSuite:
     val b = Browser(w)
     signIn(w, b)
     assert(texts(play(w, b).at).contains("Link(Wygląd · Вигляд,/workshop/look/)"), texts(play(w, b).at))
-    val plain = World()
+    // a person who is not the owner: no link at all
+    val plain = World(owner = _ => false)
     val other = Browser(plain)
     signIn(plain, other)
     assert(!texts(play(plain, other).at).contains("Link("))
@@ -112,4 +113,24 @@ class WorkshopSuite extends munit.FunSuite:
     val other = Browser(atelier)
     signIn(atelier, other)
     assert(!play(atelier, other).at.toList.flatMap(_.buttons).map(_.toString).exists(_.contains("Записи")))
+  }
+
+  test("money on a booking: marked paid by the staff (method, amount), the receipt linked; a no-show refused ahead") {
+    val w = World("salon", owner = _ => false)
+    val start = w.now + 19 * 3600000L // Friday 10:00 in Warsaw
+    val ref = w.json(w.post("/api/book", "service" -> "cut", "start" -> start.toString, "name" -> "Anna",
+      "contact" -> "anna@example.com", "rodo_consent" -> "on", "lang" -> "pl", "cf-turnstile-response" -> "t"))("ref")
+    val b = Browser(w)
+    signIn(w, b)
+    val open = Seq(Act.press("Записи"), Act.choose("Відкрити", ref))
+    assert(texts(play(w, b, open*).at).contains("не оплачено"))
+    val ahead = play(w, b, (open :+ Act.press("Не прийшов"))*)
+    assert(texts(ahead.at).contains("Лише запис, час якого вже минув."), texts(ahead.at))
+    val paid = play(w, b, (open ++ Seq(Act.press("Оплачено"), Act.press("Записати", "amount" -> "60.00",
+      "method" -> "blik")))*)
+    assertEquals(paid.problems, Nil)
+    assert(texts(paid.at).contains("60 zł · BLIK"), texts(paid.at))
+    assert(texts(paid.at).contains(s"/pl/receipt?ref=$ref"), "the client's receipt linked")
+    // the staff cannot change or undo it: no such buttons
+    assert(!paid.at.toList.flatMap(_.buttons).map(_.toString).exists(_.contains("Не оплачено")))
   }

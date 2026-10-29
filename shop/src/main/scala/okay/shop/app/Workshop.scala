@@ -107,11 +107,21 @@ border:0;border-radius:12px;background:#2a1f14;color:#fff;cursor:pointer}</style
   // ---- SIGNED IN
 
   private def signedIn[R[_]](c: Conf, r: Request, path: List[String], email: String, now: Long)(using In[Store, R],
-    In[Mail, R]): Response ! R =
+    In[Mail, R], In[Ids, R]): Response ! R =
     (r.method, path) match
       case ("GET", List("me")) => pure(ok(Json.obj("email" -> Json.str(email))))
-      case ("GET", List("more")) => pure(ok(Json.obj("more" -> Json.Arr(c.more(email).map((text, href) =>
+      // the host's pages, then the engine's own for the owner: the reports (specs/shop.md "Reports")
+      case ("GET", List("more")) => pure(ok(Json.obj("more" -> Json.Arr((c.more(email) ++
+          Option.when(c.owner(email))(reports -> s"${c.desk.path}/reports/")).map((text, href) =>
           Json.obj("text" -> Json.str(text), "href" -> Json.str(href)))))))
+      // money (specs/shop.md "Money")
+      case ("GET", List("payment")) => Accounts.payment(c, r, email)
+      case ("POST", List("pay")) => Accounts.pay(c, json(r), email, now)
+      case ("POST", List("income")) => Accounts.income(c, json(r), email, now)
+      case ("GET", List("incomes")) => Accounts.incomes(c, email)
+      case ("POST", List("booking", "noshow")) => Accounts.noShow(json(r), now)
+      case ("GET", List("report")) => Accounts.report(c, r, email, now, csv = false)
+      case ("GET", List("report.csv")) => Accounts.report(c, r, email, now, csv = true)
       case ("POST", List("out")) => perform[Store](Store.EndSession(hash(Web.cookie(r, c.desk.cookie)
           .getOrElse("")))).map(_ => ok(Json.obj()).header("Set-Cookie",
             s"${c.desk.cookie}=; Path=/; HttpOnly; Secure; SameSite=Lax; " +
@@ -141,6 +151,8 @@ border:0;border-radius:12px;background:#2a1f14;color:#fff;cursor:pointer}</style
       case _ => pure(Response.notFound())
 
   private val day = 86400000L
+  /** the reports' link, in the workshop's languages */
+  val reports = "Raporty · Звіти · Reports"
 
   /** an order as the workshop shows it: its fields, its service's name and price, where it may go next */
   def described(c: Conf, o: Order): Json.Obj =

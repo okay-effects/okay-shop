@@ -264,6 +264,117 @@ file-based site (a repository's `site/`) and a host's stored copy are the same t
 - Tests: `ContentSuite` (the five fixtures written unchanged byte for byte; edits read back; key stability; hidden;
   the checks; an escaped name on the pages).
 
+## Money: payments, income, reports, receipts (operator, 2026-10-29)
+
+What a shop was paid, as data — so its owner sees the month and gives the accountant a table. One shop's: the engine.
+Expenses are a later stage (not here).
+
+- **A payment** (`Payment`, `okay.shop.model`): what it is of (`order`, `booking` — a quote accepted became one of
+  them — or `manual`: income from work outside the system), its ref, the amount (grosze), the method (`cash`, `card`,
+  `blik`, `transfer`, `other`), the day paid (`YYYY-MM-DD`, Poland's), its state (`paid`, `unpaid`, `refunded`; a
+  refund's own day), who marked it (an address) and when, a note; a manual one its description and, optionally, a
+  service and a master; its receipt's number; a log of every change (when, who, what, amount, method, day). Stored
+  `site/pay/<of>/<ref>`, each change ONE step of the shop's object (`Store.Pay`): the rule checked and the receipt
+  numbered in the same step.
+- **The rules** (`Payments.mark`, pure, by the name of the refusal): marking PAID an unpaid one (none, or `unpaid`)
+  — any staff member or the owner; changing a paid one (amount, method, day, note), UNDOING it (`unpaid`) or
+  REFUNDING it — the owner only (`owner`); a refund only of a paid one (`state`); a manual income — the owner only.
+  The amount 0,01–1 000 000 zł (`amount`), the day a date not after today (`day`), a known method (`method`), a note
+  at most 300 characters, a manual one's description 1–200 (`description`). A cancelled order or booking is marked
+  paid by the owner only (a cancellation fee). Who the owner is, is the host's (`Conf.owner`; a site with none: every
+  staff member).
+- **Old data**: an order or booking without a record is unpaid — but an order the workflow moved to `paid` (the
+  atelier's `Status.Paid`, its amount and `paidAt`) counts as paid (`Payments.effective`: its method from the
+  order's — a transfer `transfer`, else `other` —, its receipt the old `RACH-<year>-<ref>`), until a record says
+  otherwise. Nothing old is rewritten.
+- **A no-show**: a past booking marked so by the staff (`POST <desk>/api/booking/noshow`; `BookingStatus.NoShow`),
+  counted in the reports.
+- **The workshop**: an order's and a booking's screens show the payment and offer "paid" (amount — the order's or
+  the booking's price to start with —, method, day, note), and for the owner "change", "not paid", "refund"; a
+  past booking "no-show". `POST <desk>/api/pay {of, ref, action: paid|unpaid|refund, amount, method, day, note}`,
+  `GET <desk>/api/payment?of=&ref=`; 403 `owner` for what only the owner may do.
+- **Manual income** (the reports screen, the owner's): `POST <desk>/api/income {amount, day, method, description,
+  service, master, note}`, removed by marking it unpaid; `GET <desk>/api/incomes`.
+
+### Reports (`Reports`, pure; the screen `<desk>/reports/`, the owner only — staff 403, nobody 401)
+
+- **A period**: from–to, days of Poland, both included, at most 366 days; the screen's quick ones: today, this
+  week, this month (the whole month, the default), last month, a custom range; the previous period is the same
+  number of days just before.
+- **Totals**: income paid (the payments whose day is in the period, refunded later or not), refunds (by the refund's
+  day), net; unpaid — done but not paid (an order `ready`, `parcel_out` or `delivered`, a booking past, with no
+  payment: its amount, else its price, else its service's price) and expected (bookings ahead in the period, not
+  paid); the counts of orders (placed in the period, not cancelled), bookings (starting in it, kept), visits (kept
+  and past), cancellations (orders and bookings), no-shows; the average ticket (income ÷ payments).
+- **Breakdowns** of the income: by service, by master, by mode (a booking's; an order "order"; a manual income
+  "other"), by method; a day by day chart (inline SVG, no library) and table; each total beside the previous
+  period's.
+- **Exports**: CSV (`<desk>/api/report.csv?from=&to=&comma=1`): UTF-8 with a BOM (Excel), one row a payment —
+  date, receipt number, kind, ref, description, service, master, mode, method, amount, state —, comma decimals and
+  `;` columns when `comma=1` (Excel in Polish), else `.` and `,`; a printable page (`<desk>/reports/print?…`: print
+  CSS, a PDF by the browser's print). A month's **"ewidencja przychodów" HELPER** (`<desk>/reports/ewidencja?month=`
+  and `&format=csv`): Lp., date of the income, the document's number (the receipt's), description, amount, the total
+  — said on its face to be a helper, NOT the official record, to be checked with the accountant (the rules below).
+
+### Receipts
+
+- A paid order or booking (or manual income) has a receipt (`rachunek`, non-fiscal) numbered per shop per year in the
+  order of marking: `RACH/<year>/<n>` (the year of the day paid; four digits, more when needed), kept by its
+  payment (undone and paid again: the same number). The client's page links it: the track page of a paid order, the
+  booking's page of a paid booking — `/{lang}/receipt?ref=&k=` (the key the second factor; 404 when unpaid). The
+  page: the shop (and `Conf.contact`), the client, the service, the date of the service and of the payment, the
+  method, the amount; "not a VAT invoice nor a fiscal receipt". An order paid by the old workflow keeps its old
+  receipt, byte for byte.
+
+### Polish rules — TO VERIFY with an accountant before relying on any of it (research of 2026-10-29)
+
+Not built: no KSeF, no fiscal printer, no official ledger. Sources read on 2026-10-29; uncertain points marked.
+
+- **KSeF (e-invoices)**: obligatory from 1 Feb 2026 for firms with 2024 sales above 200 mln zł, from 1 Apr 2026
+  for everyone else; receiving through KSeF since 1 Feb 2026. Until 31 Dec 2026 invoices may stay outside KSeF
+  while their gross total in a month is at most 10 000 zł (from the invoice that passes it, everything in KSeF);
+  from 1 Jan 2027 everyone. Invoices to consumers (B2C) in KSeF are voluntary. A VAT-exempt seller (zwolnienie
+  podmiotowe, 240 000 zł from 2026) issues an invoice only when a buyer asks — then in KSeF; the Ministry said
+  (26 Jan 2026) a rachunek outside KSeF may be given to a business instead (MEDIUM confidence: a ministry letter,
+  not the statute). No penalties in 2026; from 1 Jan 2027 (art. 106ni). Sources:
+  https://ksef.podatki.gov.pl/od-kiedy-trzeba-wystawiac-faktury-w-ksef/, https://ksef.podatki.gov.pl/ponizej-10-000-zl/,
+  https://ksef.podatki.gov.pl/konsumenci-i-osoby-fizyczne/,
+  https://www.podatki.biz/artykuly/ksef-rachunek-zamiast-faktury-w-przypadku-podatnikow-zwolnionych-z-vat-mf-odpowiada_34_61179.htm
+- **Kasa fiskalna online**: Rozporządzenie MF z 17 grudnia 2024 (Dz.U. 2024 poz. 1902, amended Dz.U. 2026 poz. 420),
+  exemptions valid until 31 Dec 2027. Exempt by turnover: sales to private persons up to 20 000 zł a year
+  (proportionally in the first year), lost 2 months after passing it. ALWAYS a register, whatever the turnover or
+  the way of payment: hairdressing, cosmetic and cosmetology services (§ 4 ust. 1 pkt 2 lit. j) — so a barber, a
+  hairdresser, a nail or beauty studio needs one from the first sale to a private client; also car repair, tyres,
+  legal and tax advice, catering, taxis. Tailoring, cleaning, a handyman, classes: not on that list. Exempt by
+  payment (annex, position 42): a service to a private person paid WHOLLY through a bank, the post or a SKOK, the
+  record showing what each payment was for — any cash spoils it; card, BLIK and online payments accepted by a KIS
+  ruling (14 Mar 2024, 0114-KDIP1-3.4012.682.2023.2.KP) and two WSA judgments (MEDIUM confidence: case law, not the
+  regulation's text). A June 2026 draft adapting the regulation to KSeF exists; its content not known. Sources:
+  https://eli.gov.pl/api/acts/DU/2024/1902/text/O/D20241902.pdf, https://eli.gov.pl/eli/DU/2026/420/ogl,
+  https://ksiegowosc.infor.pl/podatki/vat/kasy-fiskalne/6716102,zaplata-karta-lub-blikiem-czy-mozna-nie-rejestrowac-transakcji-na-kasie-fiskalnej-kiedy-jeszcze-stanowiska-fiskusa-i-sadow.html
+- **Ryczałt — ewidencja przychodów**: Rozporządzenie MFiG z 6 września 2025 (Dz.U. 2025 poz. 1294), from 1 Jan 2026:
+  columns Lp., date of the entry, date of the income, the KSeF number of an invoice, the document's number, the
+  contractor's tax id, the income by rate (17/15/14/12,5/12/10/8,5/5,5/3 %), total, remarks; entries by the 20th of
+  the next month; sales without an invoice and without a register: one internal document a day with that day's
+  total by rate. Electronic record and a yearly JPK_EWP: for active VAT payers for 2026 (first file by 30 Apr 2027),
+  for the others from 1 Jan 2027 — a draft (Aug 2026) would defer it for non-VAT ryczałt payers to 2029 (NOT
+  confirmed signed). Rates: 8,5 % for most services (hairdressing, beauty, clothes repair, cleaning); 15 % for
+  some (building upkeep and minor repairs PKWiU 81.10.10.0, sport and recreation division 93 — a yoga class may be
+  8,5 % as instruction 85.51 or 15 % under 93: the classification decides); 5,5 % for making goods. Sources:
+  https://eli.gov.pl/eli/DU/2025/1294/ogl/pol/pdf, https://api.sejm.gov.pl/eli/acts/DU/2025/843/text/U/D20250843Lj.pdf,
+  https://bezprawnik.pl/ministerstwo-finansow-odracza-uciazliwy-obowiazek-dla-28-mln-firm/
+- **Rachunek** (Ordynacja podatkowa art. 87–88): given when a buyer asks and no invoice is due, within 7 days of the
+  service (or the request), not when asked more than 3 months later; numbered in sequence, copies kept until the
+  limitation ends. Its content (names and addresses of both sides, date, number, the service, quantity, price, total)
+  is from a ministry regulation whose number was NOT confirmed (LOW confidence on the exact list). Source:
+  https://api.sejm.gov.pl/eli/acts/DU/2025/111/text/U/D20250111Lj.pdf
+- **Działalność nierejestrowana**: from 2026 a quarterly limit of 225 % of the minimum wage — 10 813,50 zł a quarter
+  in 2026 (a portal's figure: https://www.pit.pl/aktualnosci/ponad-10-tys-zlotych-bez-zakladania-firmy-dzialalnosc-nierejestrowana-na-nowych-zasadach-w-2026-roku-1011738).
+- So the engine's receipt is a client's confirmation (non-fiscal), its "ewidencja" a helper table; a hairdresser's
+  or beautician's sales to private persons still go through their fiscal register.
+- Tests: `MoneySuite` (the rules, the store's step and numbering, the old paid orders, the report's sums, periods,
+  breakdowns, the previous period, the CSV, the receipts and their links, owner-only).
+
 ## Open core (operator, 2026-10-29)
 
 okay-shop is public (Apache-2.0) and is the engine of ONE site: its storefront, orders, tracking and workshop — and,

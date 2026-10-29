@@ -269,6 +269,8 @@ final case class Schedule(week: Map[Int, Vector[Span]], exceptions: Map[String, 
 enum BookingStatus(val key: String):
   case Booked extends BookingStatus("booked")
   case Cancelled extends BookingStatus("cancelled")
+  /** a past booking the client did not come to (specs/shop.md "Money") */
+  case NoShow extends BookingStatus("noshow")
 
 object BookingStatus:
   def parse(s: String): Option[BookingStatus] = values.find(_.key == s)
