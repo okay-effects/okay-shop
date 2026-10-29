@@ -31,9 +31,11 @@ enum Kind:
   case Atelier, It, Salon
 
 /** AN OFFER: its key, its name and description in the four languages, its price in grosze (0: quoted); whether it is
- * asked for a quote; a group class's seats and weekly starts (weekday 1–7, minutes from midnight) */
+ * asked for a quote; a group class's seats and weekly starts (weekday 1–7, minutes from midnight); whether hidden
+ * (specs/shop.md "The owner edits the content": not shown, nothing new made for it) */
 final case class Offer(key: String, name: T, description: T, price: Long, order: Int, minutes: Int = 0,
-                       quote: Boolean = false, seats: Int = 0, times: Vector[(Int, Int)] = Vector.empty):
+                       quote: Boolean = false, seats: Int = 0, times: Vector[(Int, Int)] = Vector.empty,
+                       hidden: Boolean = false):
   /** a group class (specs/shop.md "Group classes"): seats at weekly times */
   def isClass: Boolean = seats > 0 && times.nonEmpty && minutes > 0
   def priced: Boolean = price > 0
@@ -78,6 +80,8 @@ final case class Site(id: String, slug: String, name: String, tagline: T, lang: 
       times = if s.times.nonEmpty then s.times else timed.times)
   }))
   def offer(key: String): Option[Offer] = offers.find(_.key == key)
+  /** the offers its pages show: all but the hidden */
+  def shown: Vector[Offer] = offers.filterNot(_.hidden)
   def origin: String = s"https://$domain"
 
 object Money:

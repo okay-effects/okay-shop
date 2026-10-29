@@ -116,8 +116,10 @@ object Bookings:
     if name.isEmpty then pure(Web.refused("name"))
     else if !Contact.valid(contact) then pure(Web.refused("contact"))
     else if !f.get("rodo_consent").exists(v => v.nonEmpty && v != "false") then pure(Web.refused("consent"))
+    // a hidden service takes nothing new (specs/shop.md "The owner edits the content")
     else (plan(c, f.getOrElse("service", ""), f.getOrElse("mode", ""), f.getOrElse("place", ""))
-      .flatMap(addressed(c, _, f)).flatMap(p => masters(c, p, f.getOrElse("master", "")).map(_ => p)), start) match
+      .filterOrElse(!_.offer.hidden, "service").flatMap(addressed(c, _, f))
+      .flatMap(p => masters(c, p, f.getOrElse("master", "")).map(_ => p)), start) match
       case (Left(why), _) => pure(Web.refused(why, if why == "area" then 409 else 400))
       case (_, None) => pure(Web.refused("start"))
       case (Right(p), Some(at)) => Clock.now[R].flatMap { now =>

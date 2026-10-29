@@ -45,20 +45,34 @@ object Parse:
  * in the four languages from its dictionary — a translation used while its `src` is still the site's text (the
  * dictionary's own rule) */
 object Sites:
-  def of(id: String, siteMd: String, i18nMd: String): Site =
-    val f = Parse.frontMatter(siteMd)
-    val dict = Parse.block(i18nMd, "i18n").flatMap(m => m.get("token").map(_ -> m)).toMap
-    def words(token: String, text: String): T = dict.get(token).filter(_.get("src").contains(text)) match
+  /** the dictionary of an `i18n.md`: its rows by their token */
+  def dictionary(i18nMd: String): Map[String, Map[String, String]] =
+    Parse.block(i18nMd, "i18n").flatMap(m => m.get("token").map(_ -> m)).toMap
+
+  /** a text's four languages: its row's while the row's `src` is the text, else the text in each */
+  def words(dict: Map[String, Map[String, String]], token: String, text: String): T =
+    dict.get(token).filter(_.get("src").contains(text)) match
       case Some(m) => T(m.getOrElse("ru", text), m.getOrElse("pl", text), m.getOrElse("en", text),
           m.getOrElse("uk", text))
       case None => T.all(text)
-    val offers = Parse.block(siteMd, "services").map { m =>
+
+  /** the offers of a `site.md`'s `yaml services`, in their order */
+  def offers(siteMd: String, dict: Map[String, Map[String, String]]): Vector[Offer] =
+    Parse.block(siteMd, "services").map { m =>
       val key = m.getOrElse("key", "")
-      Offer(key, words(s"name.$key", m.getOrElse("name", "")), words(s"desc.$key", m.getOrElse("description", "")),
+      Offer(key, words(dict, s"name.$key", m.getOrElse("name", "")),
+        words(dict, s"desc.$key", m.getOrElse("description", "")),
         Money.parse(m.getOrElse("price", "0")).getOrElse(0L), m.get("order").flatMap(_.toIntOption).getOrElse(0),
         m.get("minutes").flatMap(_.toIntOption).getOrElse(0), m.get("quote").contains("true"),
-        m.get("seats").flatMap(_.toIntOption).getOrElse(0), m.get("times").flatMap(Work.times).getOrElse(Vector.empty))
+        m.get("seats").flatMap(_.toIntOption).getOrElse(0), m.get("times").flatMap(Work.times).getOrElse(Vector.empty),
+        m.get("hidden").contains("true"))
     }.sortBy(_.order)
+
+  def of(id: String, siteMd: String, i18nMd: String): Site =
+    val f = Parse.frontMatter(siteMd)
+    val dict = dictionary(i18nMd)
+    def words(token: String, text: String): T = Sites.words(dict, token, text)
+    val offers = Sites.offers(siteMd, dict)
     val domain = f.getOrElse("domain", s"$id.pl")
     val prefix = f.getOrElse("refPrefix", id.take(3).toUpperCase)
     val tagline = f.getOrElse("tagline", "")

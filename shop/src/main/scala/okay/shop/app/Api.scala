@@ -63,7 +63,7 @@ object Api:
     if name.isEmpty then pure(refused("name"))
     else if !Contact.valid(contact) then pure(refused("contact"))
     else if !consent then pure(refused("consent"))
-    else if offerKey.nonEmpty && site.offer(offerKey).isEmpty then pure(refused("offer"))
+    else if offerKey.nonEmpty && !site.offer(offerKey).exists(!_.hidden) then pure(refused("offer"))
     else for
       now <- Clock.now[R]
       allowed <- Store.allow[R](s"order:${ip(r)}", 5, tenMinutes, now)

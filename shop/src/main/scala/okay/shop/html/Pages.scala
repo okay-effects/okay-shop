@@ -82,7 +82,7 @@ $switchStyle
     val site = at.site
     val clothing = site.clothing
     val salon = site.kind == Kind.Salon
-    val ordered = site.offers
+    val ordered = site.shown
     val cards = if ordered.isEmpty then s"""<p class="offer-desc">${t("Скоро.", "Wkrótce.", "Coming soon.",
       "Незабаром.")}</p>""" else ordered.map(serviceCard).mkString
     val seo = look.seo(site)

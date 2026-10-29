@@ -16,12 +16,13 @@ import okay.shop.html.Conf
  * a seed, a clock that moves only when told */
 final class World(val id: String = "atelier", var human: Boolean = true,
                   more: String => Vector[(String, String)] = _ => Vector.empty,
-                  desk: okay.shop.html.Desk = okay.shop.html.Desk()):
+                  desk: okay.shop.html.Desk = okay.shop.html.Desk(),
+                  edit: okay.shop.model.Site => okay.shop.model.Site = identity):
   val storage = Memory()
   var now: Long = 1793282400000L // 2026-10-29 14:00 UTC
   var letters: Vector[(String, Note)] = Vector.empty
   private var seed = 1L
-  val site = Fixtures.site(id)
+  val site = edit(Fixtures.site(id))
   val conf = Conf(site, s"https://preview-$id.example.workers.dev", "+48 600 000 000", "TST01A",
     "1x00000000000000000000AA", Set("staff@example.com"), "atelier@example.com", "2026-10-28",
     "CALENDAR-KEY-0123456789", more, desk)

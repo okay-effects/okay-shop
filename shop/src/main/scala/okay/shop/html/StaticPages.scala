@@ -10,7 +10,7 @@ object StaticPages:
     def at(l: Lang)(path: String) = At(site, l, path, sitekey)
     Lang.values.toVector.flatMap { l =>
       Vector(s"${l.code}/index.html" -> Pages.storefront(at(l)(""), look)) ++
-        site.offers.map(o => s"${l.code}/offer/${o.key}/index.html" ->
+        site.shown.map(o => s"${l.code}/offer/${o.key}/index.html" ->
           Pages.offer(at(l)(s"offer/${o.key}/"), o, look)) ++
         Vector(s"${l.code}/privacy/index.html" -> look.privacy(site, l))
     } ++ look.pages(l => at(l)) ++

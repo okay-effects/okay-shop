@@ -227,6 +227,43 @@ engine knowing what they are:
 - **The sign-in link is limited per address too**: 5 per IP and 5 per address (its SHA-256) in 10 minutes; the
   answer is the same for an address on the list and one not.
 
+## The owner edits the content (operator, 2026-10-29)
+
+A shop's words and prices are its content (`site.md`, `i18n.md`). A host lets its owner change them on a screen;
+the engine gives the model of what may be edited, its check, and the content written back in its own format — so a
+file-based site (a repository's `site/`) and a host's stored copy are the same text, read by the same `Sites.of`.
+
+- **The model** (`okay.shop.content.Content`): the shop's language (the content's `langDefault`: the owner writes
+  in it, its text is `site.md`'s), its name and logo text (one language), its tagline and its public contact text
+  (`T`: the `tagline` and `contact` tokens), its services in their order — each its key, name and description (`T`:
+  `name.<key>`, `desc.<key>`), price (grosze; 0: priced once seen), minutes (0: ordered, not booked), whether asked
+  for a quote, a class's seats and weekly times, whether HIDDEN — and the texts machine-translated and not yet read
+  by a person (`auto`: `<token>.<lang>`, e.g. `name.cut.en`). A price is one amount: the engine has no "from" price
+  or range for a listed service (a quote's answer has a range: "Inquiry and quote").
+- **Read and written** (`Content.read(siteMd, i18nMd)`, `Content.write(c, siteMd, i18nMd)`): the edit is a PATCH of
+  the text — the front matter's `name`, `logoText`, `tagline`, `contact` lines replaced (added when missing), a
+  service's row in `yaml services` changed only in the fields that changed (its other fields, its comments and its
+  order kept), rows added, removed, and — only when the order of the services changed — written in the new order
+  with `order: 1…n`; in `i18n.md` the rows of the texts that changed (`src` the shop language's text, the four
+  languages, `auto: en uk` while machine-made), new rows added; everything else of both files as it was. Written
+  unchanged, a content is the same bytes; written with an edit, read back it is the edit (`ContentSuite`).
+- **Keys are stable**: a service keeps its key when renamed (orders, bookings, quotes, links and a host's work and
+  masters name it by its key); a new service's key is made from its name (ASCII letters, digits, hyphens; `-2`…
+  when taken).
+- **Hidden** (`hidden: true` in its row; `Offer.hidden`): not on the storefront nor its own page (`Site.shown`), and
+  no new order, booking or inquiry for it (`offer`, `service` refused); everything already made for it — a booking's
+  page, a move, a cancel, the workshop, a letter, a receipt — still names it.
+- **Removing a service something refers to hides it instead**: a service named by any order, booking or inquiry
+  (`Content.used`) is kept, hidden; one nothing names is removed. The host is told which were hidden instead.
+- **Checked** (`Content.check`, by the name of the first wrong field): `name` 1–80, `logoText` 1–40, `tagline` 1–160
+  and `contact` 0–300 characters in every language, at most 50 services, a service's `service.key` unique and of the
+  key's form, `service.name` 1–80, `service.description` 0–300, `service.price` 0–100 000 zł, `service.minutes` 0
+  or 5–480, `service.seats` 0–200 (a class with times and minutes), `service.times` (`mon 18:00, wed 18:00`); every
+  text one line (whitespace runs one space). No markup is taken: every text is escaped wherever it is drawn (the
+  pages, the letters, the workshop), as before.
+- Tests: `ContentSuite` (the five fixtures written unchanged byte for byte; edits read back; key stability; hidden;
+  the checks; an escaped name on the pages).
+
 ## Open core (operator, 2026-10-29)
 
 okay-shop is public (Apache-2.0) and is the engine of ONE site: its storefront, orders, tracking and workshop — and,

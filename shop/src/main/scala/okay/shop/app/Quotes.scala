@@ -24,7 +24,7 @@ object Quotes:
     val name = g("name", 120)
     val contact = g("contact", 200)
     val description = f.getOrElse("description", "").trim
-    val offer = c.site.offer(g("service", 60)).filter(_.quote)
+    val offer = c.site.offer(g("service", 60)).filter(o => o.quote && !o.hidden)
     val mode = offer.flatMap(o => c.site.work.map(_.modesOf(o.key))).getOrElse(Vector.empty)
     val m = Mode.parse(g("mode", 20)).filter(mode.contains).orElse(mode.headOption)
     // the client's address when the work is at theirs: given whole, inside the area
