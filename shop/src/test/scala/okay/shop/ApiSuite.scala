@@ -13,11 +13,11 @@ class ApiSuite extends munit.FunSuite:
     val r = w.order("hem", extra = Seq("deliveryMethod" -> "courier"))
     assertEquals(r.status, 200)
     val j = w.json(r)
-    assert(j("ref").matches("SZY-[0-9A-HJKMNP-TV-Z]{6}"), j)
+    assert(j("ref").matches("TST-[0-9A-HJKMNP-TV-Z]{6}"), j)
     assertEquals(j("key").length, 24)
     assertEquals(j.get("price"), Some("40 zł"))
-    assertEquals(j.get("blik"), Some("+48 790 869 655"))
-    assertEquals(j.get("paczkomat"), Some("WRO06L"))
+    assertEquals(j.get("blik"), Some("+48 600 000 000"))
+    assertEquals(j.get("paczkomat"), Some("TST01A"))
     assertEquals(w.letters.map(_._1), Vector("owner", "anna@example.com"))
     val client = w.letters(1)._2
     // the letter's ref is the one the track page takes, its link this site's, with the key
@@ -78,8 +78,8 @@ class ApiSuite extends munit.FunSuite:
     assert(w.form("/en/track", "ref" -> j("ref").toLowerCase, "contact" -> "Anna@Example.com",
       "cf-turnstile-response" -> "t").text.contains("Received — quoting"))
     val stranger = w.form("/en/track", "ref" -> j("ref"), "contact" -> "eve@example.com").text
-    val nothing = w.form("/en/track", "ref" -> "SZY-000000", "contact" -> "eve@example.com").text
-    assertEquals(stranger.replace(j("ref"), "SZY-000000"), nothing)
+    val nothing = w.form("/en/track", "ref" -> "TST-000000", "contact" -> "eve@example.com").text
+    assertEquals(stranger.replace(j("ref"), "TST-000000"), nothing)
     assert(w.get("/ru/track").text.contains("Статус заказа"))
   }
 
@@ -94,11 +94,11 @@ class ApiSuite extends munit.FunSuite:
   }
 
   test("an inquiry of /products: kept, the owner told, its ref answered") {
-    val w = World("it")
+    val w = World("studio")
     val r = w.post("/api/inquiry", "name" -> "Jan", "contact" -> "jan@example.com", "subject" -> "CI",
       "kind" -> "task", "body" -> "Need CI", "rodo_consent" -> "on", "cf-turnstile-response" -> "t")
     assertEquals(r.status, 200, r.text)
-    assert(w.json(r)("ref").startsWith("ITCQ-"))
+    assert(w.json(r)("ref").startsWith("TSDQ-"))
     assertEquals(w.letters.map(_._1), Vector("owner"))
     assert(w.letters.head._2.html.contains("Need CI"))
   }

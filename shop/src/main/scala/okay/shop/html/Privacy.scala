@@ -8,18 +8,20 @@ object Privacy:
   /** the policy's version: a date, stored with every consent */
   val version: String = "2026-10-28"
 
-  private val email = "kontakt@szykownia.pl"
-  private val contact = s"""<a href="mailto:$email">$email</a>"""
+  /** where the controller is reached, by default `kontakt@` the site's own domain (its last two labels) */
+  def email(site: Site): String = "kontakt@" + site.domain.split('.').takeRight(2).mkString(".")
 
   /** one language's texts: the title, the «last updated» words, the translation note, the sections */
   private final case class Texts(title: String, updated: String, note: Option[String],
                                  sections: Vector[(String, String)])
 
   /** the page for this site in this language: a whole HTML document */
-  def page(site: Site, l: Lang): String =
+  def page(site: Site, l: Lang, email: String = ""): String =
+    val address = Html.escape(if email.nonEmpty then email else this.email(site))
+    val contact = s"""<a href="mailto:$address">$address</a>"""
     val name = Html.escape(site.name)
     val accent = site.color
-    val t = texts(l, site.clothing, name)
+    val t = texts(l, site.clothing, name, contact)
     val note = t.note.fold("")(n => s"\n<p><em>$n</em></p>")
     val sections = t.sections.zipWithIndex.map { case ((h, body), i) => s"<h2>${i + 1}. $h</h2>\n$body" }
     s"""<!doctype html><html lang="${l.code}"><head><meta charset="utf-8">""" +
@@ -41,11 +43,11 @@ object Privacy:
       s"""<p style="margin-top:32px;font-size:13px;color:#999">$name · $version${Pages.staff(using l)}</p>""" + "\n" +
       "</div></body></html>\n"
 
-  private def texts(l: Lang, clothing: Boolean, name: String): Texts = l match
-    case Lang.pl => pl(clothing, name)
-    case Lang.en => en(clothing, name)
-    case Lang.uk => uk(clothing, name)
-    case Lang.ru => ru(clothing, name)
+  private def texts(l: Lang, clothing: Boolean, name: String, contact: String): Texts = l match
+    case Lang.pl => pl(clothing, name, contact)
+    case Lang.en => en(clothing, name, contact)
+    case Lang.uk => uk(clothing, name, contact)
+    case Lang.ru => ru(clothing, name, contact)
 
   private def p(s: String): String = s"<p>$s</p>"
 
@@ -56,7 +58,7 @@ object Privacy:
 
   // ---- Polish: the binding text ----
 
-  private def pl(clothing: Boolean, name: String): Texts =
+  private def pl(clothing: Boolean, name: String, contact: String): Texts =
     val order = if clothing then "zamówienia" else "zlecenia"
     val collected =
       if clothing then "opis zlecenia (rodzaj i stan odzieży), dane dostawy (jeśli korzystasz z kuriera InPost)."
@@ -110,7 +112,7 @@ object Privacy:
 
   // ---- English ----
 
-  private def en(clothing: Boolean, name: String): Texts =
+  private def en(clothing: Boolean, name: String, contact: String): Texts =
     val collected =
       if clothing then "a description of the order (type and condition of the garments), and delivery details " +
         "(if you use the InPost courier)."
@@ -165,7 +167,7 @@ object Privacy:
 
   // ---- Ukrainian ----
 
-  private def uk(clothing: Boolean, name: String): Texts =
+  private def uk(clothing: Boolean, name: String, contact: String): Texts =
     val collected =
       if clothing then "опис замовлення (вид і стан одягу), дані для доставки (якщо ви користуєтеся " +
         "кур’єром InPost)."
@@ -221,7 +223,7 @@ object Privacy:
 
   // ---- Russian ----
 
-  private def ru(clothing: Boolean, name: String): Texts =
+  private def ru(clothing: Boolean, name: String, contact: String): Texts =
     val collected =
       if clothing then "описание заказа (вид и состояние одежды), данные для доставки (если вы пользуетесь " +
         "курьером InPost)."

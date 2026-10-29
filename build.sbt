@@ -25,14 +25,14 @@ val okayServerless = "0.1.0"
 val okayUi = "0.1.0"
 val munit = Def.setting("org.scalameta" %%% "munit" % "1.2.3" % Test)
 
-/** the tests' content: both sites' site.md and i18n.md (src/test/resources), as strings on both platforms */
+/** the tests' content: two fictional sites — an atelier and a studio — (src/test/resources), as strings */
 lazy val fixtures = Def.task {
   val base = (ThisBuild / baseDirectory).value / "shop" / "src" / "test" / "resources"
   def lit(f: File): String = "\"\"\"" + IO.read(f) + "\"\"\""
   val file = (Test / sourceManaged).value / "okay" / "shop" / "Fixtures.scala"
   IO.write(file, "package okay.shop\n\n/** written by the build: the two sites' content, for the tests */\n" +
     "object Fixtures:\n  val content: Map[String, (String, String)] = Map(\n" +
-    Seq("szykownia", "it").map(id => "    \"" + id + "\" -> (" + lit(base / id / "site.md") + ", " +
+    Seq("atelier", "studio").map(id => "    \"" + id + "\" -> (" + lit(base / id / "site.md") + ", " +
       lit(base / id / "i18n.md") + ")").mkString(",\n") + ")\n" +
     "  def site(id: String): okay.shop.model.Site =\n" +
     "    okay.shop.content.Sites.of(id, content(id)._1, content(id)._2)\n")

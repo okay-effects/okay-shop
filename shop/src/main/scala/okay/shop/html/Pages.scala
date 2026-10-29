@@ -62,7 +62,8 @@ $switchStyle
 <script src="/site.js" defer></script>"""
 
   def foot(site: Site, look: Look)(using l: Lang): String =
-    s"""<p class="foot">${e(site.name)}${look.footLinks} · <span>${t("сделано в busi", "zrobione w busi", "made with busi",
+    s"""<p class="foot">${e(site.name)}${look.footLinks} · <span>${t("сделано в busi", "zrobione w busi", "made " +
+        "with busi",
       "зроблено в busi")}</span>${if look.staffLink then staff else ""}</p>"""
 
   /** the workshop, for its staff: one muted word at the end of a foot, in its colour and size — not followed */
@@ -538,6 +539,3 @@ $scripts
           "stays on your request link.", "Асинхронно, без дзвінків — відповідаю протягом одного робочого дня; " +
           "листування за посиланням-заявкою.")}</p>"""
 
-  // the «Существующие решения» product cards (busi · rozum · scalascript): a diagram + a tagline + a
-  // description + links to documentation and the distribution. Shared by the /products showcase AND the
-  // IT storefront's section, so both stay in sync.

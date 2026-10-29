@@ -39,7 +39,7 @@ class MailCloudSuite extends munit.FunSuite:
           case _ => out += "221 bye\r\n"
     }
     def answer(): Option[String] = { val o = out; out = ""; Option.when(o.nonEmpty)(o) }
-  private val note = Note("Potwierdzenie SZY-1", "<p>Dziękujemy</p>", "Dziękujemy", Some("kontakt@szykownia.pl"))
+  private val note = Note("Potwierdzenie TST-1", "<p>Dziękujemy</p>", "Dziękujemy", Some("atelier@example.com"))
 
   /** the letters each binding took (`CLIENT_MAIL` refusing: an unverified destination), Brevo's requests, the log */
   private def sending(m: Mailing, relay: Relay = Relay())(p: Boolean ! C)
@@ -69,19 +69,19 @@ class MailCloudSuite extends munit.FunSuite:
     val (log, sent) = run(Log.collect[Pure + Log, Pure, Boolean](Level.Debug)(fetched))
     (sent, letters, asked, log.map(_.toString))
 
-  private val cloudflare = Mailing("kontakt@szykownia.pl", "Szykownia", "owner@example.com", "cloudflare", None)
+  private val cloudflare = Mailing("atelier@example.com", "Test Atelier", "owner@example.com", "cloudflare", None)
   private val smtp = cloudflare.copy(client = "smtp",
-    smtp = Some(SmtpServer("relay.test", 587, Tls.StartTls, "kontakt@szykownia.pl", "secret", "szykownia.pl")))
+    smtp = Some(SmtpServer("relay.test", 587, Tls.StartTls, "atelier@example.com", "secret", "atelier.example")))
 
   test("a client by the SMTP relay: STARTTLS, signed in, the letter taken; no relay set: not sent, said why") {
     val relay = Relay()
     val (sent, letters, _, _) = sending(smtp, relay)(Mail.toClient[C]("anna@example.com", note))
     assert(sent)
     assert(letters.isEmpty, "no send_email for a client")
-    assertEquals(relay.said.take(3), Vector("EHLO szykownia.pl", "STARTTLS", "EHLO szykownia.pl"))
+    assertEquals(relay.said.take(3), Vector("EHLO atelier.example", "STARTTLS", "EHLO atelier.example"))
     val (from, to, data) = relay.letters.head
-    assertEquals((from, to), ("kontakt@szykownia.pl", "anna@example.com"))
-    assert(data.contains("Reply-To: kontakt@szykownia.pl") && data.contains("text/html"), data)
+    assertEquals((from, to), ("atelier@example.com", "anna@example.com"))
+    assert(data.contains("Reply-To: atelier@example.com") && data.contains("text/html"), data)
     val (none, _, _, log) = sending(smtp.copy(smtp = None))(Mail.toClient[C]("anna@example.com", note))
     assert(!none)
     assert(log.exists(_.contains("no SMTP relay")), log)
@@ -96,8 +96,8 @@ class MailCloudSuite extends munit.FunSuite:
     assert(sent)
     val (binding, l) = letters.head
     assertEquals(binding, "MAIL")
-    assertEquals(l, Letter("kontakt@szykownia.pl", "owner@example.com", note.subject, note.text, Some(note.html),
-      note.replyTo, Some("Szykownia")))
+    assertEquals(l, Letter("atelier@example.com", "owner@example.com", note.subject, note.text, Some(note.html),
+      note.replyTo, Some("Test Atelier")))
   }
 
   test("a client by Email Service's binding; refused there: not sent, said why in the log") {

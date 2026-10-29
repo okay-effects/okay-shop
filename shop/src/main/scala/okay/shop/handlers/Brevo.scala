@@ -5,7 +5,7 @@ import okay.serverless.cloud.{Request, Response}
 import okay.shop.effects.Note
 
 /** A CLIENT'S LETTER AS BREVO'S TRANSACTIONAL API ASKS IT (`POST /v3/smtp/email` at `base`, the key in `api-key`) —
- * the second way to reach a client, chosen by `MAIL_CLIENT=brevo`; Brevo's records for szykownia.pl already exist */
+ * a way to reach a client, chosen by `MAIL_CLIENT=brevo`; the sending domain's Brevo records are the site's */
 object Brevo:
   val base = "https://api.brevo.com"
 

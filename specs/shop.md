@@ -2,7 +2,8 @@
 
 ## Overview
 
-The engine of szykownia.pl and it.szykownia.pl (2026-10-28), made a library so each site's repository holds only
+The engine first written for two small businesses' sites (2026-10-28), made a library so each site's repository holds
+only
 what is its own — its content, its look, a one-line Worker main, its deployment — and both run the same engine:
 
 - the order of a ready-made offer or of an open request, its tracking by a short ref, its receipt; an inquiry;
@@ -37,12 +38,14 @@ and its e2e.
 
 ## Behavior
 
-Everything specified and checked for the two sites (sergey-scherbina/sites, specs/sites.md, 2026-10-28), unchanged:
+Everything specified and checked for its first two sites (2026-10-28), unchanged:
 orders (validation, Turnstile, 5 per IP in 10 minutes, consent with its time and policy version, the owner's letter,
 the client's confirmation with the ref the track page takes and a link with the order's key), the track page (by the
 key, or by the ref and the email or phone; nothing told to a stranger), the receipt, the IT inquiry, the workshop
 (sign-in, the moves `Workflow` offers, the letters on ready and parcel out, a free letter), the redirects of busi's
-URLs. The tests move with the code and run on fixtures of both sites' content.
+URLs. The tests run on two FICTIONAL sites (shop/src/test/resources): "Test Atelier" (an atelier: courier, BLIK
++48 600 000 000, paczkomat TST01A) and "Test Studio" (IT-like: the AI offer first, products); addresses are
+@example.com — no real business's data in this repository.
 
 ## The workshop's link, and search engines (operator, 2026-10-28)
 
@@ -51,6 +54,13 @@ muted word in the page's language ("panel", "staff", "панель") leading to 
 foot's own colour and size (`Look.staffLink`, on by default; a look's own page puts `Pages.staff` in its foot). The
 workshop is not for search engines: its frame says `noindex`, the static files `_headers` give
 `X-Robots-Tag: noindex` for `/workshop/*`, and `robots.txt` disallows `/workshop/` and `/api/`.
+
+## Open core (operator, 2026-10-29)
+
+okay-shop is public (Apache-2.0) and is the engine of ONE site: its storefront, orders, tracking and workshop — and,
+later, booking with a calendar as a feature. The multi-tenant SaaS platform to come lives in a separate PRIVATE
+repository on top of okay-shop and is never added here: self-service sign-up and its wizard, niche templates,
+auto-translation, themes, custom domains, subscriptions and billing, its admin, and abuse protection.
 
 ## Release
 

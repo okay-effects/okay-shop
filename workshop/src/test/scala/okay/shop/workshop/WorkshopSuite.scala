@@ -35,7 +35,7 @@ class WorkshopSuite extends munit.FunSuite:
   test("signed out: the sign-in screen; an email off the list is told the same and mailed nothing") {
     val w = World()
     val b = Browser(w)
-    assertEquals(play(w, b).at.map(_.title), Some("Майстерня · Szykownia"))
+    assertEquals(play(w, b).at.map(_.title), Some("Майстерня · Test Atelier"))
     val asked = play(w, b, Act.press("Надіслати посилання", "email" -> "eve@example.com"))
     assertEquals(asked.at.map(_.title), Some("Перевірте пошту"))
     assert(w.letters.isEmpty)
@@ -49,7 +49,7 @@ class WorkshopSuite extends munit.FunSuite:
     val b = Browser(w)
     signIn(w, b)
     val list = play(w, b)
-    assertEquals(list.at.map(_.title), Some("Замовлення · Szykownia"))
+    assertEquals(list.at.map(_.title), Some("Замовлення · Test Atelier"))
     val open = Act.choose("Відкрити", ref)
     assertEquals(play(w, b, open).at.map(_.title), Some(s"$ref · ${Status.Received.label(Lang.uk)}"))
     val accepted = play(w, b, open, Act.press("Прийнято (BLIK отримано)"))
