@@ -6,7 +6,7 @@ import okay.scala3.std.Clock
 import okay.serverless.cloud.{Request, Response}
 import okay.shop.effects.*
 import okay.shop.handlers.Codec
-import okay.shop.html.{Conf, Html, Letters}
+import okay.shop.html.{Conf, Desk, Html, Letters}
 import okay.shop.model.*
 
 /**
@@ -17,13 +17,13 @@ import okay.shop.model.*
 object Workshop:
   val linkLife: Long = 15 * 60 * 1000L
   val sessionLife: Long = 30L * 24 * 60 * 60 * 1000
-  val cookie = "__Host-ws"
+  val cookie: String = Desk().cookie
 
   def answer[R[_]](c: Conf, r: Request, path: List[String])(using In[Store, R], In[Mail, R], In[Captcha, R],
     In[Ids, R], In[Clock, R]): Response ! R =
     (r.method, path) match
       case ("POST", List("link")) => link(c, r)
-      case ("GET", List("enter")) => pure(enterPage(r.param("t").getOrElse("")))
+      case ("GET", List("enter")) => pure(enterPage(c, r.param("t").getOrElse("")))
       case ("POST", List("enter")) => enter(c, r)
       case (method, rest) =>
         if method == "POST" && !sameSite(r) then pure(refused("not from this site", 403))
@@ -42,7 +42,9 @@ object Workshop:
     val email = f.getOrElse("email", "").trim.toLowerCase
     for
       now <- Clock.now[R]
-      allowed <- Store.allow[R](s"link:${Api.ip(r)}", 5, Api.tenMinutes, now)
+      byIp <- Store.allow[R](s"link:${Api.ip(r)}", 5, Api.tenMinutes, now)
+      // and per address: nobody's inbox flooded from many places
+      allowed <- if byIp then Store.allow[R](s"link:${hash(email)}", 5, Api.tenMinutes, now) else pure(false)
       human <- if allowed then Captcha.verify[R](f.getOrElse("turnstile", ""), Api.ip(r)) else pure(false)
       _ <- if allowed && human && c.staff(email) then mailLink(c, email, now) else unit[R]
     // the same answer for an email on the list and one not: the list is not told
@@ -53,17 +55,17 @@ object Workshop:
     : Unit ! R =
     Ids.secret[R].flatMap { secret =>
       perform[Store](Store.KeepLink(hash(secret), Signin(email, now + linkLife))).flatMap(_ =>
-        Mail.toStaff[R](email, Letters.signin(c, s"${c.origin}/workshop/api/enter?t=$secret")))
+        Mail.toStaff[R](email, Letters.signin(c, s"${c.origin}${c.desk.path}/api/enter?t=$secret")))
     }.map(_ => ())
 
   /** the link opened: one button that posts it, so a scanner opening links does not spend it */
-  private def enterPage(secret: String): Response =
+  private def enterPage(c: Conf, secret: String): Response =
     Response.html(s"""<!doctype html><html lang="uk"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
 <title>Майстерня</title><style>body{font:17px/1.5 system-ui,sans-serif;display:flex;align-items:center;
 justify-content:center;min-height:100vh;margin:0;background:#faf5f0}button{font-size:17px;padding:14px 28px;
 border:0;border-radius:12px;background:#2a1f14;color:#fff;cursor:pointer}</style></head><body>
-<form method="post" action="/workshop/api/enter"><input type="hidden" name="t" value="${Html.escape(secret)}">
+<form method="post" action="${c.desk.path}/api/enter"><input type="hidden" name="t" value="${Html.escape(secret)}">
 <button type="submit">Увійти до майстерні →</button></form></body></html>
 """).header("Cache-Control", "no-store").header("Referrer-Policy", "no-referrer")
 
@@ -73,11 +75,11 @@ border:0;border-radius:12px;background:#2a1f14;color:#fff;cursor:pointer}</style
       now <- Clock.now[R]
       used <- if secret.isEmpty then pure(None) else perform[Store](Store.UseLink(hash(secret), now))
       res <- used.filter(si => c.staff(si.email)) match
-        case None => pure(Response.redirect("/workshop/#expired", 303))
+        case None => pure(Response.redirect(s"${c.desk.path}/#expired", 303))
         case Some(si) => Ids.secret[R].flatMap { session =>
           perform[Store](Store.KeepSession(hash(session), Signin(si.email, now + sessionLife))).map(_ =>
-            Response.redirect("/workshop/", 303).header("Set-Cookie",
-              s"$cookie=$session; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${sessionLife / 1000}"))
+            Response.redirect(s"${c.desk.path}/", 303).header("Set-Cookie",
+              s"${c.desk.cookie}=$session; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${sessionLife / 1000}"))
         }
     yield res
 
@@ -87,7 +89,7 @@ border:0;border-radius:12px;background:#2a1f14;color:#fff;cursor:pointer}</style
 
   /** the person signed in: a session kept and not past, its email on the list still */
   private def staff[R[_]](c: Conf, r: Request, now: Long)(using In[Store, R]): Option[String] ! R =
-    Web.cookie(r, cookie).filter(_.nonEmpty) match
+    Web.cookie(r, c.desk.cookie).filter(_.nonEmpty) match
       case None => pure(None)
       case Some(s) => perform[Store](Store.Session(hash(s), now)).map(_.map(_.email).filter(c.staff))
 
@@ -104,8 +106,8 @@ border:0;border-radius:12px;background:#2a1f14;color:#fff;cursor:pointer}</style
       case ("GET", List("me")) => pure(ok(Json.obj("email" -> Json.str(email))))
       case ("GET", List("more")) => pure(ok(Json.obj("more" -> Json.Arr(c.more(email).map((text, href) =>
           Json.obj("text" -> Json.str(text), "href" -> Json.str(href)))))))
-      case ("POST", List("out")) => perform[Store](Store.EndSession(hash(Web.cookie(r, cookie).getOrElse(""))))
-          .map(_ => ok(Json.obj()).header("Set-Cookie", s"$cookie=; Path=/; HttpOnly; Secure; SameSite=Lax; " +
+      case ("POST", List("out")) => perform[Store](Store.EndSession(hash(Web.cookie(r, c.desk.cookie)
+          .getOrElse("")))).map(_ => ok(Json.obj()).header("Set-Cookie", s"${c.desk.cookie}=; Path=/; HttpOnly; Secure; SameSite=Lax; " +
             "Max-Age=0"))
       case ("GET", List("orders")) => Store.orders[R](200).map(os =>
           ok(Json.obj("orders" -> Json.Arr(os.map(o => described(c, o))))))

@@ -21,13 +21,14 @@ object Api:
   def answer[R[_]](c: Conf, r: Request)(using In[Store, R], In[Mail, R], In[Captcha, R], In[Ids, R], In[Clock, R])
     : Response ! R =
     val parts = r.path.split('/').toList.filter(_.nonEmpty)
+    val desk = c.desk.path.split('/').toList.filter(_.nonEmpty) :+ "api"
     (r.method, parts) match
+      case (_, ps) if ps.startsWith(desk) => Workshop.answer(c, r, ps.drop(desk.size))
       case ("POST", List("api", "order")) => order(c, r)
       case ("POST", List("api", "inquiry")) => inquiry(c, r)
       case ("GET", List(l, "track")) if Lang.parse(l).isDefined => trackLink(c, Lang.parse(l).get, r)
       case ("POST", List(l, "track")) if Lang.parse(l).isDefined => trackForm(c, Lang.parse(l).get, r)
       case ("GET", List(l, "receipt")) if Lang.parse(l).isDefined => receipt(c, r)
-      case (_, "workshop" :: "api" :: rest) => Workshop.answer(c, r, rest)
       case ("GET", List("api", "slots")) => Bookings.slots(c, r)
       case ("POST", List("api", "book")) => Bookings.book(c, r)
       case ("POST", List("api", "booking", "cancel")) => Bookings.cancel(c, r)

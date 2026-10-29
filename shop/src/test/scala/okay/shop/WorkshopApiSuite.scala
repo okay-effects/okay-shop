@@ -65,6 +65,34 @@ class WorkshopApiSuite extends munit.FunSuite:
       Map("content-type" -> List("application/json")))))
   }
 
+  test("a sign-in elsewhere (Conf.desk): its link, its enter page, its redirects, its own cookie") {
+    val w = World(desk = okay.shop.html.Desk("/_admin", "__Host-op"))
+    val b = Browser(w)
+    b.post("/_admin/api/link", "email" -> staff, "turnstile" -> "t")
+    val link = w.letters.last._2.html.split("'").find(_.contains("enter?t=")).get
+    assert(link.startsWith("https://preview-atelier.example.workers.dev/_admin/api/enter?t="), link)
+    val secret = link.drop(link.indexOf("t=") + 2)
+    assert(b.get(s"/_admin/api/enter?t=$secret").text.contains("""action="/_admin/api/enter""""))
+    val entered = b.send("POST", "/_admin/api/enter", Query.print(Map("t" -> List(secret))),
+      "application/x-www-form-urlencoded")
+    assertEquals(entered.headerOf("location"), Some("/_admin/"))
+    assert(b.cookie.startsWith("__Host-op="), b.cookie)
+    assertEquals(str(obj(b.get("/_admin/api/me")), "email"), staff)
+    assertEquals(Browser(w).send("POST", "/_admin/api/enter", Query.print(Map("t" -> List(secret))),
+      "application/x-www-form-urlencoded").headerOf("location"), Some("/_admin/#expired"))
+  }
+
+  test("sign-in links limited per address as well as per IP; the answer the same") {
+    val w = World()
+    def ask(ip: String) = w.ask(okay.serverless.cloud.Request.post("/workshop/api/link",
+      Json.print(Json.obj("email" -> Json.str(staff), "turnstile" -> Json.str("t")))).copy(headers = Map(
+      "host" -> List("preview-atelier.example.workers.dev"), "cf-connecting-ip" -> List(ip),
+      "content-type" -> List("application/json"))))
+    for i <- 1 to 5 do assertEquals(ask(s"10.0.0.$i").status, 200)
+    assertEquals(ask("10.0.0.9").status, 429, "the address's sixth in 10 minutes, from a new IP")
+    assertEquals(w.letters.size, 5)
+  }
+
   test("a link past its 15 minutes signs nobody in") {
     val w = World()
     val b = Browser(w)
