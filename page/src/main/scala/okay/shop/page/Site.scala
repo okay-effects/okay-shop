@@ -40,10 +40,14 @@ object Site:
       .forEach((v: js.Any, k: String) => out += k -> v.toString)
     out.result()
 
+  /** Turnstile's widget, when the page has it (`typeof`: a page without its script has no such name at all) */
+  private def turnstile: Option[js.Dynamic] =
+    if js.typeOf(js.Dynamic.global.turnstile) == "undefined" then None else Some(js.Dynamic.global.turnstile)
+
   /** Turnstile's token, given a few seconds to come: an invisible widget answers on its own, a little later */
   private def token(f: HTMLFormElement, tries: Int)(go: () => Unit): Unit =
     val t = Option(f.querySelector("[name=cf-turnstile-response]")).map(_.asInstanceOf[dom.HTMLInputElement].value)
-    if t.exists(_.nonEmpty) || tries <= 0 || js.isUndefined(js.Dynamic.global.turnstile) then go()
+    if t.exists(_.nonEmpty) || tries <= 0 || turnstile.isEmpty then go()
     else js.timers.setTimeout(250)(token(f, tries - 1)(go))
 
   private def formLang(f: dom.Element): Lang =
@@ -114,7 +118,7 @@ object Site:
         case Outcome.Booked(ref, when, manage) => booked(f, ref, lang, when, manage)
         case Outcome.Refused(why) =>
           button.foreach(_.disabled = false)
-          if !js.isUndefined(js.Dynamic.global.turnstile) then js.Dynamic.global.turnstile.reset()
+          turnstile.foreach(_.reset())
           dom.window.alert(Submit.refusal(lang, why))
       }
     }

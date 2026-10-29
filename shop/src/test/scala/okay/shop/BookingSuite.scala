@@ -175,6 +175,9 @@ class BookingSuite extends munit.FunSuite:
     val gift = pages("pl/offer/gift/index.html")
     assert(gift.contains("""data-send="order"""") && !gift.contains("data-slots"))
     assert(pages("workshop/index.html").contains("""data-books="yes""""))
+    val front = pages("pl/index.html")
+    assert(front.contains("""href="#offers"""") && front.contains("""id="offers"""") && front.contains("Usługi"))
+    assert(cut.contains("""<span class="chip accent">60 zł</span>"""), cut)
     assert(!StaticPages.of(Fixtures.site("atelier"), L, "K").toMap.apply("workshop/index.html").contains("data-books"))
   }
 

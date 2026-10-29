@@ -82,6 +82,7 @@ $switchStyle
     given l: Lang = at.lang
     val site = at.site
     val clothing = site.clothing
+    val salon = site.kind == Kind.Salon
     val ordered = site.offers
     val cards = if ordered.isEmpty then s"""<p class="offer-desc">${t("Скоро.", "Wkrótce.", "Coming soon.",
       "Незабаром.")}</p>""" else ordered.map(serviceCard).mkString
@@ -94,13 +95,15 @@ $switchStyle
     <section class="hero">
       ${look.kicker}
       <h1 class="headline">${tt(site.tagline)}</h1>
-      <p class="lead">${t("Или выберите готовый оффер ниже.", "Albo wybierz gotową ofertę poniżej.",
-        "Or pick a ready-made offer below.", "Або оберіть готову пропозицію нижче.")}</p>
-      <button class="buy" data-open="buyModal">${t("Купить", "Kup", "Buy", "Купити")}</button>
-      ${slaNote(clothing)}
+      ${if salon then salonHero else s"""<p class="lead">${t("Или выберите готовый оффер ниже.",
+        "Albo wybierz gotową ofertę poniżej.", "Or pick a ready-made offer below.", "Або оберіть готову пропозицію " +
+        "нижче.")}</p>
+      <button class="buy" data-open="buyModal">${t("Купить", "Kup", "Buy", "Купити")}</button>"""}
+      ${sla(site)}
     </section>
-    <section class="offers">
-      <p class="label">${t("Готовые офферы", "Gotowe oferty", "Ready-made offers", "Готові пропозиції")}</p>
+    <section class="offers"${if salon then " id=\"offers\"" else ""}>
+      <p class="label">${if salon then t("Услуги", "Usługi", "Services", "Послуги") else t("Готовые офферы",
+        "Gotowe oferty", "Ready-made offers", "Готові пропозиції")}</p>
       $cards
     </section>
     ${look.sections(at)}
@@ -108,7 +111,7 @@ $switchStyle
       <p class="label">${t("Связаться", "Kontakt", "Contact", "Звʼязатися")}</p>
       <p class="body">${tt(site.contact)}</p>
       <button class="cta" data-open="buyModal">${t("Написать →", "Napisz →", "Get in touch →", "Написати →")}</button>
-      ${slaNote(clothing)}
+      ${sla(site)}
     </section>
     ${foot(site, look)}
   </div>
@@ -118,7 +121,11 @@ $switchStyle
       <div id="buyForm">
         <h2>${t("Расскажите, что нужно", "Powiedz, czego potrzebujesz", "Tell us what you need",
           "Розкажіть, що потрібно")}</h2>
-        <p class="sub">${t(
+        <p class="sub">${if salon then t("Напишите, что нужно, — ответим в течение дня. Записаться на время " +
+          "можно сразу на странице услуги.", "Napisz, czego potrzebujesz — odpowiemy w ciągu dnia. Termin " +
+          "zarezerwujesz od razu na stronie usługi.", "Write what you need — we reply within a day. To book a " +
+          "time, open the service's page.", "Напишіть, що потрібно, — відповімо протягом дня. Записатися на час " +
+          "можна одразу на сторінці послуги.") else t(
           "Опишите задачу — отвечу в течение рабочего дня: уточним детали, цену и срок. Без звонков, переписка по " +
               "ссылке.",
           "Opisz zadanie — odpowiem w ciągu dnia roboczego: doprecyzujemy szczegóły, cenę i termin. Bez telefonów, " +
@@ -134,7 +141,9 @@ $switchStyle
       </div>
       <div class="done" id="buyDone" style="display:none">
         <div class="big">${t("Спасибо!", "Dziękujemy!", "Thank you!", "Дякуємо!")}</div>
-        <p>${t("Заявка принята — отвечу в течение рабочего дня. Без звонков.",
+        <p>${if salon then t("Сообщение принято — ответим в течение дня.", "Wiadomość przyjęta — odpowiemy w ciągu " +
+          "dnia.", "Got it — we reply within a day.", "Повідомлення прийнято — відповімо протягом дня.")
+          else t("Заявка принята — отвечу в течение рабочего дня. Без звонков.",
           "Zgłoszenie przyjęte — odpowiem w ciągu dnia roboczego. Bez telefonów.",
           "Got it — I reply within a business day. No phone calls.",
           "Заявку прийнято — відповім протягом робочого дня. Без дзвінків.")}</p>
@@ -158,6 +167,7 @@ $scripts
     val priceChip =
       if site.kind == Kind.It then s"""<span class="chip accent">${t("Цена договорная", "Cena do uzgodnienia",
         "Price by agreement", "Ціна договірна")}</span>"""
+      else if site.kind == Kind.Salon && o.priced then s"""<span class="chip accent">${e(pn)}</span>"""
       else if o.priced then s"""<span class="chip accent">${t("от " + pn, "od " + pn, "from " + pn, "від " +
           "" + pn)}</span>"""
       else s"""<span class="chip accent">${t("Цена по осмотру", "Cena po obejrzeniu", "Price once we see it",
@@ -553,6 +563,21 @@ background:transparent;color:inherit;border:1px solid rgba(127,127,127,.4)}
   // the async/SLA expectation shown next to every public CTA («Купить» / «Написать» / «Обсудить
   // проект»): it tells the client up front that this is asynchronous — no phone calls, a reply within
   // a business day, the conversation stays on the request link. Shared by the storefront + /products.
+
+  /** a salon's hero: choose a service and a time — the button goes to the services */
+  def salonHero(using l: Lang): String =
+    s"""<p class="lead">${t("Выберите услугу и свободное время — запись за минуту.",
+      "Wybierz usługę i wolny termin — rezerwacja w minutę.", "Pick a service and a free time — booked in a minute.",
+      "Оберіть послугу й вільний час — запис за хвилину.")}</p>
+      <a class="buy" href="#offers" style="display:inline-block;text-decoration:none">${t("Записаться", "Zarezerwuj",
+        "Book", "Записатися")}</a>"""
+
+  /** the reply's promise under a form: the site's kind's */
+  def sla(site: Site)(using l: Lang): String =
+    if site.kind == Kind.Salon then s"""<p class="sla">${t("Запись онлайн; на сообщения отвечаем в течение дня.",
+      "Rezerwacja online; na wiadomości odpowiadamy w ciągu dnia.", "Booking online; messages answered within a day.",
+      "Запис онлайн; на повідомлення відповідаємо протягом дня.")}</p>"""
+    else slaNote(site.clothing)
 
   def slaNote(clothing: Boolean = false)(using l: Lang): String =
     if clothing then

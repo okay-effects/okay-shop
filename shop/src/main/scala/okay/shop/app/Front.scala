@@ -39,5 +39,6 @@ object Front:
     r.path.split('/').toList.filter(_.nonEmpty) match
       case "api" :: _ => true
       case "workshop" :: "api" :: _ => true
-      case l :: ("track" | "receipt") :: Nil => Lang.parse(l).isDefined
+      case l :: ("track" | "receipt" | "booking") :: Nil => Lang.parse(l).isDefined
+      case "calendar" :: file :: Nil => file.endsWith(".ics")
       case _ => false

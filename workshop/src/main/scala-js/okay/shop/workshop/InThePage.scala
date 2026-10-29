@@ -43,11 +43,13 @@ object Turnstile:
       case Human.Token() => Async.cancellable[String, Rest] { cb =>
           var timer: js.UndefOr[js.timers.SetTimeoutHandle] = js.undefined
           def poll(left: Int): Unit =
-            val t = js.Dynamic.global.turnstile
-            val token = if js.isUndefined(t) then "" else Option(t.getResponse()).filterNot(js.isUndefined)
-              .map(_.toString).getOrElse("")
+            // `typeof`: until its script has come the page has no such name at all
+            val t = if js.typeOf(js.Dynamic.global.turnstile) == "undefined" then None
+              else Some(js.Dynamic.global.turnstile)
+            val token = t.flatMap(w => Option(w.getResponse()).filterNot(js.isUndefined)).map(_.toString)
+              .getOrElse("")
             if token.nonEmpty || left <= 0 then
-              if !js.isUndefined(t) then t.reset()
+              t.foreach(_.reset())
               cb(Right(token))
             else timer = js.timers.setTimeout(250)(poll(left - 1))
           poll(40)
