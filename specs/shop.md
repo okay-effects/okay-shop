@@ -102,7 +102,8 @@ engine knowing what they are:
 - The engine never adds a host's page itself, and a link to one is only what `Conf.more` says for that person.
 - **`Conf.desk`** (`Desk(path, cookie)`, by default `/workshop` and `__Host-ws`): where the sign-in lives — the
   letter's link `<origin><path>/api/enter?t=…`, the enter page's form, the redirects to `<path>/` and
-  `<path>/#expired`, the session's cookie; `Api.answer` routes `<path>/api/…` to the workshop. A host signs its own people in elsewhere with the same mechanism (the
+  `<path>/#expired`, the session's cookie; `Api.answer` routes `<path>/api/…` to the workshop. A
+  host signs its own people in elsewhere with the same mechanism (the
   mall's operators at `/_admin`).
 - **The sign-in link is limited per address too**: 5 per IP and 5 per address (its SHA-256) in 10 minutes; the
   answer is the same for an address on the list and one not.

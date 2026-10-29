@@ -107,7 +107,8 @@ border:0;border-radius:12px;background:#2a1f14;color:#fff;cursor:pointer}</style
       case ("GET", List("more")) => pure(ok(Json.obj("more" -> Json.Arr(c.more(email).map((text, href) =>
           Json.obj("text" -> Json.str(text), "href" -> Json.str(href)))))))
       case ("POST", List("out")) => perform[Store](Store.EndSession(hash(Web.cookie(r, c.desk.cookie)
-          .getOrElse("")))).map(_ => ok(Json.obj()).header("Set-Cookie", s"${c.desk.cookie}=; Path=/; HttpOnly; Secure; SameSite=Lax; " +
+          .getOrElse("")))).map(_ => ok(Json.obj()).header("Set-Cookie",
+            s"${c.desk.cookie}=; Path=/; HttpOnly; Secure; SameSite=Lax; " +
             "Max-Age=0"))
       case ("GET", List("orders")) => Store.orders[R](200).map(os =>
           ok(Json.obj("orders" -> Json.Arr(os.map(o => described(c, o))))))
