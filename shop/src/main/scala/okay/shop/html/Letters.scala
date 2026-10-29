@@ -247,3 +247,42 @@ object Letters:
   def bookedOwner(c: Conf, b: Booking): Note = ownerNote(c, b, "Новий запис")
   def rebookedOwner(c: Conf, b: Booking): Note = ownerNote(c, b, "Запис перенесено")
   def unbookedOwner(c: Conf, b: Booking): Note = ownerNote(c, b, "Запис скасовано")
+
+  // ---- QUOTES (specs/shop.md "Inquiry and quote")
+
+  private def quoteNote(c: Conf, q: Quote, subject: T, said: T, more: String): Note =
+    val l = q.lang
+    val a = accent(c.site)
+    val service = c.site.offer(q.service).map(_.name(l)).getOrElse(q.service)
+    note(s"${subject(l)} ${q.ref} — ${c.site.name}", page(a, s"<h2 style='color:$a'>${e(c.site.name)}</h2>" +
+      s"<p>${e(said(l))}</p><p style='color:#666'>${e(service)} · ${e(q.ref)}</p>" + more +
+      s"<p><a href='${e(okay.shop.app.Quotes.manageLink(c, q))}' style='background:$a;color:#fff;padding:10px 20px;" +
+      "border-radius:8px;text-decoration:none;font-size:14px'>" + e(T("Открыть запрос →", "Otwórz zapytanie →",
+      "Open the inquiry →", "Відкрити запит →")(l)) + "</a></p>" + questions(c, l)), Some(c.contact))
+
+  /** to the client: the inquiry taken, the link to follow it */
+  def quoteAsked(c: Conf, q: Quote): Note = quoteNote(c, q, T("Запрос принят", "Zapytanie przyjęte",
+    "Inquiry received", "Запит прийнято"), T("Спасибо! Оценим работу и ответим с ценой.",
+    "Dziękujemy! Wycenimy pracę i odpiszemy z ceną.", "Thank you! We will price the job and reply.",
+    "Дякуємо! Оцінимо роботу й відповімо з ціною."), s"<p>${Html.lines(q.description)}</p>")
+
+  /** to the client: the shop's quote — the price or range, the time proposed, the note — to accept or decline */
+  def quoted(c: Conf, q: Quote): Note =
+    val l = q.lang
+    def row(k: T, v: String) = if v.isEmpty then "" else s"<p><b>${e(k(l))}:</b> ${Html.lines(v)}</p>"
+    quoteNote(c, q, T("Оценка", "Wycena", "Quote", "Оцінка"), T("Мы оценили вашу работу. Примите или отклоните по " +
+      "ссылке.", "Wyceniliśmy Twoją pracę. Przyjmij lub odrzuć pod linkiem.", "We have priced your job. Accept " +
+      "or decline by the link.", "Ми оцінили вашу роботу. Прийміть або відхиліть за посиланням."),
+      row(T("Цена", "Cena", "Price", "Ціна"), q.priced) + row(T("Когда", "Kiedy", "When", "Коли"),
+        if q.start > 0 then Day.time(q.start) else "") + row(T("Комментарий", "Uwagi", "Note", "Коментар"), q.note))
+
+  /** to the owner: an inquiry asked, accepted or declined (in Ukrainian, as the owner's letters are) */
+  def quoteOwner(c: Conf, q: Quote, what: String): Note =
+    def row(k: String, v: String) = if v.isEmpty then "" else s"<p><b>${e(k)}:</b> ${Html.lines(v)}</p>"
+    note(s"💬 $what ${q.ref} — ${c.site.name}", page(accent(c.site),
+      s"<h2 style='color:${accent(c.site)}'>💬 $what — ${e(c.site.name)}</h2>" + row("Номер", q.ref) +
+        row("Послуга", c.site.offer(q.service).map(_.name(Lang.uk)).getOrElse(q.service)) + row("Опис", q.description) +
+        row("Бажані дати", q.preferred) + q.mode.fold("")(m => row("Як", m.label(Lang.uk))) +
+        q.address.fold("")(a => row("Адреса", a.line) + row("Примітки", a.notes)) + row("Ціна", q.priced) +
+        row("Клієнт", q.name) + row("Контакт", q.contact) +
+        row("Згода RODO", s"${Day.time(q.consent.at)} · політика ${q.consent.policy}")), q.email)

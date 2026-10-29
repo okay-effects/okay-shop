@@ -16,6 +16,8 @@ object Submit:
     case Placed(ref: String, blik: Option[String], price: Option[String], paczkomat: Option[String])
     /** a booking made or moved: its ref, its time as the client reads it, the link that manages it */
     case Booked(ref: String, when: String, manage: String, master: String = "")
+    /** an inquiry for a quote asked: its ref and the link to follow it */
+    case Asked(ref: String, manage: String)
     /** refused, and why: `name`, `contact`, `consent`, `captcha`, `limit`, … — or the network */
     case Refused(why: String)
 
@@ -29,12 +31,13 @@ object Submit:
           else s"status ${r.status}"))
         else (s("ref"), s("manage")) match
           case (None, _) => Outcome.Refused("answer")
+          case (Some(ref), Some(m)) if j.flatMap(_.get("quote")).contains(Json.Bool(true)) => Outcome.Asked(ref, m)
           case (Some(ref), Some(m)) => Outcome.Booked(ref, s("when").getOrElse(""), m, s("masterName").getOrElse(""))
           case (Some(ref), None) => Outcome.Placed(ref, s("blik"), s("price"), s("paczkomat"))
       }
 
-  /** a day of free starts, as `/api/slots` answers it */
-  final case class Day(date: String, weekday: Int, slots: Vector[(Long, String)])
+  /** a day of free starts, as `/api/slots` answers it; a class's seats left by start */
+  final case class Day(date: String, weekday: Int, slots: Vector[(Long, String)], left: Map[Long, Int] = Map.empty)
 
   /** the free starts of a bookable service, by day; none when the shop does not answer */
   def slots[R[_]](base: String, service: String, mode: String = "", place: String = "", master: String = "")(
@@ -44,7 +47,10 @@ object Submit:
       (if master.isEmpty then "" else "&master=" + Query.encode(master))
     Fetch[R](base, Request.get("/api/slots?service=" + Query.encode(service) + how)).map { r =>
       def days(j: Json) = j("days").list.map(d =>
-        Day(d("date").string, d("weekday").int, d("slots").list.map(x => x("start").long -> x("label").string)))
+        Day(d("date").string, d("weekday").int, d("slots").list.map(x => x("start").long -> x("label").string),
+          d("slots").list.flatMap(x => x match
+            case o: Json.Obj => o.get("left").collect { case Json.Num(n) => x("start").long -> n.toInt }
+            case _ => None).toMap))
       if r.status != 200 then Vector.empty
       else Descent.parse(r.text).toOption.flatMap(j => scala.util.Try(days(j)).toOption).getOrElse(Vector.empty)
     }
@@ -75,6 +81,15 @@ object Submit:
   def booked(l: Lang, when: String): String = T(s"Вы записаны: $when. Ссылка, чтобы перенести или отменить:",
     s"Zarezerwowano: $when. Link do przeniesienia lub odwołania:", s"Booked: $when. To move or cancel it:",
     s"Ви записані: $when. Посилання, щоб перенести або скасувати:")(l)
+
+  /** a class's start with its seats left: `18:00 · 5 wolnych` */
+  def seats(l: Lang, label: String, left: Int): String = s"$label · " + T(s"мест: $left", s"wolnych: $left",
+    s"$left left", s"місць: $left")(l)
+
+  /** the done panel of an inquiry */
+  def asked(l: Lang): String = T("Запрос принят — пришлём оценку. Следить и ответить:", "Zapytanie przyjęte — " +
+    "prześlemy wycenę. Śledź i odpowiedz:", "Inquiry received — we will send a quote. Follow and answer it:",
+    "Запит прийнято — надішлемо оцінку. Стежити й відповісти:")(l)
 
   def noSlots(l: Lang): String = T("Свободного времени пока нет — напишите нам.", "Brak wolnych terminów — napisz do " +
     "nas.", "No free times yet — write to us.", "Вільного часу поки немає — напишіть нам.")(l)
@@ -108,6 +123,10 @@ object Submit:
     case "taken" => T("Это время уже заняли — выберите другое.", "Ten termin jest już zajęty — wybierz inny.",
         "That time was just taken — please choose another.", "Цей час уже зайняли — оберіть інший.")(l)
     case "area" => outside(l)
+    case "full" => T("Мест на это время уже нет — выберите другое.", "Brak wolnych miejsc na ten termin — wybierz " +
+        "inny.", "No seats left at that time — please choose another.",
+        "Місць на цей час уже немає — оберіть інший.")(l)
+    case "description" => T("Опишите работу.", "Opisz pracę.", "Please describe the job.", "Опишіть роботу.")(l)
     case "master" => T("Этот мастер не делает эту услугу так — выберите другого.", "Ten specjalista nie wykonuje " +
         "tej usługi w ten sposób — wybierz innego.", "That master does not do this service this way — choose another.",
         "Цей майстер не робить цю послугу так — оберіть іншого.")(l)

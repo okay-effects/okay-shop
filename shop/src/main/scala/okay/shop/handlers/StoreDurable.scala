@@ -17,6 +17,7 @@ import okay.shop.model.*
  *   site/hit/<key>/<window>      a rate limit's count in a window
  *   site/link/<hash>             a sign-in link not yet used: {email, until}
  *   site/session/<hash>          a session: {email, until}
+ *   site/quote/<ref>             an inquiry for a quote, as it is now (asked, quoted, decided)
  *   site/booking/<ref>           a booking as it is now (its master, start, minutes, status, reminded; its mode,
  *                                place, address, buffers, price)
  *
@@ -32,6 +33,7 @@ object StoreDurable:
   private def link(hash: String) = s"$scope/link/$hash"
   private def session(hash: String) = s"$scope/session/$hash"
   private def bookingKey(ref: String) = s"$scope/booking/$ref"
+  private def quoteKey(ref: String) = s"$scope/quote/$ref"
   private val day = 86400000L
 
   def run[R[_], Rest[_], A](p: A ! R)(using Split[Store, R, Rest], In[Storage, Rest]): A ! Rest =
@@ -146,6 +148,46 @@ object StoreDurable:
                   val moved = b.copy(start = start, master = k, reminded = start - day <= now)
                   Durable.put[Json, D](bookingKey(ref), Codec.booking(moved))
                     .andThen(nextReminder[D](others :+ moved, now)).as(Right(moved))
+        })
+      case Store.Seat(b, schedule, o, now) => step[Either[String, Booking]](allBookings[D].flatMap { all =>
+          if !Slots.hasSeat(schedule, o, all, now, b.start) then pure(Left("full"))
+          else
+            val kept = b.copy(reminded = b.start - day <= now)
+            Durable.put[Json, D](bookingKey(b.ref), Codec.booking(kept))
+              .andThen(nextReminder[D](all :+ kept, now)).as(Right(kept))
+        })
+      case Store.Reseat(ref, start, schedule, o, now) => step[Either[String, Booking]](allBookings[D].flatMap { all =>
+          all.find(_.ref == ref).filter(_.active) match
+            case None => pure(Left("no such booking"))
+            case Some(b) =>
+              val others = all.filterNot(_.ref == ref)
+              if !Slots.hasSeat(schedule, o, others, now, start) then pure(Left("full"))
+              else
+                val moved = b.copy(start = start, reminded = start - day <= now)
+                Durable.put[Json, D](bookingKey(ref), Codec.booking(moved))
+                  .andThen(nextReminder[D](others :+ moved, now)).as(Right(moved))
+        })
+      case Store.Ask(q) => step[Unit](Durable.put[Json, D](quoteKey(q.ref), Codec.quote(q)))
+      case Store.FindQuote(ref) => read[R](List(quoteKey(ref))).map(_.get(quoteKey(ref)).map(Codec.quote))
+      case Store.Quotes(limit) => readAll[R](s"$scope/quote/").map(_.map((_, j) => Codec.quote(j))
+          .sortBy(q => -q.placed).take(limit).toVector)
+      case Store.Reply(ref, price, priceTo, start, note) => step[Option[Quote]](Durable.get[Json, D](quoteKey(ref))
+        .flatMap {
+          case Some(j: Json.Obj) =>
+            val q = Codec.quote(j)
+            if q.status != QuoteStatus.Asked && q.status != QuoteStatus.Quoted then pure(None)
+            else
+              val quoted = q.copy(status = QuoteStatus.Quoted, price = price, priceTo = priceTo, start = start,
+                note = note)
+              Durable.put[Json, D](quoteKey(ref), Codec.quote(quoted)).as(Some(quoted))
+          case _ => pure(None)
+        })
+      case Store.Decide(ref, accepted, result) => step[Option[Quote]](Durable.get[Json, D](quoteKey(ref)).flatMap {
+          case Some(j: Json.Obj) if Codec.quote(j).status == QuoteStatus.Quoted =>
+            val decided = Codec.quote(j).copy(status = if accepted then QuoteStatus.Accepted else QuoteStatus.Declined,
+              result = result)
+            Durable.put[Json, D](quoteKey(ref), Codec.quote(decided)).as(Some(decided))
+          case _ => pure(None)
         })
       case Store.FindBooking(ref) => read[R](List(bookingKey(ref))).map(_.get(bookingKey(ref)).map(Codec.booking))
       case Store.Bookings(from, until) => readAll[R](s"$scope/booking/").map(_.map((_, j) => Codec.booking(j))

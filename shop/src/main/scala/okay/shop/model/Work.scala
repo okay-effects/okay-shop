@@ -50,7 +50,8 @@ final case class Online(how: String, details: String = "")
 
 /** a service's own: the modes it allows (none: all the shop's), a price difference per mode (grosze), its minutes
  * when the content gives none */
-final case class ServiceWork(modes: Vector[Mode] = Vector.empty, extra: Map[Mode, Long] = Map.empty, minutes: Int = 0)
+final case class ServiceWork(modes: Vector[Mode] = Vector.empty, extra: Map[Mode, Long] = Map.empty, minutes: Int = 0,
+                             quote: Boolean = false, seats: Int = 0, times: Vector[(Int, Int)] = Vector.empty)
 
 /** HOW A SHOP WORKS: its modes, its locations, its area, its online calls, its services' own */
 final case class Work(modes: Vector[Mode], locations: Vector[Location] = Vector.empty, area: Option[Area] = None,
@@ -90,7 +91,8 @@ object Work:
     "services" -> Json.Obj(w.services.toVector.sortBy(_._1).map((k, s) => k -> Json.obj(
       "modes" -> Json.Arr(s.modes.map(m => Json.str(m.key))),
       "extra" -> Json.Obj(s.extra.toVector.sortBy(_._1.ordinal).map((m, g) => m.key -> Json.str(zl(g)))),
-      "minutes" -> Json.num(s.minutes)))))
+      "minutes" -> Json.num(s.minutes), "quote" -> Json.bool(s.quote), "seats" -> Json.num(s.seats),
+      "times" -> Json.str(Work.timesText(s.times))))))
 
   /**
    * A SHOP'S WORK FROM ITS JSON, checked whole against its services' keys: the work, or the name of its first wrong
@@ -166,7 +168,10 @@ object Work:
             case (Some(mode), Some(g)) if g >= 0 && g <= 1000000L => Right(mode -> g)
             case _ => Left("service.extra"))).flatMap { ex =>
             int(o, "minutes").filter(m => m == 0 || (m >= 5 && m <= 600)).toRight("service.minutes")
-              .map(mins => ServiceWork(ms, ex.filter(_._2 > 0).toMap, mins))
+              .flatMap(mins => int(o, "seats").filter(n => n >= 0 && n <= 200).toRight("service.seats").flatMap(
+                seats => times(str(o, "times")).toRight("service.times").map(ts =>
+                  ServiceWork(ms, ex.filter(_._2 > 0).toMap, mins, o.get("quote").contains(Json.Bool(true)), seats,
+                    ts))))
           }
         }
       }
@@ -191,6 +196,16 @@ object Work:
           service(k, x, ms).map(k -> _)))
       yield Work(ms, if ms.contains(Mode.AtShop) then locs else Vector.empty, ar, on, svs.toMap)
     }
+
+  /** a class's weekly starts from `mon 18:00, wed 18:00` (none from an empty text; a wrong one: none at all) */
+  def times(text: String): Option[Vector[(Int, Int)]] =
+    val parts = text.split(',').map(_.trim).filter(_.nonEmpty).toVector
+    val ts = parts.map(_.split("\\s+") match
+      case Array(d, t) => for day <- Some(days.indexOf(d.toLowerCase.take(3)) + 1).filter(_ > 0)
+        m <- Span.minutes(t) yield day -> m
+      case _ => None)
+    Option.when(ts.forall(_.isDefined) && ts.size <= 28)(ts.flatten.distinct.sorted)
+  def timesText(ts: Vector[(Int, Int)]): String = ts.map((d, m) => s"${days(d - 1)} ${Span.label(m)}").mkString(", ")
 
   /** a week's hours as people read them: `pn–pt 10:00–18:00, sb 10:00–14:00` */
   def hoursText(h: Map[Int, Vector[Span]], l: Lang): String =

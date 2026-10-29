@@ -47,6 +47,21 @@ lead: 60
   price: 200.00
   order: 5
   minutes: 60
+- key: fix
+  name: Hydraulik
+  description: opisz problem — wycenimy
+  price: 0
+  order: 6
+  minutes: 60
+  quote: true
+- key: yoga
+  name: Joga w grupie
+  description: zajęcia grupowe, 3 miejsca
+  price: 40.00
+  order: 7
+  minutes: 60
+  seats: 3
+  times: mon 18:00, wed 18:00
 ```
 
 ```yaml schedule
@@ -87,7 +102,9 @@ lead: 60
    "visit": {"modes": ["atClient"], "minutes": 60, "extra": {"atClient": "20"}},
    "consult": {"modes": ["online"]},
    "parcel": {"modes": ["byMail"]},
-   "both": {"modes": ["atShop", "byMail"]}
+   "both": {"modes": ["atShop", "byMail"]},
+   "fix": {"modes": ["atClient"]},
+   "yoga": {"modes": ["atShop"]}
  }}
 ```
 

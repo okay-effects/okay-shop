@@ -10,6 +10,9 @@ object BookingPage:
   private def e(s: String) = Html.escape(s)
   private def accent(site: Site) = if site.clothing then "#ff6f91" else site.color
 
+  /** the frame of a client's own page (a booking's, an inquiry's): its head, its bar, the column opened */
+  def frame(site: Site, l: Lang, title: String): String = head(site, l, title)
+
   private def head(site: Site, l: Lang, title: String): String =
     val a = accent(site)
     s"""<!doctype html><html lang="${l.code}"><head><meta charset="utf-8">

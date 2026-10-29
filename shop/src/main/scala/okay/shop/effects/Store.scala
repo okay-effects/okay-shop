@@ -42,6 +42,20 @@ enum Store[X]:
   /** a booking moved to `start` by the first of `candidates` free then (itself not in the way) */
   case RebookWith(ref: String, start: Long, candidates: Vector[(String, Schedule)], masters: Set[String], now: Long)
     extends Store[Either[String, Booking]]
+  /** a seat of a class taken — if it still has one at the booking's start, counted in the same step:
+   * `Left("full")` else */
+  case Seat(booking: Booking, schedule: Schedule, offer: Offer, now: Long) extends Store[Either[String, Booking]]
+  /** a seat moved to another start of its class, if that one has a seat */
+  case Reseat(ref: String, start: Long, schedule: Schedule, offer: Offer, now: Long)
+    extends Store[Either[String, Booking]]
+  /** an inquiry for a quote asked */
+  case Ask(quote: Quote) extends Store[Unit]
+  case FindQuote(ref: String) extends Store[Option[Quote]]
+  case Quotes(limit: Int) extends Store[Vector[Quote]]
+  /** the shop's answer to an inquiry not yet decided: the quote as it is after it (none: no such, or decided) */
+  case Reply(ref: String, price: Long, priceTo: Long, start: Long, note: String) extends Store[Option[Quote]]
+  /** the client's decision on a quoted inquiry, with what it became: none when it is not quoted */
+  case Decide(ref: String, accepted: Boolean, result: String) extends Store[Option[Quote]]
   /** the bookings whose reminder is due at `now`, marked reminded; the next reminder's alarm set */
   case Remind(now: Long) extends Store[Vector[Booking]]
 
@@ -70,4 +84,15 @@ object Store:
   def rebookWith[R[_]](ref: String, start: Long, candidates: Vector[(String, Schedule)], masters: Set[String],
                        now: Long)(using In[Store, R]): Either[String, Booking] ! R =
     perform[Store](RebookWith(ref, start, candidates, masters, now))
+  def seat[R[_]](b: Booking, s: Schedule, o: Offer, now: Long)(using In[Store, R]): Either[String, Booking] ! R =
+    perform[Store](Seat(b, s, o, now))
+  def reseat[R[_]](ref: String, start: Long, s: Schedule, o: Offer, now: Long)(using In[Store, R])
+    : Either[String, Booking] ! R = perform[Store](Reseat(ref, start, s, o, now))
+  def ask[R[_]](q: Quote)(using In[Store, R]): Unit ! R = perform[Store](Ask(q))
+  def quote[R[_]](ref: String)(using In[Store, R]): Option[Quote] ! R = perform[Store](FindQuote(ref))
+  def quotes[R[_]](limit: Int)(using In[Store, R]): Vector[Quote] ! R = perform[Store](Quotes(limit))
+  def reply[R[_]](ref: String, price: Long, priceTo: Long, start: Long, note: String)(using In[Store, R])
+    : Option[Quote] ! R = perform[Store](Reply(ref, price, priceTo, start, note))
+  def decide[R[_]](ref: String, accepted: Boolean, result: String)(using In[Store, R]): Option[Quote] ! R =
+    perform[Store](Decide(ref, accepted, result))
   def remind[R[_]](now: Long)(using In[Store, R]): Vector[Booking] ! R = perform[Store](Remind(now))

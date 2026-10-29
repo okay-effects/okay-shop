@@ -13,7 +13,8 @@ import okay.shop.model.*
  */
 /** the site as the workshop shows it: its name, whether it takes bookings (the «Записи» screen), the host's own
  * pages for the person signed in (`Conf.more`: their text and address, links on the orders screen) */
-final case class Shown(name: String, books: Boolean = false, more: Vector[(String, String)] = Vector.empty)
+final case class Shown(name: String, books: Boolean = false, more: Vector[(String, String)] = Vector.empty,
+                       quotes: Boolean = false)
 
 object Workshop:
   private val uk = Lang.uk
@@ -49,7 +50,7 @@ object Workshop:
 
   private enum OnList:
     case Open(ref: String)
-    case Inquiries, Bookings, Refresh, Out
+    case Inquiries, Bookings, Quotes, Refresh, Out
 
   def orders[R[_]: Has[Ui]: Has[Staff]: Has[Human]](site: Shown, said: Option[String]): Unit ! R =
     Staff.orders[R].flatMap {
@@ -66,10 +67,12 @@ object Workshop:
         show[OnList, R](Screen[OnList](s"Замовлення · ${site.name}")((said.map(Part.info).toSeq ++ more :+ table)*)(
           (Seq(Button.select("Відкрити", table)(j => OnList.Open(j.order.ref)), Button("Заявки")(OnList.Inquiries)) ++
             Option.when(site.books)(Button("Записи")(OnList.Bookings)) ++
+            Option.when(site.quotes)(Button("Запити ціни")(OnList.Quotes)) ++
             Seq(Button("Оновити")(OnList.Refresh), Button("Вийти", Style.Danger)(OnList.Out)))*)).flatMap {
           case OnList.Open(ref) => order[R](site, ref, None)
           case OnList.Inquiries => inquiries[R](site)
           case OnList.Bookings => bookings[R](site, None)
+          case OnList.Quotes => quotes[R](site, None)
           case OnList.Refresh => orders[R](site, None)
           case OnList.Out => Staff.out[R].flatMap(_ => signIn[R](site, expired = false))
         }
@@ -283,6 +286,53 @@ object Workshop:
       }
     }
 
+  // ---- THE INQUIRIES FOR A QUOTE (specs/shop.md "Inquiry and quote")
+
+  private enum OnQuotes:
+    case Open(q: (Quote, String))
+    case Back
+
+  def quotes[R[_]: Has[Ui]: Has[Staff]: Has[Human]](site: Shown, said: Option[Part]): Unit ! R =
+    Staff.quotes[R].flatMap {
+      case Left(why) => orders[R](site, Some(refusal(why)))
+      case Right(qs) =>
+        type Q = (Quote, String)
+        val table = Table(qs.toList)(Column.text[Q]("Коли")(q => Day.time(q._1.placed)),
+          Column.text[Q]("Послуга")(_._2), Column.text[Q]("Клієнт")(_._1.name),
+          Column.text[Q]("Стан")(_._1.status.label(uk)), Column.text[Q]("Ціна")(_._1.priced),
+          Column.text[Q]("№")(_._1.ref)).keyedBy(_._1.ref).whenEmpty("Запитів немає.")
+        show[OnQuotes, R](Screen[OnQuotes](s"Запити ціни · ${site.name}")((said.toSeq :+ table)*)(
+          Button.select("Відкрити", table)(OnQuotes.Open(_)), Button("Назад")(OnQuotes.Back))).flatMap {
+          case OnQuotes.Back => orders[R](site, None)
+          case OnQuotes.Open(q) => quote[R](site, q._1, q._2)
+        }
+    }
+
+  private enum OnQuote:
+    case Sent(price: String, priceTo: String, start: String, note: String)
+    case Back
+
+  private def quote[R[_]: Has[Ui]: Has[Staff]: Has[Human]](site: Shown, q: Quote, service: String): Unit ! R =
+    val details = Part.details(Seq("Послуга" -> service, "Опис" -> q.description, "Бажані дати" -> q.preferred,
+      "Як" -> q.mode.fold("")(_.label(uk)), "Адреса" -> q.address.fold("")(_.line),
+      "Примітки" -> q.address.fold("")(_.notes), "Клієнт" -> q.name, "Контакт" -> q.contact,
+      "Стан" -> q.status.label(uk), "Ціна" -> q.priced, "Коли" -> (if q.start > 0 then Day.time(q.start) else ""),
+      "Коментар" -> q.note, "Стало" -> q.result).filter(_._2.nonEmpty)*)
+    val open = q.status == QuoteStatus.Asked || q.status == QuoteStatus.Quoted
+    val form = Form((Field.text("Ціна, zł").keyed("price"), Field.text("До, zł (діапазон)").keyed("priceTo"),
+      Field.text("Час (2026-11-03 14:00)").keyed("start"), Field.longText("Коментар").keyed("note")))
+    show[OnQuote, R](Screen[OnQuote](s"${q.ref} · ${q.name}")((Seq(details) ++ Option.when(open)(form))*)(
+      ((if open then Seq(Button.submit("Надіслати оцінку", form)((p, t, w, n) => OnQuote.Sent(p, t, w, n)))
+        else Nil) :+
+        Button("Назад")(OnQuote.Back))*)).flatMap {
+      case OnQuote.Back => quotes[R](site, None)
+      case OnQuote.Sent(price, to, start, note) => Staff.reply[R](q.ref, price, to, start, note).flatMap {
+        case Right(sent) => quotes[R](site, Some(Part.info(if sent then "Оцінку надіслано клієнту."
+          else "Оцінку збережено.")))
+        case Left(why) => quotes[R](site, Some(Part.problem(refusal(why))))
+      }
+    }
+
   /** how and where a booking meets, short: the mode and the address (none before the modes) */
   def where(b: Booking): String = b.mode.fold("")(m => (m.label(Lang.uk) +: b.address.map(_.line).toSeq)
     .mkString(" · "))
@@ -293,6 +343,10 @@ object Workshop:
     case "limit" => "Забагато спроб — зачекайте 10 хвилин."
     case "sign in" => "Сесія закінчилась — увійдіть знову."
     case "no such order" => "Такого замовлення немає."
+    case "price" => "Вкажіть ціну (zł)."
+    case "priceTo" => "«До» має бути не меншою за ціну."
+    case "start" => "Час — у формі 2026-11-03 14:00."
+    case "no such quote" => "Такого запиту немає (або на нього вже відповіли)."
     case "no such booking" => "Такого запису немає (або його вже скасовано)."
     case "no email" => "У клієнта немає email."
     case "no connection" => "Немає зв'язку з сервером."

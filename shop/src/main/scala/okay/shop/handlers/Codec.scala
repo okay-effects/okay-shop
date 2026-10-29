@@ -83,3 +83,24 @@ object Codec:
     s(j, "place"), j.get("address").collect { case a: Json.Obj => Address(s(a, "name"), s(a, "street"),
       s(a, "postcode"), s(a, "city"), s(a, "notes"), s(a, "map")) }, n(j, "before").toInt, n(j, "after").toInt,
     n(j, "price"))
+
+  private def address(a: Address): Json = Json.obj("name" -> Json.str(a.name), "street" -> Json.str(a.street),
+    "postcode" -> Json.str(a.postcode), "city" -> Json.str(a.city), "notes" -> Json.str(a.notes),
+    "map" -> Json.str(a.map))
+  private def address(j: Json.Obj, k: String): Option[Address] = j.get(k).collect { case a: Json.Obj =>
+    Address(s(a, "name"), s(a, "street"), s(a, "postcode"), s(a, "city"), s(a, "notes"), s(a, "map")) }
+
+  def quote(q: Quote): Json.Obj = Json.obj("ref" -> Json.str(q.ref), "key" -> Json.str(q.key),
+    "service" -> Json.str(q.service), "name" -> Json.str(q.name), "contact" -> Json.str(q.contact),
+    "description" -> Json.str(q.description), "mode" -> Json.str(q.mode.fold("")(_.key)),
+    "address" -> q.address.fold(Json.Null)(address), "preferred" -> Json.str(q.preferred),
+    "lang" -> Json.str(q.lang.code), "consentAt" -> Json.num(q.consent.at), "policy" -> Json.str(q.consent.policy),
+    "placed" -> Json.num(q.placed), "status" -> Json.str(q.status.key), "price" -> Json.num(q.price),
+    "priceTo" -> Json.num(q.priceTo), "start" -> Json.num(q.start), "note" -> Json.str(q.note),
+    "result" -> Json.str(q.result))
+
+  def quote(j: Json.Obj): Quote = Quote(s(j, "ref"), s(j, "key"), s(j, "service"), s(j, "name"), s(j, "contact"),
+    s(j, "description"), Mode.parse(s(j, "mode")), address(j, "address"), s(j, "preferred"),
+    Lang.parse(s(j, "lang")).getOrElse(Lang.pl), Consent(n(j, "consentAt"), s(j, "policy")), n(j, "placed"),
+    QuoteStatus.parse(s(j, "status")).getOrElse(QuoteStatus.Asked), n(j, "price"), n(j, "priceTo"), n(j, "start"),
+    s(j, "note"), s(j, "result"))

@@ -168,6 +168,42 @@ this: one calendar, the master `main`, exactly as before).
   service; the pages' script shows only those eligible for the mode and place chosen) when the shop has masters.
 - **Tests**: `MastersSuite` (the fictional `crew` fixture: the visits' work and three masters).
 
+## Inquiry and quote (operator, 2026-10-29)
+
+Some work cannot be priced from a list: a leaking pipe, a sofa to clean. The client describes it; the shop answers
+with a quote; the client accepts or declines by their link.
+
+- **A quoted service**: `quote: true` in the content's `yaml services` (or the work's `services.<key>.quote`). Its
+  page has the inquiry form in place of the order or booking form.
+- **Asked** (`POST /api/quote {service, name, contact, description, mode, street, postcode, city, notes, preferred,
+  rodo_consent, lang, turnstile}`): the description (1–2000 characters), the mode and the address when the service
+  is at the client's (the area checked as a booking's), the preferred dates in the client's words; Turnstile, 5 per IP
+  in 10 minutes, the consent kept. Answered `{ref, key, manage}`; the client mailed the link to its page, the owner
+  the inquiry. Text only: no photos (no blob store in the engine yet).
+- **Quoted** by the workshop (`POST /workshop/api/quote/reply {ref, price, priceTo, start, note}`): a price, or a
+  range (`price`–`priceTo`), optionally a proposed time (an instant) and a note; the client mailed. The workshop's
+  list (`GET /workshop/api/quotes`): every inquiry with its status — asked, quoted, accepted, declined.
+- **Decided** by the client on the quote's page (`/{lang}/quote?ref=&k=`; `POST /api/quote/accept`,
+  `/api/quote/decline` with `ref`, `k`): accepted, it becomes a BOOKING when it has a proposed time and its service
+  is bookable (the store's check, as any booking: `409 taken` when the time was taken meanwhile) — else an ORDER
+  (status accepted, the quoted price its amount, the description its need); its ref on the quote. The owner mailed
+  either way; the client mailed the booking's or the order's link.
+- Store: `site/quote/<ref>` (`Store.Ask`, `FindQuote`, `Quotes`, `Reply`, `Decide`, each change one step).
+
+## Group classes (operator, 2026-10-29)
+
+A class takes many clients at once: yoga, a dance class, a workshop.
+
+- **A class**: a service with `seats: 12` and `times: mon 18:00, wed 18:00` (weekly starts) in the content's `yaml
+  services` (or the work's `services.<key>.seats` and `.times`), its `minutes` its length. Its occurrences: each
+  weekly time over the horizon, from the lead on, none on a closed date; in a mode and at a place as other bookings
+  (a location's class, an online class).
+- **Slots** (`GET /api/slots?service=…`): the occurrences with seats left (`left`), a full one not offered; the page
+  shows "18:00 · 5 seats left". **A seat** (`POST /api/book` as a booking): the store counts the active bookings of
+  that class at that start IN ITS STEP and refuses the one past the capacity (`409 full`); cancelling frees a seat.
+  The price is per seat. A class's master is busy at its time for other services. No waiting list yet.
+- Tests: `QuotesSuite`, `ClassesSuite` (the fictional `visits` fixture's `fix` and `yoga`).
+
 ## The host's own workshop pages (operator, 2026-10-29)
 
 A site built on the engine may add pages of its own to the workshop (the mall's "Appearance" screen) without the

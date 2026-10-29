@@ -30,8 +30,12 @@ object T:
 enum Kind:
   case Atelier, It, Salon
 
-/** AN OFFER: its key, its name and description in the four languages, its price in grosze (0: quoted) */
-final case class Offer(key: String, name: T, description: T, price: Long, order: Int, minutes: Int = 0):
+/** AN OFFER: its key, its name and description in the four languages, its price in grosze (0: quoted); whether it is
+ * asked for a quote; a group class's seats and weekly starts (weekday 1–7, minutes from midnight) */
+final case class Offer(key: String, name: T, description: T, price: Long, order: Int, minutes: Int = 0,
+                       quote: Boolean = false, seats: Int = 0, times: Vector[(Int, Int)] = Vector.empty):
+  /** a group class (specs/shop.md "Group classes"): seats at weekly times */
+  def isClass: Boolean = seats > 0 && times.nonEmpty && minutes > 0
   def priced: Boolean = price > 0
   /** booked for a time, not ordered: the service lasts `minutes` */
   def bookable: Boolean = minutes > 0
@@ -46,7 +50,7 @@ final case class Site(id: String, slug: String, name: String, tagline: T, lang: 
   def clothing: Boolean = kind == Kind.Atelier
   /** whether `o` is booked here: it lasts, and the shop has a schedule — or, by its work, a mode with hours */
   def books(o: Offer): Boolean = work match
-    case None => o.bookable && schedule.isDefined
+    case None => o.bookable && (schedule.isDefined || o.isClass)
     case Some(_) => bookedModes(o).nonEmpty
   /** the modes `o` is booked in (specs/shop.md "How the work happens"): allowed, with a time, and hours somewhere */
   def bookedModes(o: Offer): Vector[Mode] = work.fold(Vector.empty[Mode])(w => w.modesOf(o.key).filter(m =>
@@ -63,12 +67,16 @@ final case class Site(id: String, slug: String, name: String, tagline: T, lang: 
       case Mode.AtClient => work.flatMap(_.area).map(_.hours)
       case _ => None
     val s = own.filter(_.nonEmpty).fold(base)(w => base.copy(week = w))
-    Option.when(o.bookable && m.booked && s.week.values.exists(_.nonEmpty))(s)
+    Option.when(o.bookable && m.booked && (o.isClass || s.week.values.exists(_.nonEmpty)))(s)
   /** the masters who do `o` in mode `m` at place `p` (specs/shop.md "Masters"), in their order */
   def eligible(o: Offer, m: Option[Mode], p: String): Vector[Master] = masters.filter(_.does(o.key, m, p))
   /** the site with its work: a service with no minutes in the content takes the work's */
-  def working(w: Work): Site = copy(work = Some(w), offers = offers.map(o =>
-    w.services.get(o.key).filter(s => o.minutes == 0 && s.minutes > 0).fold(o)(s => o.copy(minutes = s.minutes))))
+  def working(w: Work): Site = copy(work = Some(w), offers = offers.map(o => w.services.get(o.key).fold(o) { s =>
+    val timed = if o.minutes == 0 && s.minutes > 0 then o.copy(minutes = s.minutes) else o
+    // asked for a quote, or a class, when the work says so
+    timed.copy(quote = timed.quote || s.quote, seats = if s.seats > 0 then s.seats else timed.seats,
+      times = if s.times.nonEmpty then s.times else timed.times)
+  }))
   def offer(key: String): Option[Offer] = offers.find(_.key == key)
   def origin: String = s"https://$domain"
 
@@ -173,6 +181,16 @@ object Day:
     val doy = (153 * (if m > 2 then m - 3 else m + 9) + 2) / 5 + d - 1
     val doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
     era * 146097 + doe - 719468
+  /** `2026-11-03 14:00`, Poland's time, as the instant it is */
+  def parse(s: String): Option[Long] = s.trim.replace('T', ' ').split(' ') match
+    case Array(d, t) => (d.split('-'), Span.minutes(t)) match
+      case (Array(y, m, dd), Some(mins)) => for yy <- y.toIntOption; mm <- m.toIntOption; x <- dd.toIntOption
+        if mm >= 1 && mm <= 12 && x >= 1 && x <= 31
+        yield
+          val local = days(yy, mm, x) * 86400000L + mins * 60000L
+          local - offset(local - offset(local))
+      case _ => None
+    case _ => None
   /** a moment for a person: `2026-10-28 14:03` in Poland's time */
   def time(millis: Long): String = Civil.iso(millis + offset(millis)).take(16).replace('T', ' ')
 
@@ -250,6 +268,29 @@ enum BookingStatus(val key: String):
 
 object BookingStatus:
   def parse(s: String): Option[BookingStatus] = values.find(_.key == s)
+
+enum QuoteStatus(val key: String, val label: T):
+  case Asked extends QuoteStatus("asked", T("Ждёт оценки", "Czeka na wycenę", "Waiting for a quote",
+    "Чекає на оцінку"))
+  case Quoted extends QuoteStatus("quoted", T("Оценено — ждём вашего решения", "Wycenione — czekamy na decyzję",
+    "Quoted — waiting for your decision", "Оцінено — чекаємо на ваше рішення"))
+  case Accepted extends QuoteStatus("accepted", T("Принято", "Przyjęte", "Accepted", "Прийнято"))
+  case Declined extends QuoteStatus("declined", T("Отклонено", "Odrzucone", "Declined", "Відхилено"))
+
+object QuoteStatus:
+  def parse(s: String): Option[QuoteStatus] = values.find(_.key == s)
+
+/** AN INQUIRY FOR A QUOTE (specs/shop.md "Inquiry and quote"): the job described, how and where, the dates the client
+ * prefers; then the shop's answer — a price or a range, a proposed time (0: none), a note — and the client's decision,
+ * with the ref of the booking or the order it became */
+final case class Quote(ref: String, key: String, service: String, name: String, contact: String,
+                       description: String, mode: Option[Mode], address: Option[Address], preferred: String,
+                       lang: Lang, consent: Consent, placed: Long, status: QuoteStatus = QuoteStatus.Asked,
+                       price: Long = 0, priceTo: Long = 0, start: Long = 0, note: String = "", result: String = ""):
+  def email: Option[String] = Contact.email(contact)
+  /** `120 zł` or `120 zł – 200 zł` */
+  def priced: String = if price <= 0 then "" else if priceTo > price then s"${Money.zl(price)} – ${Money.zl(priceTo)}"
+    else Money.zl(price)
 
 /** A BOOKING: a service of a master from `start` (a UTC instant) for `minutes`; who, how reached, the consent, its
  * secret key (the manage link's), whether reminded; how it meets (none: before the modes) — at which location, at

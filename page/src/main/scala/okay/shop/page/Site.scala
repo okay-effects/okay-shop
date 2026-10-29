@@ -175,7 +175,7 @@ object Site:
             slotRow.innerHTML = ""
             start.foreach(_.value = "")
             d.slots.foreach { (at, label) =>
-              val t = el("button", "slot", label)
+              val t = el("button", "slot", d.left.get(at).fold(label)(Submit.seats(l, label, _)))
               t.setAttribute("type", "button")
               t.addEventListener("click", (_: dom.Event) =>
                 slotRow.querySelectorAll(".slot").foreach(_.asInstanceOf[HTMLElement].classList.remove("on"))
@@ -206,6 +206,7 @@ object Site:
       (if chosen then sent else scala.concurrent.Future.successful(Outcome.Refused("start")))
         .recover { case _ => Outcome.Refused("network") }.foreach {
         case Outcome.Placed(ref, blik, price, paczkomat) => done(f, ref, lang, blik, price, paczkomat)
+        case Outcome.Asked(ref, manage) => linked(f, ref, Submit.asked(lang), manage)
         case Outcome.Booked(ref, when, manage, master) =>
           booked(f, ref, lang, if master.isEmpty then when else s"$when · $master", manage)
         case Outcome.Refused(why) =>
@@ -217,11 +218,15 @@ object Site:
 
   /** a booking's done panel: the ref, the time, the link that manages it */
   private def booked(f: HTMLFormElement, ref: String, l: Lang, when: String, manage: String): Unit =
+    linked(f, ref, Submit.booked(l, when), manage)
+
+  /** a done panel with its ref, its words and the link to follow it */
+  private def linked(f: HTMLFormElement, ref: String, said: String, manage: String): Unit =
     byId(f.getAttribute("data-form")).foreach(_.style.display = "none")
     byId(f.getAttribute("data-done")).foreach { d =>
       d.style.display = "block"
       d.appendChild(el("p", "done-ref", "№ " + ref))
-      val p = el("p", "", Submit.booked(l, when) + " ")
+      val p = el("p", "", said + " ")
       p.style.cssText = "margin-top:10px;font-size:14px"
       val a = el("a", "", manage).asInstanceOf[dom.html.Anchor]
       a.href = manage

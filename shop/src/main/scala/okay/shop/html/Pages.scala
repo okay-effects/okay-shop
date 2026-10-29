@@ -172,7 +172,11 @@ $scripts
           "" + pn)}</span>"""
       else s"""<span class="chip accent">${t("Цена по осмотру", "Cena po obejrzeniu", "Price once we see it",
         "Ціна після огляду")}</span>"""
-    val howChip = if site.work.isDefined then workChips(site, o)
+    val howChip = if o.quote then s"""<span class="chip">${t("Цена после описания", "Wycena po opisie",
+        "Priced once described", "Ціна після опису")}</span>"""
+      else if o.isClass then s"""<span class="chip">${t(s"${o.minutes} мин · ${o.seats} мест", s"${o.minutes} min · " +
+        s"${o.seats} miejsc", s"${o.minutes} min · ${o.seats} seats", s"${o.minutes} хв · ${o.seats} місць")}</span>"""
+      else if site.work.isDefined then workChips(site, o)
       else if books then s"""<span class="chip">${t(s"${o.minutes} мин · запись онлайн",
         s"${o.minutes} min · rezerwacja online", s"${o.minutes} min · book online",
         s"${o.minutes} хв · запис онлайн")}</span>"""
@@ -196,7 +200,8 @@ $scripts
     </section>
     <section class="offers" style="margin-top: 1vh">
       <div class="formcard">
-      ${if site.work.isDefined then modesForm(at, o) else if books then bookingForm(at, o) else s"""<div id="offForm">
+      ${if o.quote then quoteForm(at, o) else if site.work.isDefined then modesForm(at, o)
+        else if books then bookingForm(at, o) else s"""<div id="offForm">
         <p class="label">${t("Оформить заказ", "Złóż zamówienie", "Place the order", "Оформити замовлення")}</p>
         <form data-send="order" data-form="offForm" data-done="offDone">
           <input type="hidden" name="offerKey" value="${e(o.key)}">
@@ -368,6 +373,43 @@ color:var(--mist);margin:0 0 6px}</style>
       </div></div>"""
     chooser + book + order
 
+  /** an inquiry's form (specs/shop.md "Inquiry and quote"): the job described, the dates preferred, the address
+   * when the work is at the client's, who, the consent — posted to `/api/quote` */
+  def quoteForm(at: At, o: Offer)(using l: Lang): String =
+    val site = at.site
+    val m = site.work.flatMap(_.modesOf(o.key).headOption)
+    val address = if !m.contains(Mode.AtClient) then "" else
+      s"""<p class="fld where">${t("Приезжаем: ", "Dojeżdżamy: ", "We come to: ", "Приїжджаємо: ")}${
+        site.work.flatMap(_.area).fold("")(areaText)}</p>
+          <label class="fld"><span>${t("Улица и номер", "Ulica i numer", "Street and number", "Вулиця і номер")
+          }</span><input name="street" maxlength="120" required></label>
+          <div class="fld" style="display:flex;gap:10px"><label style="flex:1"><span>${t("Индекс", "Kod pocztowy",
+          "Postcode", "Індекс")}</span><input name="postcode" placeholder="00-000" pattern="[0-9]{2}-[0-9]{3}"
+          maxlength="6" required></label><label style="flex:2"><span>${t("Город", "Miasto", "City", "Місто")
+          }</span><input name="city" maxlength="60" required></label></div>
+          <label class="fld"><span>${t("Этаж, домофон", "Piętro, domofon", "Floor, intercom", "Поверх, домофон")
+          }</span><input name="notes" maxlength="200"></label>
+          <p class="fld area-said" data-area-said role="status" aria-live="polite"></p>"""
+    s"""<div id="offForm">
+        <p class="label">${t("Опишите работу — пришлём цену", "Opisz pracę — prześlemy wycenę",
+          "Describe the job — we send a quote", "Опишіть роботу — надішлемо ціну")}</p>
+        <form data-send="quote" data-form="offForm" data-done="offDone">
+          <input type="hidden" name="service" value="${e(o.key)}">
+          <input type="hidden" name="lang" value="${l.code}">${m.fold("")(x =>
+          s"""<input type="hidden" name="mode" value="${x.key}">""")}
+          <label class="fld"><span>${t("Что нужно сделать?", "Co trzeba zrobić?", "What needs doing?",
+            "Що потрібно зробити?")}</span><textarea name="description" maxlength="2000" required></textarea></label>
+          <label class="fld"><span>${t("Удобные даты", "Dogodne terminy", "Dates that suit you", "Зручні дати")
+            }</span><input name="preferred" maxlength="200"></label>
+          $address
+          $contactFields
+          ${rodoConsent(site.slug)}
+          ${turnstile(at.sitekey)}
+          <button class="send" type="submit">${t("Попросить оценку", "Poproś o wycenę", "Ask for a quote",
+            "Попросити оцінку")}</button>
+        </form>
+      </div>"""
+
   /** a storefront's section of the ways it works, one card a mode: at the shop (its locations), at the client's
    * (the area), by parcel, online — for a look to put among its sections */
   def ways(site: Site)(using l: Lang): String = site.work.fold("") { w =>
@@ -421,8 +463,9 @@ color:var(--mist);margin:0 0 6px}</style>
 <title>Майстерня · ${e(site.name)}</title><link rel="icon" href="data:,"></head><body>
 <header><div class="bar"><span class="brand">Майстерня</span><span class="tag">${e(site.name)}</span></div></header>
 <main id="app" data-name="${e(site.name)}" data-accent="${e(site.color)}"
-  data-deep="${if site.clothing then "#3a2a22" else "#0c1420"}"${if site.schedule.isDefined then
-    " data-books=\"yes\"" else ""}></main>
+  data-deep="${if site.clothing then "#3a2a22" else "#0c1420"}"${if site.schedule.isDefined ||
+    site.offers.exists(site.books) then " data-books=\"yes\"" else ""}${if site.offers.exists(_.quote) then
+    " data-quotes=\"yes\"" else ""}></main>
 <div class="cf-turnstile" data-sitekey="${e(sitekey)}" data-appearance="interaction-only"
   style="display:flex;justify-content:center;margin:12px 0"></div>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>

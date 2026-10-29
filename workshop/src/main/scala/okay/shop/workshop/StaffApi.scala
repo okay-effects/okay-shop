@@ -40,6 +40,11 @@ object StaffApi:
           j.get("mine").contains(Json.Bool(true))) }, str(o, "me").nonEmpty)))
       case Staff.Unbook(ref) => post("booking/cancel", "ref" -> ref)
         .map(r => read(r)(o => o.get("sent").contains(Json.Bool(true))))
+      case Staff.Quotes() => get("quotes").map(r => read(r)(o => arr(o, "quotes").collect { case j: Json.Obj =>
+        Codec.quote(j) -> str(j, "serviceName") }))
+      case Staff.Reply(ref, price, priceTo, start, note) => post("quote/reply", "ref" -> ref, "price" -> price,
+        "priceTo" -> priceTo, "start" -> start, "note" -> note)
+        .map(r => read(r)(o => o.get("sent").contains(Json.Bool(true))))
       case Staff.More() => get("more").map(r => read(r)(o => arr(o, "more").collect { case j: Json.Obj =>
         str(j, "text") -> str(j, "href") }.filter((t, h) => t.nonEmpty && h.nonEmpty)).getOrElse(Vector.empty))
 

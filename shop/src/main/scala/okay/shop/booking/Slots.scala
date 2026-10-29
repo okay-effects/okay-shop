@@ -2,8 +2,9 @@ package okay.shop.booking
 
 import okay.shop.model.*
 
-/** a free start: its instant (UTC) and its time as the shop says it (`14:30`) */
-final case class Slot(start: Long, label: String)
+/** a free start: its instant (UTC) and its time as the shop says it (`14:30`); a class's seats left (-1: not a
+ * class) */
+final case class Slot(start: Long, label: String, left: Int = -1)
 
 /** a day of slots: its date (`2026-11-03`), its weekday (1 Monday … 7 Sunday), its free starts */
 final case class SlotDay(date: String, weekday: Int, slots: Vector[Slot])
@@ -43,3 +44,30 @@ object Slots:
   def isFree(schedule: Schedule, minutes: Int, taken: Vector[Booking], now: Long, start: Long, before: Int = 0,
              after: Int = 0): Boolean =
     free(schedule, minutes, taken, now, before, after).exists(_.slots.exists(_.start == start))
+
+  /**
+   * A CLASS'S OCCURRENCES (specs/shop.md "Group classes"): each of its weekly starts over the horizon, from the lead
+   * on, none on a closed date (an exception with no span), each with its seats left — the active bookings of the
+   * class at that start counted; a full one not offered
+   */
+  def classes(schedule: Schedule, o: Offer, taken: Vector[Booking], now: Long): Vector[SlotDay] =
+    val today = Math.floorDiv(now + Day.offset(now), day)
+    val earliest = now + schedule.lead * 60000L
+    (0 until schedule.horizon).toVector.map { i =>
+      val days = today + i
+      val (y, m, d) = Civil.ymd(days)
+      val date = f"$y%04d-$m%02d-$d%02d"
+      val weekday = Math.floorMod(days + 3, 7L).toInt + 1
+      val closed = schedule.exceptions.get(date).exists(_.isEmpty)
+      val starts = for
+        (wd, t) <- o.times if wd == weekday && !closed
+        start = instant(days * day + t * 60000L)
+        left = o.seats - taken.count(b => b.active && b.service == o.key && b.start == start)
+        if start >= earliest && left > 0
+      yield Slot(start, Span.label(t), left)
+      SlotDay(date, weekday, starts)
+    }
+
+  /** whether a class has a seat at `start` now: a seat's check, again, in its step */
+  def hasSeat(schedule: Schedule, o: Offer, taken: Vector[Booking], now: Long, start: Long): Boolean =
+    classes(schedule, o, taken, now).exists(_.slots.exists(_.start == start))

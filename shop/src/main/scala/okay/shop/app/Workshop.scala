@@ -131,6 +131,8 @@ border:0;border-radius:12px;background:#2a1f14;color:#fff;cursor:pointer}</style
             "masterName" -> Json.str(Letters.master(c, b).getOrElse("")),
             "mine" -> Json.bool(me.nonEmpty && b.master == me))))), "me" -> Json.str(me)))
         }
+      case ("GET", List("quotes")) => Quotes.list(c)
+      case ("POST", List("quote", "reply")) => Quotes.reply(c, json(r))
       case ("POST", List("booking", "cancel")) => Store.cancelBooking[R](json(r).getOrElse("ref", ""), now).flatMap {
           case None => pure(refused("no such booking", 404))
           case Some(b) => b.email.fold(pure(false))(to => Mail.toClient[R](to, Letters.unbooked(c, b)))

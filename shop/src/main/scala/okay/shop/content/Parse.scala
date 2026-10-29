@@ -56,7 +56,8 @@ object Sites:
       val key = m.getOrElse("key", "")
       Offer(key, words(s"name.$key", m.getOrElse("name", "")), words(s"desc.$key", m.getOrElse("description", "")),
         Money.parse(m.getOrElse("price", "0")).getOrElse(0L), m.get("order").flatMap(_.toIntOption).getOrElse(0),
-        m.get("minutes").flatMap(_.toIntOption).getOrElse(0))
+        m.get("minutes").flatMap(_.toIntOption).getOrElse(0), m.get("quote").contains("true"),
+        m.get("seats").flatMap(_.toIntOption).getOrElse(0), m.get("times").flatMap(Work.times).getOrElse(Vector.empty))
     }.sortBy(_.order)
     val domain = f.getOrElse("domain", s"$id.pl")
     val prefix = f.getOrElse("refPrefix", id.take(3).toUpperCase)
