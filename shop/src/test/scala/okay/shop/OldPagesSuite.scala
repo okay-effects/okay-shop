@@ -15,8 +15,14 @@ class OldPagesSuite extends munit.FunSuite:
   import OldPages.Plain
 
   private def sha(s: String) = Sha256.hex(s.getBytes("UTF-8"))
+  /** the foot's words since 2026-10-29 ("made with okay-effects"), read back as they were, so the digests still pin
+   * everything else */
+  private val before = Vector("сделано в okay-effects" -> "сделано в busi", "zrobione w okay-effects" ->
+    "zrobione w busi", "made with okay-effects" -> "made with busi", "зроблено в okay-effects" -> "зроблено в busi")
+  private def asBefore(page: String) = before.foldLeft(page)((p, w) => p.replace(w._1, w._2))
   def digest(id: String): String =
-    sha(StaticPages.of(Fixtures.site(id), Plain, "SITEKEY").sortBy(_._1).map((k, v) => k + "\n" + v).mkString("\n"))
+    sha(StaticPages.of(Fixtures.site(id), Plain, "SITEKEY").sortBy(_._1).map((k, v) => k + "\n" + asBefore(v))
+      .mkString("\n"))
   def letters: String =
     val w = World("salon")
     val b = Booking("TSLB-1", "KEY", "cut", "main", 1793282400000L + 19 * 3600000L, 45, "Anna", "anna@example.com",
@@ -33,4 +39,10 @@ class OldPagesSuite extends munit.FunSuite:
 
   test("a salon's booking letters, its page and its calendar as before the modes") {
     assertEquals(letters, "6ac1e93a598f38327a15d6de7be2d78a848803a88aec6590c0f3fc04a079243c")
+  }
+
+  test("the foot says it was made with okay-effects, in each language") {
+    val pages = StaticPages.of(Fixtures.site("atelier"), Plain, "SITEKEY").toMap
+    assert(pages.values.exists(_.contains("zrobione w okay-effects")))
+    assert(!pages.values.exists(p => "\\bbusi\\b".r.findFirstIn(p).isDefined))
   }

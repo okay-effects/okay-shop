@@ -62,9 +62,8 @@ $switchStyle
 <script src="/site.js" defer></script>"""
 
   def foot(site: Site, look: Look)(using l: Lang): String =
-    s"""<p class="foot">${e(site.name)}${look.footLinks} · <span>${t("сделано в busi", "zrobione w busi", "made " +
-        "with busi",
-      "зроблено в busi")}</span>${if look.staffLink then staff else ""}</p>"""
+    s"""<p class="foot">${e(site.name)}${look.footLinks} · <span>${t("сделано в okay-effects", "zrobione w okay-effects",
+        "made with okay-effects", "зроблено в okay-effects")}</span>${if look.staffLink then staff else ""}</p>"""
 
   /** the workshop, for its staff: one muted word at the end of a foot, in its colour and size — not followed */
   def staff(using l: Lang): String =
