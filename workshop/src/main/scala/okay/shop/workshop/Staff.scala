@@ -31,6 +31,8 @@ enum Staff[X]:
   case Bookings() extends Staff[Either[String, Vector[(Booking, String)]]]
   /** a booking cancelled by the staff: whether its client was mailed */
   case Unbook(ref: String) extends Staff[Either[String, Boolean]]
+  /** the host's own pages for the person signed in: their text and address (none when the host has none) */
+  case More() extends Staff[Vector[(String, String)]]
 
 object Staff:
   def me[R[_]: Has[Staff]]: Option[String] ! R = perform[Staff](Me())
@@ -45,6 +47,7 @@ object Staff:
   def out[R[_]: Has[Staff]]: Unit ! R = perform[Staff](Out())
   def bookings[R[_]: Has[Staff]]: Either[String, Vector[(Booking, String)]] ! R = perform[Staff](Bookings())
   def unbook[R[_]: Has[Staff]](ref: String): Either[String, Boolean] ! R = perform[Staff](Unbook(ref))
+  def more[R[_]: Has[Staff]]: Vector[(String, String)] ! R = perform[Staff](More())
 
 /** A PERSON, NOT A BOT: Turnstile's token for the sign-in form — the page's widget answers it, a test a constant */
 enum Human[X]:

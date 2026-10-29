@@ -6,7 +6,8 @@ import okay.shop.model.*
 /** THE CONFIGURATION a site's program needs beyond its content: where it is answered from (the request's origin —
  * a preview's workers.dev, or the domain), the BLIK phone, the paczkomat, the Turnstile key, who may sign in */
 final case class Conf(site: Site, origin: String, blik: String, paczkomat: String, sitekey: String,
-                      staff: Set[String], contact: String, policy: String, calendarKey: String = "")
+                      staff: Set[String], contact: String, policy: String, calendarKey: String = "",
+                      more: String => Vector[(String, String)] = _ => Vector.empty)
 
 /**
  * THE LETTERS, as busi wrote them (`orders.ssc`, `email.ssc`, `hub.ssc`), fixed: the client's confirmation shows

@@ -46,6 +46,25 @@ class WorkshopApiSuite extends munit.FunSuite:
     assertEquals(b.get("/workshop/api/me").status, 401)
   }
 
+  test("the host's own pages: for the person signed in only; who is signed in, for the host's endpoints") {
+    val w = World(more = email => if email == staff then Vector("Wygląd" -> "/workshop/look/") else Vector.empty)
+    assertEquals(Browser(w).get("/workshop/api/more").status, 401)
+    val b = signedIn(w)
+    assertEquals(b.get("/workshop/api/more").text, """{"more":[{"text":"Wygląd","href":"/workshop/look/"}]}""")
+    assertEquals(World().get("/workshop/api/more").status, 401)
+    import okay.scala3.*
+    import okay.serverless.cloud.Request
+    def who(cookie: String) =
+      val r = Request.get("/x").copy(headers = Map("cookie" -> List(cookie)))
+      run(w.storage.handler(okay.shop.handlers.StoreDurable.run(okay.scala3.std.Clock.virtual(w.now)(
+        okay.shop.app.Workshop.person[(Pure + okay.serverless.Storage + okay.shop.effects.Store +
+          okay.scala3.std.Clock)](w.conf, r)))))._2
+    assertEquals(who(b.cookie), Some(staff))
+    assertEquals(who("__Host-ws=forged"), None)
+    assert(okay.shop.app.Workshop.sameSite(Request.post("/x", "{}").copy(headers =
+      Map("content-type" -> List("application/json")))))
+  }
+
   test("a link past its 15 minutes signs nobody in") {
     val w = World()
     val b = Browser(w)

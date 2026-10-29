@@ -11,15 +11,16 @@ import okay.shop.model.*
  * busi's workshop had them. The program asks only `Ui`, `Staff` and `Human`: in the page they are the Laminar face,
  * the site's API and Turnstile; in a test, `Play`, the site's own program on SQLite, a constant
  */
-/** the site as the workshop shows it: its name, and whether it takes bookings (the «Записи» screen) */
-final case class Shown(name: String, books: Boolean = false)
+/** the site as the workshop shows it: its name, whether it takes bookings (the «Записи» screen), the host's own
+ * pages for the person signed in (`Conf.more`: their text and address, links on the orders screen) */
+final case class Shown(name: String, books: Boolean = false, more: Vector[(String, String)] = Vector.empty)
 
 object Workshop:
   private val uk = Lang.uk
 
   def main[R[_]: Has[Ui]: Has[Staff]: Has[Human]](site: Shown, expired: Boolean): Unit ! R =
     Staff.me[R].flatMap {
-      case Some(_) => orders[R](site, None)
+      case Some(_) => Staff.more[R].flatMap(more => orders[R](site.copy(more = more), None))
       case None => signIn[R](site, expired)
     }
 
@@ -61,7 +62,8 @@ object Workshop:
           Column.text[Job]("Статус")(_.order.status.label(uk)), Column.text[Job]("Клієнт")(_.order.name),
           Column.text[Job]("Послуга")(j => if j.service.nonEmpty then j.service else "заявка з сайту"),
           Column.text[Job]("Ціна")(_.price)).keyedBy(_.order.ref).whenEmpty("Замовлень ще немає.")
-        show[OnList, R](Screen[OnList](s"Замовлення · ${site.name}")((said.map(Part.info).toSeq :+ table)*)(
+        val more = site.more.map((text, href) => Part.link(text, href))
+        show[OnList, R](Screen[OnList](s"Замовлення · ${site.name}")((said.map(Part.info).toSeq ++ more :+ table)*)(
           (Seq(Button.select("Відкрити", table)(j => OnList.Open(j.order.ref)), Button("Заявки")(OnList.Inquiries)) ++
             Option.when(site.books)(Button("Записи")(OnList.Bookings)) ++
             Seq(Button("Оновити")(OnList.Refresh), Button("Вийти", Style.Danger)(OnList.Out)))*)).flatMap {

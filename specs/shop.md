@@ -87,6 +87,20 @@ names the master everywhere, so more come without a change of data.
   `/api/slots`) and the booking form in place of the order form; its done panel shows the ref, the time and the
   manage link. Tests: `BookingSuite` (the fictional `salon` fixture) and the workshop's `WorkshopSuite`.
 
+## The host's own workshop pages (operator, 2026-10-29)
+
+A site built on the engine may add pages of its own to the workshop (the mall's "Appearance" screen) without the
+engine knowing what they are:
+
+- **`Conf.more`**: given the email signed in, the host's pages for that person — each a text and an address
+  (`Vector[(String, String)]`; none by default). `GET /workshop/api/more` answers them (`{"more":[{text, href}]}`;
+  401 signed out). The workshop asks once after sign-in and shows each as a link on its orders screen
+  (`Staff.More`, `Shown.more`).
+- **`Workshop.person(c, r)`**: who is signed in (a session kept and not past, its email on the list still), and
+  **`Workshop.sameSite(r)`**: whether a POST is this site's own (JSON, its own origin when said) — for the host's own
+  endpoints and pages, which check them before anything else.
+- The engine never adds a host's page itself, and a link to one is only what `Conf.more` says for that person.
+
 ## Open core (operator, 2026-10-29)
 
 okay-shop is public (Apache-2.0) and is the engine of ONE site: its storefront, orders, tracking and workshop — and,

@@ -14,7 +14,8 @@ import okay.shop.html.Conf
 /** A SITE IN A TEST: the program the Durable Object runs, its durable state in memory (okay-serverless' `Memory`,
  * which keeps `Storage`'s contract as the object's SQLite does), letters kept, Turnstile answered `human`, names from
  * a seed, a clock that moves only when told */
-final class World(val id: String = "atelier", var human: Boolean = true):
+final class World(val id: String = "atelier", var human: Boolean = true,
+                  more: String => Vector[(String, String)] = _ => Vector.empty):
   val storage = Memory()
   var now: Long = 1793282400000L // 2026-10-29 14:00 UTC
   var letters: Vector[(String, Note)] = Vector.empty
@@ -22,7 +23,7 @@ final class World(val id: String = "atelier", var human: Boolean = true):
   val site = Fixtures.site(id)
   val conf = Conf(site, s"https://preview-$id.example.workers.dev", "+48 600 000 000", "TST01A",
     "1x00000000000000000000AA", Set("staff@example.com"), "atelier@example.com", "2026-10-28",
-    "CALENDAR-KEY-0123456789")
+    "CALENDAR-KEY-0123456789", more)
 
   type W[X] = (Pure + Storage + Store + Ids + Captcha + Mail + Clock)[X]
 

@@ -67,6 +67,17 @@ class WorkshopSuite extends munit.FunSuite:
     assert(texts(paid.at).contains(s"/pl/receipt?ref=$ref"), "the client's receipt linked")
   }
 
+  test("the host's own pages: a link on the orders screen for the person the host names") {
+    val w = World(more = _ => Vector("Wygląd · Вигляд" -> "/workshop/look/"))
+    val b = Browser(w)
+    signIn(w, b)
+    assert(texts(play(w, b).at).contains("Link(Wygląd · Вигляд,/workshop/look/)"), texts(play(w, b).at))
+    val plain = World()
+    val other = Browser(plain)
+    signIn(plain, other)
+    assert(!texts(play(plain, other).at).contains("Link("))
+  }
+
   test("cancel asks a reason; a letter to the client") {
     val w = World()
     val ref = w.json(w.order("fit"))("ref")

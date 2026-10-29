@@ -39,6 +39,8 @@ object StaffApi:
         Codec.booking(j) -> str(j, "serviceName") }))
       case Staff.Unbook(ref) => post("booking/cancel", "ref" -> ref)
         .map(r => read(r)(o => o.get("sent").contains(Json.Bool(true))))
+      case Staff.More() => get("more").map(r => read(r)(o => arr(o, "more").collect { case j: Json.Obj =>
+        str(j, "text") -> str(j, "href") }.filter((t, h) => t.nonEmpty && h.nonEmpty)).getOrElse(Vector.empty))
 
   private def obj(r: Response): Option[Json.Obj] =
     Descent.parse(r.text).toOption.collect { case o: Json.Obj => o }

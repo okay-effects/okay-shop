@@ -81,6 +81,10 @@ border:0;border-radius:12px;background:#2a1f14;color:#fff;cursor:pointer}</style
         }
     yield res
 
+  /** who is signed in (specs/shop.md "The host's own workshop pages"): for the host's own pages and endpoints */
+  def person[R[_]](c: Conf, r: Request)(using In[Store, R], In[Clock, R]): Option[String] ! R =
+    Clock.now[R].flatMap(now => staff(c, r, now))
+
   /** the person signed in: a session kept and not past, its email on the list still */
   private def staff[R[_]](c: Conf, r: Request, now: Long)(using In[Store, R]): Option[String] ! R =
     Web.cookie(r, cookie).filter(_.nonEmpty) match
@@ -88,7 +92,7 @@ border:0;border-radius:12px;background:#2a1f14;color:#fff;cursor:pointer}</style
       case Some(s) => perform[Store](Store.Session(hash(s), now)).map(_.map(_.email).filter(c.staff))
 
   /** a POST of this site: JSON (a form elsewhere cannot send it without asking), and its own origin when said */
-  private def sameSite(r: Request): Boolean =
+  def sameSite(r: Request): Boolean =
     r.header("content-type").exists(_.startsWith("application/json")) &&
       r.header("origin").forall(_ == Web.origin(r))
 
@@ -98,6 +102,8 @@ border:0;border-radius:12px;background:#2a1f14;color:#fff;cursor:pointer}</style
     In[Mail, R]): Response ! R =
     (r.method, path) match
       case ("GET", List("me")) => pure(ok(Json.obj("email" -> Json.str(email))))
+      case ("GET", List("more")) => pure(ok(Json.obj("more" -> Json.Arr(c.more(email).map((text, href) =>
+          Json.obj("text" -> Json.str(text), "href" -> Json.str(href)))))))
       case ("POST", List("out")) => perform[Store](Store.EndSession(hash(Web.cookie(r, cookie).getOrElse(""))))
           .map(_ => ok(Json.obj()).header("Set-Cookie", s"$cookie=; Path=/; HttpOnly; Secure; SameSite=Lax; " +
             "Max-Age=0"))
