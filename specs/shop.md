@@ -105,6 +105,8 @@ engine knowing what they are:
   `<path>/#expired`, the session's cookie; `Api.answer` routes `<path>/api/…` to the workshop. A
   host signs its own people in elsewhere with the same mechanism (the
   mall's operators at `/_admin`).
+- **`Workshop.invite(c, email)`**: the host mails a sign-in link to an address on the staff list itself (a new
+  shop's owner invited) — no captcha and no limit, so never reachable by a visitor; false for an address off the list.
 - **The sign-in link is limited per address too**: 5 per IP and 5 per address (its SHA-256) in 10 minutes; the
   answer is the same for an address on the list and one not.
 

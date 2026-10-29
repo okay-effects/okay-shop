@@ -51,6 +51,12 @@ object Workshop:
     yield if !allowed then refused("limit", 429) else if !human then refused("captcha", 403)
       else ok(Json.obj("ok" -> Json.bool(true)))
 
+  /** a sign-in link mailed to a person on the staff list by the host itself (a new shop's owner invited): no
+   * captcha, no limit — the host's own call, never a visitor's; false when the address is not on the list */
+  def invite[R[_]](c: Conf, email: String)(using In[Store, R], In[Mail, R], In[Ids, R], In[Clock, R]): Boolean ! R =
+    val e = email.trim.toLowerCase
+    if !c.staff(e) then pure(false) else Clock.now[R].flatMap(now => mailLink[R](c, e, now)).as(true)
+
   private def mailLink[R[_]](c: Conf, email: String, now: Long)(using In[Store, R], In[Mail, R], In[Ids, R])
     : Unit ! R =
     Ids.secret[R].flatMap { secret =>

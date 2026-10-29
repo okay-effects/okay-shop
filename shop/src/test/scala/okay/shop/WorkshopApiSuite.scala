@@ -93,6 +93,25 @@ class WorkshopApiSuite extends munit.FunSuite:
     assertEquals(w.letters.size, 5)
   }
 
+  test("an invitation by the host: a link to an address on the list only; it signs in like any") {
+    import okay.scala3.*
+    import okay.shop.effects.{Ids, Mail, Store}
+    val w = World()
+    def invite(email: String) = run(w.storage.handler(okay.shop.handlers.StoreDurable.run(Ids.seeded(3)(Mail.kept()(
+      okay.scala3.std.Clock.virtual(w.now)(okay.shop.app.Workshop.invite[(Pure + okay.serverless.Storage + Store +
+        Ids + Mail + okay.scala3.std.Clock)](w.conf, email)))))))
+    val (sent, (_, ok)) = invite(" Staff@Example.com ")
+    assert(ok)
+    assertEquals(sent.map(_._1), Vector(staff))
+    val link = sent.head._2.html.split("'").find(_.contains("enter?t=")).get
+    val b = Browser(w)
+    b.send("POST", "/workshop/api/enter", Query.print(Map("t" -> List(link.drop(link.indexOf("t=") + 2)))),
+      "application/x-www-form-urlencoded")
+    assertEquals(str(obj(b.get("/workshop/api/me")), "email"), staff)
+    val (none, (_, no)) = invite("eve@example.com")
+    assert(!no && none.isEmpty)
+  }
+
   test("a link past its 15 minutes signs nobody in") {
     val w = World()
     val b = Browser(w)
