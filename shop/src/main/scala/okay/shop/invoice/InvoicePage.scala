@@ -27,7 +27,7 @@ color:#555;margin:0 0 4px}table{border-collapse:collapse;width:100%;margin:12px 
 padding:6px 8px;text-align:left;vertical-align:top}th{background:#f3f3f3;font-weight:600}td.r,th.r{text-align:right}
 .total{font-size:16px;font-weight:700}.note{color:#444;font-size:12px}.test{background:#fff3cd;border:1px solid #e0c060;
 padding:6px 10px;border-radius:6px}.qr{display:flex;gap:14px;align-items:center;margin-top:14px}
-.qr div{width:120px;height:120px}button{font:inherit;padding:8px 14px;cursor:pointer}
+#qr{flex:0 0 120px;width:120px;height:120px}.qr .note{word-break:break-all}button{font:inherit;padding:8px 14px;cursor:pointer}
 @media print{button,.noprint{display:none}body{margin:0}}@media(max-width:560px){.two{grid-template-columns:1fr}}"""
 
   private def table(lines: Vector[Item], vat: Boolean): String =
