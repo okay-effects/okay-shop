@@ -227,6 +227,17 @@ engine knowing what they are:
 - **The sign-in link is limited per address too**: 5 per IP and 5 per address (its SHA-256) in 10 minutes; the
   answer is the same for an address on the list and one not.
 
+## The site's host in its privacy policy (operator, 2026-10-30)
+
+A site run on someone else's platform (the mall: many shops on one Worker) has that platform as its PROCESSOR (art. 28
+RODO): the policy must name it among the recipients and point to its own policy.
+
+- `Privacy.page(site, l, email, host)`: `host` the host's items for the recipients' list, in the page's language —
+  each an HTML fragment the host writes (its name, what it does, the link to its own policy) — said FIRST, before the
+  engine's processors (Cloudflare, Turnstile, Brevo, InPost for an atelier). None (the default, every site on its own
+  Worker): the page exactly as before, byte for byte.
+- Tests: `PagesSuite` (the host's item first in the list, in its language; without one the same bytes).
+
 ## The owner edits the content (operator, 2026-10-29)
 
 A shop's words and prices are its content (`site.md`, `i18n.md`). A host lets its owner change them on a screen;

@@ -15,13 +15,15 @@ object Privacy:
   private final case class Texts(title: String, updated: String, note: Option[String],
                                  sections: Vector[(String, String)])
 
-  /** the page for this site in this language: a whole HTML document */
-  def page(site: Site, l: Lang, email: String = ""): String =
+  /** the page for this site in this language: a whole HTML document. `host`: the items its host (a platform the
+   * site runs on: its processor) adds to the recipients, in `l`, said first — HTML of the host's (specs/shop.md
+   * "The site's host in its privacy policy"); none: the page as it always was */
+  def page(site: Site, l: Lang, email: String = "", host: Vector[String] = Vector.empty): String =
     val address = Html.escape(if email.nonEmpty then email else this.email(site))
     val contact = s"""<a href="mailto:$address">$address</a>"""
     val name = Html.escape(site.name)
     val accent = site.color
-    val t = texts(l, site.clothing, name, contact)
+    val t = texts(l, site.clothing, name, contact, host)
     val note = t.note.fold("")(n => s"\n<p><em>$n</em></p>")
     // a shop that comes to its clients keeps their addresses: said after what is collected
     val visits = site.work.filter(_.has(Mode.AtClient)).fold(t.sections)(_ =>
@@ -46,11 +48,12 @@ object Privacy:
       s"""<p style="margin-top:32px;font-size:13px;color:#999">$name · $version${Pages.staff(using l)}</p>""" + "\n" +
       "</div></body></html>\n"
 
-  private def texts(l: Lang, clothing: Boolean, name: String, contact: String): Texts = l match
-    case Lang.pl => pl(clothing, name, contact)
-    case Lang.en => en(clothing, name, contact)
-    case Lang.uk => uk(clothing, name, contact)
-    case Lang.ru => ru(clothing, name, contact)
+  private def texts(l: Lang, clothing: Boolean, name: String, contact: String, host: Vector[String]): Texts =
+    l match
+      case Lang.pl => pl(clothing, name, contact, host)
+      case Lang.en => en(clothing, name, contact, host)
+      case Lang.uk => uk(clothing, name, contact, host)
+      case Lang.ru => ru(clothing, name, contact, host)
 
   private def p(s: String): String = s"<p>$s</p>"
 
@@ -72,13 +75,14 @@ object Privacy:
         "записью.")
 
   /** the recipients: Cloudflare (hosting, Turnstile), Brevo, and InPost for the atelier */
-  private def recipients(intro: String, items: Vector[String], inpost: Option[String], outro: String): String =
-    val all = items ++ inpost.toVector
+  private def recipients(intro: String, items: Vector[String], inpost: Option[String], outro: String,
+                         host: Vector[String]): String =
+    val all = host ++ items ++ inpost.toVector
     p(intro) + "\n<ul>\n" + all.map(i => s"<li>$i</li>").mkString("\n") + "\n</ul>\n" + p(outro)
 
   // ---- Polish: the binding text ----
 
-  private def pl(clothing: Boolean, name: String, contact: String): Texts =
+  private def pl(clothing: Boolean, name: String, contact: String, host: Vector[String]): Texts =
     val order = if clothing then "zamówienia" else "zlecenia"
     val collected =
       if clothing then "opis zlecenia (rodzaj i stan odzieży), dane dostawy (jeśli korzystasz z kuriera InPost)."
@@ -121,7 +125,7 @@ object Privacy:
           "Sendinblue SAS (Brevo, Francja) — wysyłka wiadomości e-mail do klientów" + (if clothing then ";" else ".")),
         Option.when(clothing)("InPost S.A. — operator paczek, wyłącznie w zakresie niezbędnym do dostarczenia " +
           "przesyłki."),
-        "Nie sprzedajemy danych osobom trzecim."),
+        "Nie sprzedajemy danych osobom trzecim.", host),
       "Pliki cookie" -> p(
         "Strona używa wyłącznie technicznych plików cookie: <code>lang</code> zapamiętuje wybrany język, " +
           "a pracownicy obsługujący zgłoszenia po zalogowaniu otrzymują cookie sesji panelu administracyjnego. " +
@@ -132,7 +136,7 @@ object Privacy:
 
   // ---- English ----
 
-  private def en(clothing: Boolean, name: String, contact: String): Texts =
+  private def en(clothing: Boolean, name: String, contact: String, host: Vector[String]): Texts =
     val collected =
       if clothing then "a description of the order (type and condition of the garments), and delivery details " +
         "(if you use the InPost courier)."
@@ -175,7 +179,7 @@ object Privacy:
           "Sendinblue SAS (Brevo, France) — sending e-mails to clients" + (if clothing then ";" else ".")),
         Option.when(clothing)("InPost S.A. — parcel operator, only to the extent necessary to deliver " +
           "the parcel."),
-        "We do not sell your data to third parties."),
+        "We do not sell your data to third parties.", host),
       "Cookies" -> p(
         "The website uses technical cookies only: <code>lang</code> remembers the language you chose, " +
           "and staff who handle requests receive a sign-in session cookie for the back office. " +
@@ -187,7 +191,7 @@ object Privacy:
 
   // ---- Ukrainian ----
 
-  private def uk(clothing: Boolean, name: String, contact: String): Texts =
+  private def uk(clothing: Boolean, name: String, contact: String, host: Vector[String]): Texts =
     val collected =
       if clothing then "опис замовлення (вид і стан одягу), дані для доставки (якщо ви користуєтеся " +
         "кур’єром InPost)."
@@ -231,7 +235,7 @@ object Privacy:
             (if clothing then ";" else ".")),
         Option.when(clothing)("InPost S.A. — оператор доставки посилок, лише в обсязі, необхідному " +
           "для доставки відправлення."),
-        "Ми не продаємо ваші дані третім особам."),
+        "Ми не продаємо ваші дані третім особам.", host),
       "Файли cookie" -> p(
         "Сайт використовує лише технічні файли cookie: <code>lang</code> запам’ятовує обрану мову, " +
           "а працівники, які опрацьовують заявки, після входу отримують сесійний cookie панелі адміністрування. " +
@@ -243,7 +247,7 @@ object Privacy:
 
   // ---- Russian ----
 
-  private def ru(clothing: Boolean, name: String, contact: String): Texts =
+  private def ru(clothing: Boolean, name: String, contact: String, host: Vector[String]): Texts =
     val collected =
       if clothing then "описание заказа (вид и состояние одежды), данные для доставки (если вы пользуетесь " +
         "курьером InPost)."
@@ -289,7 +293,7 @@ object Privacy:
             (if clothing then ";" else ".")),
         Option.when(clothing)("InPost S.A. — оператор доставки посылок, только в объёме, необходимом " +
           "для доставки отправления."),
-        "Мы не продаём ваши данные третьим лицам."),
+        "Мы не продаём ваши данные третьим лицам.", host),
       "Файлы cookie" -> p(
         "Сайт использует только технические файлы cookie: <code>lang</code> запоминает выбранный язык, " +
           "а сотрудники, обрабатывающие заявки, после входа получают сессионный cookie панели администрирования. " +

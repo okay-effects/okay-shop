@@ -52,6 +52,17 @@ class PagesSuite extends munit.FunSuite:
     assert(Privacy.page(it, Lang.pl, "office@example.com").contains("mailto:office@example.com"))
   }
 
+  test("the site's host in the privacy policy: its items first among the recipients; none, the same bytes") {
+    val atelier = Fixtures.site("atelier")
+    for l <- Lang.values do
+      assertEquals(Privacy.page(atelier, l, host = Vector.empty), Privacy.page(atelier, l))
+    val hosted = Privacy.page(atelier, Lang.pl, host = Vector("""Platforma <a href="https://host.example/">Host</a>"""))
+    assert(hosted.contains("<ul>\n<li>Platforma <a href=\"https://host.example/\">Host</a></li>\n<li>Cloudflare, Inc."),
+      hosted)
+    assertEquals(hosted.replace("""<li>Platforma <a href="https://host.example/">Host</a></li>""" + "\n", ""),
+      Privacy.page(atelier, Lang.pl))
+  }
+
   test("the workshop: one muted word at the end of every public foot, not followed; not for search engines") {
     for (l, word) <- Seq("pl" -> "panel", "en" -> "staff", "uk" -> "панель", "ru" -> "панель") do
       for page <- Seq(s"$l/index.html", s"$l/offer/hem/index.html") do
