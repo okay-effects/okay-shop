@@ -116,6 +116,7 @@ object Bookings:
     if name.isEmpty then pure(Web.refused("name"))
     else if !Contact.valid(contact) then pure(Web.refused("contact"))
     else if !f.get("rodo_consent").exists(v => v.nonEmpty && v != "false") then pure(Web.refused("consent"))
+    else if Invoicing.asked(c, f).isLeft then pure(Web.refused(Invoicing.asked(c, f).left.toOption.get))
     // a hidden service takes nothing new (specs/shop.md "The owner edits the content")
     else (plan(c, f.getOrElse("service", ""), f.getOrElse("mode", ""), f.getOrElse("place", ""))
       .filterOrElse(!_.offer.hidden, "service").flatMap(addressed(c, _, f))
@@ -138,7 +139,8 @@ object Bookings:
     val lang = Lang.parse(f.getOrElse("lang", "")).getOrElse(c.site.lang)
     reserve[R](c, p, at, name, contact, lang, f.getOrElse("master", ""), now).flatMap {
       case Left(why) => pure(Web.refused(why, 409))
-      case Right(b) => told(c, b, Letters.booked(c, b), Letters.bookedOwner(c, b), Notice.Booked(b)).as(answer(c, b))
+      case Right(b) => Invoicing.keep[R]("booking", b.ref, Invoicing.asked(c, f).toOption.flatten).flatMap(_ =>
+          told(c, b, Letters.booked(c, b), Letters.bookedOwner(c, b), Notice.Booked(b))).as(answer(c, b))
     }
 
   /** A BOOKING TAKEN for `p` at `at`, no letter yet: a class's seat, a master's time, or the one calendar's — the

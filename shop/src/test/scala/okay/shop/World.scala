@@ -18,7 +18,9 @@ final class World(val id: String = "atelier", var human: Boolean = true,
                   more: String => Vector[(String, String)] = _ => Vector.empty,
                   desk: okay.shop.html.Desk = okay.shop.html.Desk(),
                   edit: okay.shop.model.Site => okay.shop.model.Site = identity,
-                  staff: Set[String] = Set("staff@example.com"), owner: String => Boolean = _ => true):
+                  staff: Set[String] = Set("staff@example.com"), owner: String => Boolean = _ => true,
+                  seller: Option[okay.shop.invoice.Seller] = None,
+                  ksef: Option[okay.shop.invoice.KsefEnv] = None):
   val storage = Memory()
   var now: Long = 1793282400000L // 2026-10-29 14:00 UTC
   var letters: Vector[(String, Note)] = Vector.empty
@@ -26,7 +28,9 @@ final class World(val id: String = "atelier", var human: Boolean = true,
   val site = edit(Fixtures.site(id))
   val conf = Conf(site, s"https://preview-$id.example.workers.dev", "+48 600 000 000", "TST01A",
     "1x00000000000000000000AA", staff, "atelier@example.com", "2026-10-28",
-    "CALENDAR-KEY-0123456789", more, desk, owner)
+    "CALENDAR-KEY-0123456789", more, desk, owner, seller, ksef)
+  /** KSeF in memory (specs/shop.md "KSeF"): the seller's NIP its context */
+  val ksefFake = okay.shop.invoice.KsefFake(seller.fold("")(_.nip))
 
   /** the notices the shop gave (specs/shop.md "Notices") */
   val notices: scala.collection.mutable.Buffer[Notice] = scala.collection.mutable.Buffer.empty
@@ -47,6 +51,13 @@ final class World(val id: String = "atelier", var human: Boolean = true,
       Clock.virtual(now)(Notify.kept(notices)(Bookings.remind[W](conf)))))))))
     letters ++= kept
     n
+
+  /** the object's alarm for KSeF: the invoices due sent, asked about, their UPO kept */
+  def ksefRound(): Int =
+    storage.alarm = None
+    type K[X] = (Pure + Storage + Store + Clock + okay.shop.invoice.Ksef)[X]
+    run(storage.handler(StoreDurable.run(Clock.virtual(now)(ksefFake.run(
+      okay.shop.app.Invoicing.ksef[K](conf))))))._2
 
   private def at(r: Request, headers: (String, String)*): Request =
     r.copy(headers = r.headers ++ (("host" -> conf.origin.stripPrefix("https://")) +: headers).map((k, v) =>

@@ -38,6 +38,7 @@ object Quotes:
     else if offer.isEmpty then pure(Web.refused("service"))
     else if description.isEmpty || description.length > 2000 then pure(Web.refused("description"))
     else if !f.get("rodo_consent").exists(v => v.nonEmpty && v != "false") then pure(Web.refused("consent"))
+    else if Invoicing.asked(c, f).isLeft then pure(Web.refused(Invoicing.asked(c, f).left.toOption.get))
     else address match
       case Left(why) => pure(Web.refused(why, if why == "area" then 409 else 400))
       case Right(where) => Clock.now[R].flatMap { now =>
@@ -51,6 +52,7 @@ object Quotes:
                 q = Quote(ref, key, offer.get.key, name, contact, description, m, where, g("preferred", 200),
                   Lang.parse(g("lang", 5)).getOrElse(c.site.lang), Consent(now, c.policy), now)
                 _ <- Store.ask[R](q)
+                _ <- Invoicing.keep[R]("quote", q.ref, Invoicing.asked(c, f).toOption.flatten)
                 _ <- Mail.toOwner[R](Letters.quoteOwner(c, q, "Новий запит на оцінку"))
                 _ <- Notify.tell[R](Notice.Asked(q))
                 _ <- q.email.fold(unit[R])(to => Mail.toClient[R](to, Letters.quoteAsked(c, q)).map(_ => ()))
@@ -96,6 +98,7 @@ object Quotes:
             case Some(p) => Bookings.reserve[R](c, p, q.start, q.name, q.contact, q.lang, "", now).flatMap {
                 case Left(why) => pure(Web.refused(why, 409))
                 case Right(b) => Store.decide[R](q.ref, accepted = true, b.ref).flatMap(_ =>
+                  Invoicing.carried[R](q.ref, Of.Booking, b.ref)).flatMap(_ =>
                   Mail.toOwner[R](Letters.bookedOwner(c, b))).flatMap(_ => Notify.tell[R](Notice.Decided(q,
                     accepted = true, b.ref))).flatMap(_ => b.email.fold(unit[R])(to =>
                     Mail.toClient[R](to, Letters.booked(c, b)).map(_ => ()))).as(Web.json(Json.obj(
@@ -110,6 +113,7 @@ object Quotes:
                   q.lang, q.consent, now, Status.Accepted, amount = q.price)
                 _ <- Store.place[R](o)
                 _ <- Store.decide[R](q.ref, accepted = true, ref)
+                _ <- Invoicing.carried[R](q.ref, Of.Order, ref)
                 _ <- Mail.toOwner[R](Letters.owner(c, o))
                 _ <- Notify.tell[R](Notice.Decided(q, accepted = true, ref))
                 _ <- o.email.fold(unit[R])(to => Mail.toClient[R](to, Letters.confirmation(c, o)).map(_ => ()))

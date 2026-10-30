@@ -132,5 +132,13 @@ object Submit:
         "Цей майстер не робить цю послугу так — оберіть іншого.")(l)
     case "address" => T("Укажите улицу, индекс (00-000) и город.", "Podaj ulicę, kod pocztowy (00-000) i miasto.",
         "Please give the street, postcode (00-000) and city.", "Вкажіть вулицю, індекс (00-000) і місто.")(l)
+    case "buyer.name" => T("Укажите название фирмы для фактуры.", "Podaj nazwę firmy do faktury.",
+        "Please give the company's name for the invoice.", "Вкажіть назву фірми для фактури.")(l)
+    case "buyer.nip" => T("Проверьте NIP: 10 цифр.", "Sprawdź NIP: 10 cyfr.", "Please check the NIP: 10 digits.",
+        "Перевірте NIP: 10 цифр.")(l)
+    case "buyer.address" => T("Укажите адрес фирмы: улицу, индекс (00-000) и город.",
+        "Podaj adres firmy: ulicę, kod pocztowy (00-000) i miasto.",
+        "Please give the company's address: street, postcode (00-000) and city.",
+        "Вкажіть адресу фірми: вулицю, індекс (00-000) і місто.")(l)
     case _ => T("Не удалось отправить, попробуйте ещё раз.", "Nie udało się wysłać, spróbuj ponownie.",
         "Could not send, please try again.", "Не вдалося надіслати, спробуйте ще раз.")(l)

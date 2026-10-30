@@ -4,11 +4,14 @@ import okay.shop.effects.Note
 import okay.shop.model.*
 
 /** THE CONFIGURATION a site's program needs beyond its content: where it is answered from (the request's origin —
- * a preview's workers.dev, or the domain), the BLIK phone, the paczkomat, the Turnstile key, who may sign in */
+ * a preview's workers.dev, or the domain), the BLIK phone, the paczkomat, the Turnstile key, who may sign in; the
+ * seller's data for invoices and the KSeF environment it is connected to (specs/shop.md "Invoices", "KSeF") */
 final case class Conf(site: Site, origin: String, blik: String, paczkomat: String, sitekey: String,
                       staff: Set[String], contact: String, policy: String, calendarKey: String = "",
                       more: String => Vector[(String, String)] = _ => Vector.empty, desk: Desk = Desk(),
-                      owner: String => Boolean = _ => true)
+                      owner: String => Boolean = _ => true,
+                      seller: Option[okay.shop.invoice.Seller] = None,
+                      ksef: Option[okay.shop.invoice.KsefEnv] = None)
 
 /** where a workshop's sign-in lives (specs/shop.md "The host's own workshop pages"): its path — its API under
  * `<path>/api/`, its page `<path>/` — and its session's cookie. A host may sign its own people in elsewhere */

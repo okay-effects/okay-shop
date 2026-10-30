@@ -5,6 +5,7 @@ import okay.scala3.*
 import okay.serverless.{Durable, Storage}
 import okay.shop.booking.Slots
 import okay.shop.effects.*
+import okay.shop.invoice.{Buyer, InvoiceCodec, InvoiceKind, InvoiceMath}
 import okay.shop.model.*
 
 /**
@@ -22,6 +23,12 @@ import okay.shop.model.*
  *                                place, address, buffers, price)
  *   site/pay/<of>/<ref>          a payment of an order, a booking or manual income, with its log
  *   site/receipts/<year>         the last receipt number given in a year
+ *   site/buyer/<kind>/<ref>      an order's, a booking's or a quote's buyer data (specs/shop.md "Invoices")
+ *   site/invoice/<id>            an invoice (its id the shop's sequence, six digits), its KSeF side
+ *   site/invoiceof/<of>/<ref>    the id of an order's or a booking's VAT invoice
+ *   site/invoiceseq/id           the last id given; site/invoiceseq/<series> the last number of a series
+ *   site/ksefq/<id>              an invoice to send to KSeF again: when (the object's alarm)
+ *   site/upo/<id>                its UPO, as KSeF gave it
  *
  * A change is ONE `Durable.step`: the event and the order it moves written together or not at all; a reading is a
  * read of what is committed, no step. Only the SHA-256 of a link's or a session's secret is a key
@@ -72,11 +79,26 @@ object StoreDurable:
         case _ => bs
       })))
 
-  /** the object's alarm at the earliest reminder still due: a day before a booking not yet reminded */
+  /** the object's alarm at the earliest reminder still due — a day before a booking not yet reminded — or KSeF's next
+   * try of an invoice in its queue (specs/shop.md "Invoices"), whichever comes first */
   private def nextReminder[D[_]: Has[Durable]](all: Vector[Booking], now: Long): Unit ! D =
-    all.filter(b => b.active && !b.reminded && b.start > now).map(_.start - day).minOption match
-      case Some(at) => Durable.wakeAt[D](at.max(now + 1000))
-      case None => unit[D]
+    Durable.keys[D](s"$scope/ksefq/").flatMap(ks => ks.foldLeft(pure[Vector[Long], D](Vector.empty))((acc, k) =>
+      acc.flatMap(ts => Durable.get[Long, D](k).map(ts ++ _)))).flatMap { tries =>
+      (all.filter(b => b.active && !b.reminded && b.start > now).map(_.start - day) ++ tries).minOption match
+        case Some(at) => Durable.wakeAt[D](at.max(now + 1000))
+        case None => unit[D]
+    }
+
+  /** an invoice found by what it is of (a VAT one), or kept on the one it corrects (a correction) */
+  private def linked[D[_]: Has[Durable]](made: okay.shop.invoice.Invoice): Unit ! D =
+    if made.kind == InvoiceKind.Vat then Durable.put[String, D](s"$scope/invoiceof/${made.of.key}/${made.ref}", made.id)
+    else made.corrects.fold(unit[D])(c => Durable.get[Json, D](s"$scope/invoice/${c.id}").flatMap {
+      case Some(o: Json.Obj) =>
+        val orig = InvoiceCodec.invoice(o)
+        Durable.put[Json, D](s"$scope/invoice/${c.id}", InvoiceCodec.invoice(orig.copy(corrections =
+          orig.corrections :+ made.id)))
+      case _ => unit[D]
+    })
 
   private def answer[R[_], X](op: Store[X])(using In[Storage, R]): X ! R =
     type D[Y] = (R + Durable)[Y]
@@ -237,6 +259,51 @@ object StoreDurable:
             Durable.put[Json, D](bookingKey(ref), Codec.booking(missed)).as(Some(missed))
           case _ => pure(None)
         })
+      case Store.KeepBuyer(kind, ref, b) => step[Unit](b match
+          case Some(x) => Durable.put[Json, D](s"$scope/buyer/$kind/$ref", Buyer.toJson(x))
+          case None => Durable.delete[D](s"$scope/buyer/$kind/$ref"))
+      case Store.FindBuyer(kind, ref) => read[R](List(s"$scope/buyer/$kind/$ref")).map(_.get(
+          s"$scope/buyer/$kind/$ref").map(Buyer.fromJson))
+      case Store.Issue(d, pattern) => step[Either[String, okay.shop.invoice.Invoice]](
+        Durable.get[String, D](s"$scope/invoiceof/${d.of.key}/${d.ref}").flatMap { had =>
+          if d.kind == InvoiceKind.Vat && had.isDefined then pure(Left("issued"))
+          else
+            val series = InvoiceMath.series(pattern, d.issued)
+            for
+              id <- Durable.get[Long, D](s"$scope/invoiceseq/id").map(_.getOrElse(0L) + 1)
+              n <- Durable.get[Long, D](s"$scope/invoiceseq/$series").map(_.getOrElse(0L) + 1)
+              made = d.copy(id = f"$id%06d", number = InvoiceMath.number(pattern, d.issued, n))
+              _ <- Durable.put[Long, D](s"$scope/invoiceseq/id", id)
+              _ <- Durable.put[Long, D](s"$scope/invoiceseq/$series", n)
+              _ <- Durable.put[Json, D](s"$scope/invoice/${made.id}", InvoiceCodec.invoice(made))
+              _ <- linked[D](made)
+            yield Right(made)
+        })
+      case Store.FindInvoice(id) => read[R](List(s"$scope/invoice/$id")).map(_.get(s"$scope/invoice/$id")
+          .map(InvoiceCodec.invoice))
+      case Store.InvoiceOf(of, ref) =>
+        val k = s"$scope/invoiceof/${of.key}/$ref"
+        perform[Storage](Storage.Read(List(k))).flatMap(_.get(k).map(_.value).flatMap(v => Descent.parse(v).toOption)
+          .collect { case Json.Str(id) => id } match
+          case Some(id) => read[R](List(s"$scope/invoice/$id")).map(_.get(s"$scope/invoice/$id")
+              .map(InvoiceCodec.invoice))
+          case None => pure(None))
+      case Store.Invoices() => readAll[R](s"$scope/invoice/").map(_.map((_, j) => InvoiceCodec.invoice(j)).toVector)
+      case Store.KsefMarked(id, k) => step[Option[okay.shop.invoice.Invoice]](
+        Durable.get[Json, D](s"$scope/invoice/$id").flatMap {
+          case Some(j: Json.Obj) =>
+            val marked = InvoiceCodec.invoice(j).copy(ksef = k)
+            Durable.put[Json, D](s"$scope/invoice/$id", InvoiceCodec.invoice(marked))
+              .andThen(if k.next > 0 then Durable.put[Long, D](s"$scope/ksefq/$id", k.next)
+                else Durable.delete[D](s"$scope/ksefq/$id"))
+              .andThen(allBookings[D].flatMap(all => nextReminder[D](all, k.at)))
+              .as(Some(marked))
+          case _ => pure(None)
+        })
+      case Store.KeepUpo(id, xml) => step[Unit](Durable.put[String, D](s"$scope/upo/$id", xml))
+      case Store.FindUpo(id) =>
+        perform[Storage](Storage.Read(List(s"$scope/upo/$id"))).map(_.get(s"$scope/upo/$id").map(_.value)
+          .flatMap(v => Descent.parse(v).toOption).collect { case Json.Str(x) => x })
       case Store.Remind(now) => step[Vector[Booking]](allBookings[D].flatMap { all =>
           val due = all.filter(b => b.active && !b.reminded && b.start - day <= now && b.start > now)
           val marked = due.map(_.copy(reminded = true))

@@ -134,3 +134,31 @@ class WorkshopSuite extends munit.FunSuite:
     // the staff cannot change or undo it: no such buttons
     assert(!paid.at.toList.flatMap(_.buttons).map(_.toString).exists(_.contains("Не оплачено")))
   }
+
+  test("invoices on a booking (specs/shop.md \"Invoices\"): the buyer's data given, a wrong NIP refused, the invoice " +
+    "issued once paid and linked") {
+    val seller = okay.shop.invoice.Seller("TEST Salon", "1111111111", "ul. Testowa 1", "00-001", "Warszawa")
+    val w = World("salon", owner = _ => false, edit = _.copy(invoices = true), seller = Some(seller))
+    val start = w.now + 19 * 3600000L
+    val ref = w.json(w.post("/api/book", "service" -> "cut", "start" -> start.toString, "name" -> "Anna",
+      "contact" -> "anna@example.com", "rodo_consent" -> "on", "lang" -> "pl", "cf-turnstile-response" -> "t"))("ref")
+    val b = Browser(w)
+    signIn(w, b)
+    val open = Seq(Act.press("Записи"), Act.choose("Відкрити", ref))
+    val first = play(w, b, open*)
+    assert(texts(first.at).contains("клієнт не просив"), texts(first.at))
+    assert(!first.at.toList.flatMap(_.buttons).map(_.toString).exists(_.contains("Виставити фактуру")))
+    val wrong = play(w, b, (open ++ Seq(Act.press("Дані для фактури"), Act.press("Зберегти", "name" -> "TEST Kupiec",
+      "nip" -> "1234567890", "street" -> "ul. B 2", "postcode" -> "30-001", "city" -> "Kraków")))*)
+    assertEquals(wrong.problems.map(_.message), List("10 цифр NIP"))
+    val saved = play(w, b, (open ++ Seq(Act.press("Дані для фактури"), Act.press("Зберегти", "name" -> "TEST Kupiec",
+      "nip" -> "2222222222", "street" -> "ul. B 2", "postcode" -> "30-001", "city" -> "Kraków")))*)
+    assert(texts(saved.at).contains("NIP 2222222222"), texts(saved.at))
+    play(w, b, (open ++ Seq(Act.press("Оплачено"), Act.press("Записати", "amount" -> "60.00", "method" -> "card")))*)
+    val issued = play(w, b, (open :+ Act.press("Виставити фактуру"))*)
+    assertEquals(issued.problems, Nil)
+    assert(texts(issued.at).contains("FV/2026/10/1"), texts(issued.at))
+    assert(texts(issued.at).contains("/workshop/invoices/view?id=000001"))
+    assert(!issued.at.toList.flatMap(_.buttons).map(_.toString).exists(_.contains("Виставити фактуру")))
+  }
+

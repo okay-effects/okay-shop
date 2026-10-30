@@ -1,6 +1,7 @@
 package okay.shop.effects
 
 import okay.scala3.*
+import okay.shop.invoice.{Buyer, Invoice, KsefState}
 import okay.shop.model.*
 
 /** A STAFF MEMBER'S SIGN-IN: a link mailed, a session it opens — kept as the SHA-256 of their secrets */
@@ -67,6 +68,22 @@ enum Store[X]:
   case Payments() extends Store[Vector[Payment]]
   /** a past booking kept marked a no-show: none when it is not such */
   case NoShow(ref: String, now: Long) extends Store[Option[Booking]]
+  // ---- INVOICES (specs/shop.md "Invoices")
+  /** the buyer data of an order, a booking or a quote (`kind`: `order`, `booking`, `quote`); none: taken off */
+  case KeepBuyer(kind: String, ref: String, buyer: Option[Buyer]) extends Store[Unit]
+  case FindBuyer(kind: String, ref: String) extends Store[Option[Buyer]]
+  /** an invoice numbered in one step: the shop's next id, its series' next number (`pattern`, the invoice's issue
+   * day); a VAT invoice refused `issued` when its order or booking has one; a correction kept on its original */
+  case Issue(draft: Invoice, pattern: String) extends Store[Either[String, Invoice]]
+  case FindInvoice(id: String) extends Store[Option[Invoice]]
+  /** the VAT invoice of an order or a booking */
+  case InvoiceOf(of: Of, ref: String) extends Store[Option[Invoice]]
+  case Invoices() extends Store[Vector[Invoice]]
+  /** an invoice's KSeF side changed in one step; kept in the queue the object's alarm retries while `next > 0` */
+  case KsefMarked(id: String, state: KsefState) extends Store[Option[Invoice]]
+  /** an invoice's UPO (KSeF's receipt, XML) kept, read */
+  case KeepUpo(id: String, xml: String) extends Store[Unit]
+  case FindUpo(id: String) extends Store[Option[String]]
 
 object Store:
   def place[R[_]](o: Order)(using In[Store, R]): Unit ! R = perform[Store](Place(o))
@@ -111,3 +128,15 @@ object Store:
   def payment[R[_]](of: Of, ref: String)(using In[Store, R]): Option[Payment] ! R = perform[Store](FindPayment(of, ref))
   def payments[R[_]](using In[Store, R]): Vector[Payment] ! R = perform[Store](Payments())
   def noShow[R[_]](ref: String, now: Long)(using In[Store, R]): Option[Booking] ! R = perform[Store](NoShow(ref, now))
+  def keepBuyer[R[_]](kind: String, ref: String, b: Option[Buyer])(using In[Store, R]): Unit ! R =
+    perform[Store](KeepBuyer(kind, ref, b))
+  def buyer[R[_]](kind: String, ref: String)(using In[Store, R]): Option[Buyer] ! R = perform[Store](FindBuyer(kind, ref))
+  def issue[R[_]](draft: Invoice, pattern: String)(using In[Store, R]): Either[String, Invoice] ! R =
+    perform[Store](Issue(draft, pattern))
+  def invoice[R[_]](id: String)(using In[Store, R]): Option[Invoice] ! R = perform[Store](FindInvoice(id))
+  def invoiceOf[R[_]](of: Of, ref: String)(using In[Store, R]): Option[Invoice] ! R = perform[Store](InvoiceOf(of, ref))
+  def invoices[R[_]](using In[Store, R]): Vector[Invoice] ! R = perform[Store](Invoices())
+  def ksefMarked[R[_]](id: String, k: KsefState)(using In[Store, R]): Option[Invoice] ! R =
+    perform[Store](KsefMarked(id, k))
+  def keepUpo[R[_]](id: String, xml: String)(using In[Store, R]): Unit ! R = perform[Store](KeepUpo(id, xml))
+  def upo[R[_]](id: String)(using In[Store, R]): Option[String] ! R = perform[Store](FindUpo(id))

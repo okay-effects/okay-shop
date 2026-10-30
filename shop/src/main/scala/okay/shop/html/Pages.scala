@@ -135,7 +135,7 @@ $switchStyle
             "листування за посиланням.")}</p>
         <form data-send="order" data-form="buyForm" data-done="buyDone">
           <input type="hidden" name="lang" value="${l.code}">
-          ${intakeFields(clothing, site.slug, at.sitekey)}
+          ${intakeFields(clothing, site.slug, at.sitekey, site.invoices)}
         </form>
       </div>
       <div class="done" id="buyDone" style="display:none">
@@ -205,7 +205,7 @@ $scripts
         <form data-send="order" data-form="offForm" data-done="offDone">
           <input type="hidden" name="offerKey" value="${e(o.key)}">
           <input type="hidden" name="lang" value="${l.code}">
-          ${offerFields(clothing, site.slug, o.key, at.sitekey)}
+          ${offerFields(clothing, site.slug, o.key, at.sitekey, site.invoices)}
         </form>
         ${slaNote(clothing)}
       </div>"""}
@@ -255,7 +255,7 @@ background:transparent;color:inherit;border:1px solid rgba(127,127,127,.4)}
           <div class="fld slots" data-slots="${e(o.key)}"><span>${t("Загружаем свободное время…",
             "Wczytujemy wolne terminy…", "Loading the free times…", "Завантажуємо вільний час…")}</span></div>
           $contactFields
-          ${rodoConsent(at.site.slug)}
+          ${invoiceFields(at.site.invoices)}${rodoConsent(at.site.slug)}
           ${turnstile(at.sitekey)}
           <button class="send" type="submit">${t("Записаться", "Zarezerwuj", "Book", "Записатися")}</button>
         </form>
@@ -355,7 +355,7 @@ color:var(--mist);margin:0 0 6px}</style>
           <div class="fld slots" data-slots="${e(o.key)}"><span>${t("Загружаем свободное время…",
             "Wczytujemy wolne terminy…", "Loading the free times…", "Завантажуємо вільний час…")}</span></div>
           $contactFields
-          ${rodoConsent(site.slug)}
+          ${invoiceFields(site.invoices)}${rodoConsent(site.slug)}
           ${turnstile(at.sitekey)}
           <button class="send" type="submit">${t("Записаться", "Zarezerwuj", "Book", "Записатися")}</button>
         </form>
@@ -366,7 +366,7 @@ color:var(--mist);margin:0 0 6px}</style>
         <form data-send="order" data-form="mailForm" data-done="offDone">
           <input type="hidden" name="offerKey" value="${e(o.key)}">
           <input type="hidden" name="lang" value="${l.code}">
-          ${offerFields(site.clothing, site.slug, o.key, at.sitekey)}
+          ${offerFields(site.clothing, site.slug, o.key, at.sitekey, site.invoices)}
         </form>
         ${slaNote(site.clothing)}
       </div></div>"""
@@ -402,7 +402,7 @@ color:var(--mist);margin:0 0 6px}</style>
             }</span><input name="preferred" maxlength="200"></label>
           $address
           $contactFields
-          ${rodoConsent(site.slug)}
+          ${invoiceFields(site.invoices)}${rodoConsent(site.slug)}
           ${turnstile(at.sitekey)}
           <button class="send" type="submit">${t("Попросить оценку", "Poproś o wycenę", "Ask for a quote",
             "Попросити оцінку")}</button>
@@ -680,7 +680,25 @@ color:var(--mist);margin:0 0 6px}</style>
           target="_blank">${t("Политикой конфиденциальности", "Polityką Prywatności", "Privacy Policy", "Політикою " +
           "конфіденційності")}</a></span></label>"""
 
-  def intakeFields(clothing: Boolean, slug: String, sitekey: String)(using l: Lang): String =
+  /** "Potrzebuję faktury" (specs/shop.md "Invoices"): the buyer's company, NIP and address, shown when ticked; nothing
+   * at all for a shop that does not take it — its pages as before */
+  def invoiceFields(invoices: Boolean)(using l: Lang): String =
+    if !invoices then ""
+    else
+      def f(name: String, label: String, extra: String = "") =
+        s"""<label class="fld"><span>$label</span><input name="$name"$extra></label>"""
+      s"""<div class="fld inv"><style>.inv .invf{display:none}.inv:has(input[name=invoice]:checked) .invf{display:block}
+</style><label class="consent"><input type="checkbox" name="invoice" value="on"><span>${t("Нужна фактура (для фирмы)",
+        "Potrzebuję faktury (dla firmy)", "I need an invoice (for a company)", "Потрібна фактура (для фірми)")
+        }</span></label><div class="invf">${f("buyer_name", t("Название фирмы", "Nazwa firmy", "Company name",
+        "Назва фірми"), " maxlength=\"200\"")}${f("buyer_nip", "NIP", " inputmode=\"numeric\" maxlength=\"13\"")}${
+        f("buyer_street", t("Улица и номер", "Ulica i numer", "Street and number", "Вулиця і номер"))}${
+        f("buyer_postcode", t("Индекс", "Kod pocztowy", "Postcode", "Індекс"), " placeholder=\"00-000\"")}${
+        f("buyer_city", t("Город", "Miasto", "City", "Місто"))}</div></div>
+          """
+
+  def intakeFields(clothing: Boolean, slug: String, sitekey: String, invoices: Boolean = false)(
+    using l: Lang): String =
     val whatLabel = if clothing then t("Что нужно сделать?", "Co trzeba zrobić?", "What do you need?", "Що потрібно " +
         "зробити?")
                     else t("Опишите задачу", "Opisz zadanie", "Describe the task", "Опишіть задачу")
@@ -700,14 +718,15 @@ color:var(--mist);margin:0 0 6px}</style>
       ${itemValueField}
       ${if clothing then courierFields else ""}
       ${contactFields}
-      ${rodoConsent(slug)}
+      ${invoiceFields(invoices)}${rodoConsent(slug)}
       ${turnstile(sitekey)}
       <button class="send" type="submit">${t("Отправить заявку", "Wyślij zgłoszenie", "Send request", "Надіслати " +
           "заявку")}</button>"""
 
   // READY-MADE OFFER — the need is ALREADY defined (= the offer), so we don't re-ask it; we ORDER this one.
   // Only the specifics that ordering this offer needs: how to hand it over, optional notes, contact.
-  def offerFields(clothing: Boolean, slug: String, key: String, sitekey: String)(using l: Lang): String =
+  def offerFields(clothing: Boolean, slug: String, key: String, sitekey: String, invoices: Boolean = false)(
+    using l: Lang): String =
     if key == "bespoke" then
       s"""<label class="fld"><span>${t("Опишите желаемый образ", "Opisz wymarzony strój", "Describe your ideal outfit",
            "Опишіть бажаний образ")}</span><textarea name="need" placeholder="${t("напр.: приталенное платье миди, " +
@@ -723,7 +742,7 @@ color:var(--mist);margin:0 0 6px}</style>
           "contact you and open your project.", "Після заявки надішліть 2 фото на повний зріст (спереду + збоку) — " +
           "майстер напише і відкриє ваш проект.")}</p>
       ${contactFields}
-      ${rodoConsent(slug)}
+      ${invoiceFields(invoices)}${rodoConsent(slug)}
       ${turnstile(sitekey)}
       <button class="send" type="submit">${t("Начать →", "Zacznijmy →", "Let's start →", "Почнімо →")}</button>"""
     else
@@ -743,7 +762,7 @@ color:var(--mist);margin:0 0 6px}</style>
       <label class="fld"><span>${t("Пожелания (необязательно)", "Uwagi (opcjonalnie)", "Notes (optional)",
            "Побажання (необовʼязково)")}</span><textarea name="need" placeholder="${notePh}"></textarea></label>
       ${contactFields}
-      ${rodoConsent(slug)}
+      ${invoiceFields(invoices)}${rodoConsent(slug)}
       ${turnstile(sitekey)}
       <button class="send" type="submit">${t("Заказать", "Zamów", "Order", "Замовити")}</button>"""
 

@@ -353,7 +353,8 @@ Expenses are a later stage (not here).
 
 ### Polish rules — TO VERIFY with an accountant before relying on any of it (research of 2026-10-29)
 
-Not built: no KSeF, no fiscal printer, no official ledger. Sources read on 2026-10-29; uncertain points marked.
+Not built here: no fiscal printer, no official ledger (invoices and KSeF since: "Invoices", "KSeF"). Sources read on
+2026-10-29; uncertain points marked.
 
 - **KSeF (e-invoices)**: obligatory from 1 Feb 2026 for firms with 2024 sales above 200 mln zł, from 1 Apr 2026
   for everyone else; receiving through KSeF since 1 Feb 2026. Until 31 Dec 2026 invoices may stay outside KSeF
@@ -361,7 +362,8 @@ Not built: no KSeF, no fiscal printer, no official ledger. Sources read on 2026-
   from 1 Jan 2027 everyone. Invoices to consumers (B2C) in KSeF are voluntary. A VAT-exempt seller (zwolnienie
   podmiotowe, 240 000 zł from 2026) issues an invoice only when a buyer asks — then in KSeF; the Ministry said
   (26 Jan 2026) a rachunek outside KSeF may be given to a business instead (MEDIUM confidence: a ministry letter,
-  not the statute). No penalties in 2026; from 1 Jan 2027 (art. 106ni). Sources:
+  not the statute). CORRECTED 2026-10-30: the letter itself says the opposite — always an invoice ("Invoices": the
+  law the engine follows). No penalties in 2026; from 1 Jan 2027 (art. 106ni). Sources:
   https://ksef.podatki.gov.pl/od-kiedy-trzeba-wystawiac-faktury-w-ksef/, https://ksef.podatki.gov.pl/ponizej-10-000-zl/,
   https://ksef.podatki.gov.pl/konsumenci-i-osoby-fizyczne/,
   https://www.podatki.biz/artykuly/ksef-rachunek-zamiast-faktury-w-przypadku-podatnikow-zwolnionych-z-vat-mf-odpowiada_34_61179.htm
@@ -399,6 +401,186 @@ Not built: no KSeF, no fiscal printer, no official ledger. Sources read on 2026-
   or beautician's sales to private persons still go through their fiscal register.
 - Tests: `MoneySuite` (the rules, the store's step and numbering, the old paid orders, the report's sums, periods,
   breakdowns, the previous period, the CSV, the receipts and their links, owner-only).
+
+## Invoices (operator, 2026-10-30: step 1, no KSeF yet in the law's sense — KSeF below)
+
+A business client may ask for a faktura. The engine keeps the buyer's data, the seller's data is the host's
+(`Conf.seller`:
+a site's own config; the mall's owner screen "Dane do faktur"), an invoice is issued from a PAID order or booking,
+numbered per shop in its series, never reused; corrected by a faktura korygująca. Package `okay.shop.invoice`
+(model, rules, FA(3), KSeF) and `okay.shop.app.Invoicing` (the programs).
+
+- **The client's form** (`Site.invoices`, the host's switch; off — every site before this — the pages byte for byte as
+  before: `OldPagesSuite`): the order, booking and inquiry forms get "Potrzebuję faktury (dla firmy)"; ticked, the
+  company's name, NIP, street, postcode, city appear (CSS `:has`, no script). `POST /api/order`, `/api/book`,
+  `/api/quote` take `invoice=on`, `buyer_name`, `buyer_nip`, `buyer_street`, `buyer_postcode`, `buyer_city`: checked
+  before anything is made (`Buyer.check`: `buyer.name` 1–200, `buyer.nip` — ten digits, PL/spaces/hyphens allowed,
+  its check digit: weights 6,5,7,2,3,4,5,6,7 on the first nine, the sum mod 11, 10 never issued —, `buyer.address`:
+  a street, `NN-NNN`, a city), refused 400 by that name (the page's words in four languages); kept beside what was
+  made (`site/buyer/<order|booking|quote>/<ref>`). A quote accepted carries its buyer to the order or booking it became.
+- **Personal and company data**: the buyer's data is shown only to the staff and the owner (the workshop) and on the
+  client's own links (the invoice's page by the order's or booking's key); never on a public page.
+- **The workshop** (okay-ui): an order's and a booking's screen show "Фактура" — "клієнт не просив", the buyer's data,
+  or the invoice's number and KSeF state with its link; "Дані для фактури" (the staff gives or changes the buyer:
+  `GET/POST <desk>/api/buyer {of, ref, name, nip, street, postcode, city | clear}`) and, once paid with a buyer,
+  "Виставити фактуру" (`POST <desk>/api/invoice/issue {of, ref}`). Nothing new on a shop without seller data and a
+  buyer.
+- **The seller** (`Seller`, JSON by `Seller.fromJson`, checked by field: `seller.name`, `seller.nip`,
+  `seller.address`, `seller.status`, `seller.basis`, `seller.rate`, `seller.rates`, `seller.pattern`, `seller.bank`):
+  legal name, NIP, address; VAT status — an active payer (`vat`), exempt by turnover (`zw113`: art. 113 ust. 1, the
+  basis said as „art. 113 ust. 1 ustawy z dnia 11 marca 2004 r. o podatku od towarów i usług” unless given) or by
+  activity (`zw43`: its basis required, e.g. „art. 43 ust. 1 pkt 29 lit. …”); the default rate and one per service
+  (23, 8, 5, 0, zw, np; an exempt seller's lines always zw); the numbering patterns — invoices `FV/{yyyy}/{mm}/{n}`,
+  corrections `FK/{yyyy}/{mm}/{n}` by default (`{yyyy}`, `{yy}`, `{mm}`, one `{n}`, letters, digits, `/-_.`, at most
+  40, the two different); a bank account (NRB or IBAN).
+- **An invoice** (`Invoice`): its id (the shop's sequence, `000001`…), number, kind (`vat`, `kor`), what it is of
+  (order or booking, ref), the issue day (today) and the service's day (a booking's start, a paid order's day), the
+  seller and buyer AS THEY WERE (copied in), its lines (the service's name in Polish, or the order's need; 1 ×, the
+  payment's amount as GROSS — the shop's prices are gross), the payment's method and day, who issued it and when;
+  a correction's reason, the corrected invoice (id, number, day, KSeF number) and its lines before; its KSeF side;
+  the corrections made of it.
+- **Sums from gross** (art. 106e ust. 7–9): per rate, VAT = gross × rate ÷ (100 + rate), rounded to the grosz (half
+  up, ust. 11), net = gross − VAT; the invoice shows gross unit prices and values (ust. 8) and the table by rate.
+- **Numbering** (`Store.Issue`, ONE step): the next id, the series' next number — the series is the pattern with its
+  dates filled (`FV/2026/10/`: a monthly series starts at 1 each month) — and the order's or booking's index written
+  together; a second VAT invoice of the same order or booking refused `issued`. Numbers are never deleted or reused
+  (there is no delete). Refusals: `seller` (no seller data), `buyer`, `unpaid` (409).
+- **Correction** (owner only, `POST <desk>/api/invoice/correct {id, reason, lines:[{name, quantity, gross, rate}]}`):
+  the lines as they should be, starting from the last correction's; refused `reason` (1–256), `lines`, `same`,
+  `kind` (a correction is not corrected: correct the original); numbered in the corrections' series; kept on the
+  original (`corrections`). Its page: "Faktura korygująca nr …", "Korekta faktury nr … z dnia …" (+ its KSeF number),
+  the reason, the lines before and after, the difference by rate. KOR in FA(3).
+- **Pages**: the client's `/{lang}/invoice?ref=&k=` (the order's or booking's key; `&id=` a correction of it) and a
+  link from the receipt; the workshop's `<desk>/invoices/` (the list: number, kind, day, buyer, amount, KSeF state,
+  error, UPO, XML; the owner's "Wyślij do KSeF" and "Korekta"), `<desk>/invoices/view?id=`, `xml?id=` (FA(3)),
+  `upo?id=`; the workshop's link "Faktury · Рахунки-фактури · Invoices" (`more`) when the shop has a seller. The
+  printable page (`InvoicePage`): "Faktura nr …", issue place and day, the service's day, seller and buyer with NIP,
+  the lines, the table by rate (a VAT payer's), the total, „zapłacono w całości”, an exempt seller's line „Sprzedawca
+  zwolniony z VAT — podstawa prawna zwolnienia: …” and no VAT columns, the KSeF number and its QR code once accepted,
+  a TEST notice when sent to a test environment; print CSS (a PDF by the browser).
+- **The accountant's CSV** (owner only, `GET <desk>/api/invoices.csv?from=&to=&comma=1`): UTF-8 with a BOM, one row
+  an invoice — Lp, number, kind (VAT/KOR), issue day, sale day (empty when the same), buyer's NIP and name, KSeF number
+  or `BFK` (issued outside KSeF, JPK_V7's marker), net and VAT by rate under JPK_V7(3)'s column names (K_19/K_20 23 %,
+  K_17/K_18 8 %, K_15/K_16 5 %, K_13 0 %, K_10 exempt, K_11 outside the country), gross, KSeF state, the corrected
+  number; a correction's amounts its difference. A helper for the accountant's JPK, not the JPK file.
+- Tests: `InvoiceSuite` (NIP, buyer, seller, sums, the forms on and off, the buyer kept and carried, numbering and
+  series, the pages and their keys, exempt, correction, CSV, KSeF in the alarm), `Fa3XsdSuite` (JVM), the workshop's
+  `WorkshopSuite`.
+
+### Polish invoice law — what the engine follows (research of 2026-10-30; TO VERIFY with an accountant)
+
+Primary texts read: the VAT Act, consolidated Dz.U. 2026 poz. 1263 (law as of 2026-08-26, the KSeF amendments in)
+https://api.sejm.gov.pl/eli/acts/DU/2026/1263/text.pdf; the invoicing regulation Dz.U. 2021 poz. 1979 as amended by
+2024 poz. 1938 and 2025 poz. 1742 (from 1 Feb 2026) https://api.sejm.gov.pl/eli/acts/DU/2021/1979/text.pdf,
+https://api.sejm.gov.pl/eli/acts/DU/2025/1742/text.pdf; the MF letter to SKwP of 26 Jan 2026 (PT7.8165.6.2026.46)
+https://skwp.pl//content/uploads/2026/01/MF-do-SKwP-odpowiedz-na-pismo-SKwP.pdf; the JPK_V7(3) brochure
+https://www.podatki.gov.pl/media/wgbkrejs/broszura-jpk_vat-z-deklaracj%C4%85-od-1-lutego-2026-r.pdf.
+
+- **Art. 106e ust. 1** (HIGH): issue date; a sequential number in one or more series identifying the invoice; names
+  and addresses of both; the seller's NIP and the buyer's; the date of the service when known and different; the
+  service; quantity; unit price; net value; rate; net by rate; VAT by rate; the total due; markers when they apply
+  (metoda kasowa, samofakturowanie, odwrotne obciążenie, mechanizm podzielonej płatności — the latter only above
+  15 000 zł for annex 15 goods and building works: not our services); pkt 19 the legal basis of an exemption. The
+  engine prints all of these that apply to a small service business; the markers never apply to its cases (it issues
+  no reverse charge, no self-billing, no cash method — a payer on the cash method must not use it yet: OPEN).
+- **Exempt sellers** (HIGH): art. 113 ust. 1, the limit 240 000 zł from 2026 (Dz.U. 2025 poz. 896); consulting and
+  legal services may NOT use it (art. 113 ust. 13). An invoice only on the buyer's request (art. 106b ust. 3 pkt 2,
+  within 3 months of the month's end); its content may omit rate, net and VAT by rate (art. 106e ust. 4 pkt 3,
+  regulation § 3 pkt 3). The legal basis is not in § 3 pkt 3's list (MEDIUM), but FA(3) requires it when P_19=1 —
+  the engine always prints it. The document is a "faktura" (zw); "faktura bez VAT" is only a colloquial label.
+- **A rachunek instead of an invoice: NO.** The spec's earlier note (2026-10-29, after a portal) said the Ministry
+  allowed a rachunek outside KSeF to a business. The letter itself says the opposite: when an exempt seller documents
+  a sale, „zawsze tym dokumentem będzie faktura, ponieważ rachunek nie stanowi ekwiwalentu faktury”, through KSeF from
+  its date; a rachunek is for activities outside VAT (HIGH as to the letter; it is not an interpretation). So the
+  engine issues invoices, not rachunki, to businesses; its receipt stays the consumer's confirmation.
+- **Deadlines** (HIGH): by the 15th of the next month (art. 106i ust. 1); on a later request within 15 days (ust. 6).
+- **Correction** (art. 106j, HIGH): its number and date; the corrected invoice's KSeF number when it had one (ust. 2
+  pkt 2a); the corrected invoice's data (art. 106e ust. 1 pkt 1–5) and the service; the difference by rate, or the
+  corrected items. "FAKTURA KORYGUJĄCA" and the reason are optional (ust. 2a) — the engine prints both. A correction
+  of a KSeF invoice must go to KSeF too (ust. 4). Correction notes are abolished.
+- **Numbering** (MEDIUM): monthly series like FV/2026/10/1 are common practice and the law allows several series;
+  "kolejny" read as +1 (a KIS interpretation of 7 Feb 2023, 0114-KDIP1-3.4012.603.2022.1.KP, reported by infor.pl);
+  no rule on gaps — the engine never makes one (the number is taken in the same step as the invoice is written).
+- **NIP's check digit** (MEDIUM-HIGH): the algorithm above is universal in practice; no official MF text found.
+- **Storage**: art. 112/112a until the limitation (5 years from the year's end); KSeF keeps its invoices 10 years
+  (art. 112aa) — the shop's object keeps every invoice, its XML is made again from it, the UPO kept.
+- **Paragon z NIP** (≤ 450 zł) is a simplified invoice until 31 Dec 2026 only (art. 145n; after: MEDIUM). Not built.
+- **B2C invoices** are outside KSeF (art. 106ga ust. 2 pkt 4); the engine invoices businesses (a NIP required).
+- **JPK_V7(3)** (from Feb 2026, HIGH): a sale's row has one of `NrKSeF` | `OFF` | `BFK` | `DI`; the amounts K_10–K_20
+  by rate. The CSV uses those names; active VAT payers only file it.
+
+## KSeF (operator, 2026-10-30: step 2, the TEST environment only)
+
+KSeF 2.0's API (v2, API version 2.9.0; https://api-test.ksef.mf.gov.pl/docs/v2/openapi.json; the Ministry's
+documentation https://github.com/CIRFMF/ksef-api, commit ce3670e of 2026-10-14; the clients
+https://github.com/CIRFMF/ksef-client-java, -csharp). Environments (`KsefEnv`): TEST `https://api-test.ksef.mf.gov.pl`
+(QR `https://qr-test.ksef.mf.gov.pl`), DEMO `api-demo`/`qr-demo`, PRODUCTION `api.ksef.mf.gov.pl`/`qr.ksef.mf.gov.pl`.
+
+- **The effect** (`Ksef`): `Send(xml)` → the session's and the invoice's references, `Status(session, reference)` →
+  KSeF's code (100 accepted, 150 processing, 200 done with its `ksefNumber`, 4xx a refusal with its description),
+  `Upo(session, number)` → the UPO's XML. A refusal of the call is a `Left` with KSeF's words (its exception code and
+  description), never a failure. Handlers: `KsefHttp` (over okay-serverless' `Fetch` and `Crypto`, and `Clock` to
+  poll), `KsefFake` (memory; numbers in KSeF's form), `Ksef.off` (not connected).
+- **`KsefHttp`**, each handler instance signing in once:
+  1. `POST /v2/auth/challenge` → `challenge`, `timestampMs`; `GET /v2/security/public-key-certificates` → the
+     Ministry's certificates (base64 DER) by `usage` (`KsefTokenEncryption`, `SymmetricKeyEncryption`; the latest
+     valid one), their public key taken out (`Crypto.spki`).
+  2. `POST /v2/auth/ksef-token {challenge, contextIdentifier:{type:"Nip", value}, encryptedToken}` — the token is
+     `"<token>|<timestampMs>"` encrypted RSA-OAEP with SHA-256 and MGF1-SHA-256 (base64) → `referenceNumber`,
+     `authenticationToken`; `GET /v2/auth/{ref}` polled (status 100 → 200); `POST /v2/auth/token/redeem` → the
+     `accessToken` (Bearer for the rest).
+  3. Send: a fresh AES-256 key and 16-byte IV; `POST /v2/sessions/online {formCode:{systemCode:"FA (3)",
+     schemaVersion:"1-0E", value:"FA"}, encryption:{encryptedSymmetricKey (RSA-OAEP to the SymmetricKeyEncryption
+     key), initializationVector}}` → 201 `referenceNumber`; `POST /v2/sessions/online/{ref}/invoices {invoiceHash,
+     invoiceSize, encryptedInvoiceHash, encryptedInvoiceSize, encryptedInvoiceContent, offlineMode:false}` — SHA-256
+     (base64) of the UTF-8 XML and of its AES-256-CBC/PKCS#7 ciphertext → 202 the invoice's `referenceNumber`;
+     `POST …/close` (its UPO made).
+  4. Status: `GET /v2/sessions/{session}/invoices/{reference}` → `status{code, description, details}`, `ksefNumber`.
+  5. UPO: `GET /v2/sessions/{session}/invoices/ksef/{ksefNumber}/upo` (XML, schema
+     `http://upo.schematy.mf.gov.pl/KSeF/v4-3`).
+- **FA(3)** (`Fa3.xml`): namespace `http://crd.gov.pl/wzor/2025/06/25/13775/`, `KodFormularza kodSystemowy="FA (3)"
+  wersjaSchemy="1-0E"`, `WariantFormularza` 3; Podmiot1/Podmiot2 by NIP and a Polish address (Podmiot2's `JST`=2,
+  `GV`=2); `P_1`, `P_1M`, `P_2`, `P_6`; the sums by rate (P_13_1/P_14_1 23 %, P_13_2/P_14_2 8 %, P_13_3/P_14_3 5 %,
+  P_13_6_1 0 % KR, P_13_7 zw, P_13_8 np I), `P_15`; `Adnotacje` (P_16–P_18A 2, `Zwolnienie` P_19N or P_19 + P_19A
+  the basis, P_22N, P_23, P_PMarzyN); `RodzajFaktury` VAT or KOR (+ `PrzyczynaKorekty`, `DaneFaKorygowanej` with
+  `NrKSeF`+`NrKSeFFaKorygowanej` or `NrKSeFN`); rows `P_7`, `P_8A`, `P_8B`, `P_9B`, `P_11A` (gross, art. 106e ust.
+  7–8), `P_12` (23, 8, 5, `0 KR`, `zw`, `np I`), a correction's rows before with `StanPrzed`; `Platnosc` (Zaplacono,
+  DataZaplaty, FormaPlatnosci 1 cash, 2 card, 6 transfer, 7 mobile/BLIK, else PlatnoscInna; the bank account's NRB).
+  Its creation instant is the invoice's: the same bytes whenever made. The schema: `schemat_FA(3)_v1-0E.xsd`
+  (= http://crd.gov.pl/wzor/2025/06/25/13775/schemat.xsd, SHA-256 b646b6b5…958) and its imports
+  StrukturyDanych_v10-0E, ElementarneTypyDanych_v10-0E, KodyKrajow_v10-0E (ksef-api's `faktury/schemy/FA`) in the
+  JVM tests' resources; `Fa3XsdSuite` validates a VAT payer's, an exempt seller's and two corrections (the JDK's
+  Xerces reads maxOccurs ≥ 10000 as unbounded: it cannot expand them).
+- **In the shop** (`Conf.ksef`, the host's): an invoice issued while connected is QUEUED (its KSeF state `queued`,
+  `next` = now, `site/ksefq/<id>`); the object's ALARM (`Invoicing.ksef`, run by the host beside the reminders) takes
+  every due one: sends it (→ `sent`, the XML's SHA-256 kept for the QR), asks its status 3 s later (→ `accepted` with
+  its KSeF number, the UPO fetched and kept `site/upo/<id>`; `rejected` with KSeF's description; still processing:
+  again), and a failure (no connection, KSeF down, 5xx, a sign-in refused) keeps the error, counts the attempt and
+  waits 1, 2, 4 … minutes, at most 6 hours. Every change ONE step of the store, which sets the object's alarm at the
+  earliest of the reminders and the queue (`StoreDurable`'s `nextReminder`). Requests never wait for KSeF. The owner
+  sends an invoice issued before the connection, or rejected, again ("Wyślij do KSeF", `POST <desk>/api/invoice/ksef
+  {id}`); a correction of an invoice sent to KSeF is queued too.
+- **The QR code (KOD I)** on an accepted invoice's page: `<qr base>/invoice/<seller NIP>/<issue day DD-MM-YYYY>/<SHA-256
+  of the XML sent, base64url without padding>`, its label the KSeF number; drawn in the browser
+  (qrcode-generator 1.4.4 from cdnjs). KOD II (offline invoices) needs a KSeF offline certificate: not built.
+- **Offline modes** (not built; the queue is not offline mode: an invoice waiting in it has no KSeF number yet):
+  offline24 (art. 106nda, any time, sent by the next business day), offline when KSeF is announced unavailable
+  (art. 106nh, next business day after), awaria (art. 106nf, 7 business days); offline invoices need KOD I and KOD II
+  and `offlineMode:true` ([docs] tryby-offline.md). OPEN: in 2026 an invoice may stay outside KSeF while the month's
+  such invoices are at most 10 000 zł gross (art. 145m) — the owner chooses by connecting or not.
+- **Test environment without a real identity** (verified 2026-10-30): TE takes self-signed certificates and random
+  NIPs („W środowisku testowym TE dopuszczalne jest uwierzytelnianie przy użyciu samopodpisanych certyfikatów … Do
+  testów należy używać losowych identyfikatorów NIP”, ksef-api srodowiska.md). `scripts/ksef-test-token.sc`
+  (scala-cli): a random checksum-valid NIP, a fictional person's self-signed RSA certificate (`serialNumber
+  TINPL-<NIP>`, openssl), an AuthTokenRequest (`http://ksef.mf.gov.pl/auth/token/2.0`) signed XAdES-BES (enveloped,
+  rsa-sha256, exc-c14n, SignedProperties with SigningTime and SigningCertificate) by the JDK, `POST
+  /v2/auth/xades-signature?verifyCertificateChain=false`, redeemed, `POST /v2/tokens {permissions:["InvoiceWrite",
+  "InvoiceRead"]}` until `Active`; the token written to a file (mode 600), never printed. `KsefTestEnvSuite` (JVM,
+  only with `KSEF_TEST_FILE`) sends a real invoice through `KsefHttp` and checks its KSeF number and UPO — done
+  2026-10-30: TEST NIP 9010486374, KSeF number 9010486374-20261030-3D0B0D000000-0A, the UPO from „Ministerstwo
+  Finansów - środowisko testowe (TE)”.
+- **Production is never asked** by anything here: the host decides the environment, and the mall keeps production
+  disabled until its operator enables it (specs/mall.md).
 
 ## Open core (operator, 2026-10-29)
 

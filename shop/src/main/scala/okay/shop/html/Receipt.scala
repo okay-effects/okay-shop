@@ -10,7 +10,8 @@ import okay.shop.model.*
 object Receipt:
   private def e(s: String) = Html.escape(s)
 
-  def page(c: Conf, p: Payment, buyer: String, service: String, served: String): String =
+  def page(c: Conf, p: Payment, buyer: String, service: String, served: String,
+           invoice: Option[(String, String)] = None): String =
     val what = c.site.offer(service).map(_.name(Lang.pl)).getOrElse(if p.description.nonEmpty then p.description
       else "Usługa")
     s"""<!doctype html><html lang=pl><head><meta charset=utf-8>
@@ -31,6 +32,7 @@ td,th{border:1px solid #bbb;padding:8px 10px;text-align:left}td.r{text-align:rig
 <tr><th>Kwota</th><td class=r><b>${e(Money.zl(p.amount))}</b></td></tr>
 </table>
 <p class=meta>Dokument niefiskalny: nie jest fakturą VAT ani paragonem fiskalnym. Zapłacono w całości. Dziękujemy!</p>
-<p><button onclick="print()">Drukuj / PDF</button></p>
+${invoice.fold("")((href, number) => s"""<p>Faktura nr ${e(number)}: <a href="${e(href)}">otwórz</a></p>
+""")}<p><button onclick="print()">Drukuj / PDF</button></p>
 </body></html>
 """

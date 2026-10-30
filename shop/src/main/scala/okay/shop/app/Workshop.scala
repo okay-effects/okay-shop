@@ -107,12 +107,14 @@ border:0;border-radius:12px;background:#2a1f14;color:#fff;cursor:pointer}</style
   // ---- SIGNED IN
 
   private def signedIn[R[_]](c: Conf, r: Request, path: List[String], email: String, now: Long)(using In[Store, R],
-    In[Mail, R], In[Ids, R]): Response ! R =
-    (r.method, path) match
+    In[Mail, R], In[Ids, R], In[Clock, R]): Response ! R =
+    // the invoices' calls (specs/shop.md "Invoices")
+    Invoicing.desk[R](c, r, path, email, now).getOrElse((r.method, path) match
       case ("GET", List("me")) => pure(ok(Json.obj("email" -> Json.str(email))))
       // the host's pages, then the engine's own for the owner: the reports (specs/shop.md "Reports")
       case ("GET", List("more")) => pure(ok(Json.obj("more" -> Json.Arr((c.more(email) ++
-          Option.when(c.owner(email))(reports -> s"${c.desk.path}/reports/")).map((text, href) =>
+          Option.when(c.owner(email))(reports -> s"${c.desk.path}/reports/") ++
+          Option.when(c.seller.isDefined)(Invoicing.link -> s"${c.desk.path}/invoices/")).map((text, href) =>
           Json.obj("text" -> Json.str(text), "href" -> Json.str(href)))))))
       // money (specs/shop.md "Money")
       case ("GET", List("payment")) => Accounts.payment(c, r, email)
@@ -148,7 +150,7 @@ border:0;border-radius:12px;background:#2a1f14;color:#fff;cursor:pointer}</style
           case Some(b) => b.email.fold(pure(false))(to => Mail.toClient[R](to, Letters.unbooked(c, b)))
               .map(sent => ok(Json.obj("sent" -> Json.bool(sent))))
         }
-      case _ => pure(Response.notFound())
+      case _ => pure(Response.notFound()))
 
   private val day = 86400000L
   /** the reports' link, in the workshop's languages */

@@ -1,6 +1,7 @@
 package okay.shop.workshop
 
 import okay.scala3.*
+import okay.shop.invoice.Buyer
 import okay.shop.model.*
 
 /** an order as the workshop sees it: the order, its service's name and price, the statuses it may go to next */
@@ -13,6 +14,10 @@ final case class Opened(job: Job, history: Vector[(Long, Event)], emailed: Strin
 /** a booking as the workshop lists it: the booking, its service's name, its master's name (none: a shop without
  * masters) and whether it is the signed-in person's own */
 final case class Booked(booking: Booking, service: String, master: String = "", mine: Boolean = false)
+
+/** an order's or a booking's invoice side (specs/shop.md "Invoices"): its buyer's data, its invoice — id, number,
+ * KSeF's status — and whether the shop issues invoices (its seller's data set) */
+final case class InvoiceSide(buyer: Option[Buyer], invoice: Option[(String, String, String)], invoicing: Boolean)
 
 /** a move asked: the status, and what it needs — the amount of a payment (zł), a parcel's tracking number, a reason */
 final case class Move(to: Status, amount: String = "", tracking: String = "", note: String = "")
@@ -51,6 +56,12 @@ enum Staff[X]:
     extends Staff[Either[String, Payment]]
   /** a past booking marked a no-show */
   case NoShow(ref: String) extends Staff[Either[String, Unit]]
+  /** the invoice side of an order or a booking */
+  case Invoicing(of: Of, ref: String) extends Staff[Either[String, InvoiceSide]]
+  /** its buyer's data given or changed */
+  case SetBuyer(of: Of, ref: String, buyer: Buyer) extends Staff[Either[String, Buyer]]
+  /** its invoice issued: the number, KSeF's status */
+  case Issue(of: Of, ref: String) extends Staff[Either[String, (String, String)]]
 
 object Staff:
   def me[R[_]: Has[Staff]]: Option[String] ! R = perform[Staff](Me())
@@ -75,6 +86,12 @@ object Staff:
                             day: String = "", note: String = ""): Either[String, Payment] ! R =
     perform[Staff](Pay(of, ref, action, amount, method, day, note))
   def noShow[R[_]: Has[Staff]](ref: String): Either[String, Unit] ! R = perform[Staff](NoShow(ref))
+  def invoicing[R[_]: Has[Staff]](of: Of, ref: String): Either[String, InvoiceSide] ! R =
+    perform[Staff](Invoicing(of, ref))
+  def setBuyer[R[_]: Has[Staff]](of: Of, ref: String, b: Buyer): Either[String, Buyer] ! R =
+    perform[Staff](SetBuyer(of, ref, b))
+  def issue[R[_]: Has[Staff]](of: Of, ref: String): Either[String, (String, String)] ! R =
+    perform[Staff](Issue(of, ref))
 
 /** A PERSON, NOT A BOT: Turnstile's token for the sign-in form — the page's widget answers it, a test a constant */
 enum Human[X]:

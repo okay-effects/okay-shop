@@ -26,6 +26,9 @@ object Api:
       case (_, ps) if ps.startsWith(desk) => Workshop.answer(c, r, ps.drop(desk.size))
       // the owner's reports (specs/shop.md "Reports"): pages beside the workshop's
       case ("GET", ps) if ps.startsWith(desk.init :+ "reports") => Accounts.pages(c, r, ps.drop(desk.size))
+      // the invoices (specs/shop.md "Invoices"): the list and an invoice's pages beside the workshop's
+      case ("GET", ps) if ps.startsWith(desk.init :+ "invoices") => Invoicing.pages(c, r, ps.drop(desk.size))
+      case ("GET", List(l, "invoice")) if Lang.parse(l).isDefined => Invoicing.page(c, r)
       case ("POST", List("api", "order")) => order(c, r)
       case ("POST", List("api", "inquiry")) => inquiry(c, r)
       case ("GET", List(l, "track")) if Lang.parse(l).isDefined => trackLink(c, Lang.parse(l).get, r)
@@ -66,6 +69,7 @@ object Api:
     else if !Contact.valid(contact) then pure(refused("contact"))
     else if !consent then pure(refused("consent"))
     else if offerKey.nonEmpty && !site.offer(offerKey).exists(!_.hidden) then pure(refused("offer"))
+    else if Invoicing.asked(c, f).isLeft then pure(refused(Invoicing.asked(c, f).left.toOption.get))
     else for
       now <- Clock.now[R]
       allowed <- Store.allow[R](s"order:${ip(r)}", 5, tenMinutes, now)
@@ -91,6 +95,7 @@ object Api:
         oneOf("paymentMethod", Set("transfer", "cod")), field(f, "itemValue").filter(ch => ch.isDigit || ch == '.'),
         field(f, "fabric"), lang, Consent(now, c.policy), now)
       _ <- Store.place[R](o)
+      _ <- Invoicing.keep[R]("order", o.ref, Invoicing.asked(c, f).toOption.flatten)
       _ <- Mail.toOwner[R](Letters.owner(c, o))
       _ <- Notify.tell[R](Notice.Ordered(o))
       _ <- o.email match
@@ -177,20 +182,27 @@ object Api:
     val key = r.param("k").getOrElse("")
     val none = Web.page("Rachunek dostępny po opłaceniu zamówienia.", 404)
     found[R](ref)(o => same(o.key, key)).flatMap {
-      case Some(o) => Store.payment[R](Of.Order, o.ref).map {
-          case Some(p) if p.paid => page(Receipt.page(c, p, o.name, o.offerKey, Day.of(o.placed)))
-          case Some(_) => none
-          case None if o.status == Status.Paid => page(Track.receipt(c.site, o, c.contact))
-          case None => none
+      case Some(o) => Store.payment[R](Of.Order, o.ref).flatMap(p => invoiced[R](Of.Order, o.ref, key).map(p -> _))
+        .map {
+          case (Some(p), inv) if p.paid => page(Receipt.page(c, p, o.name, o.offerKey, Day.of(o.placed), inv))
+          case (Some(_), _) => none
+          case (None, _) if o.status == Status.Paid => page(Track.receipt(c.site, o, c.contact))
+          case (None, _) => none
         }
       case None => if ref.isEmpty then pure(none) else Store.booking[R](ref.toUpperCase).flatMap {
-          case Some(b) if same(b.key, key) => Store.payment[R](Of.Booking, b.ref).map {
-              case Some(p) if p.paid => page(Receipt.page(c, p, b.name, b.service, Day.of(b.start)))
+          case Some(b) if same(b.key, key) => Store.payment[R](Of.Booking, b.ref).flatMap(p =>
+              invoiced[R](Of.Booking, b.ref, key).map(p -> _)).map {
+              case (Some(p), inv) if p.paid => page(Receipt.page(c, p, b.name, b.service, Day.of(b.start), inv))
               case _ => none
             }
           case _ => pure(none)
         }
     }
+
+  /** the client's link to the invoice of an order or a booking, and its number; none when none was issued */
+  private def invoiced[R[_]](of: Of, ref: String, key: String)(using In[Store, R]): Option[(String, String)] ! R =
+    Store.invoiceOf[R](of, ref).map(_.map(i => (s"/pl/invoice?ref=$ref&k=${okay.http.Query.encode(key)}",
+      i.number)))
 
   /** equal, in a time that does not tell where they differ */
   def same(a: String, b: String): Boolean =

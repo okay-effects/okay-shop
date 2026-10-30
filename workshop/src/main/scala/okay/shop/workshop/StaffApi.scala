@@ -5,6 +5,7 @@ import okay.scala3.*
 import okay.http.Query
 import okay.serverless.cloud.{Fetch, Request, Response, text}
 import okay.shop.handlers.Codec
+import okay.shop.invoice.Buyer
 import okay.shop.model.*
 
 /** `Staff` AS THE SITE'S WORKSHOP API (`sites.app.Workshop`): each operation a request to `/workshop/api/…` of
@@ -51,6 +52,15 @@ object StaffApi:
         "action" -> action, "amount" -> amount, "method" -> method, "day" -> day, "note" -> note).map(r =>
         read(r)(o => o.get("payment").collect { case j: Json.Obj => Codec.payment(j) }.get))
       case Staff.NoShow(ref) => post("booking/noshow", "ref" -> ref).map(r => read(r)(_ => ()))
+      case Staff.Invoicing(of, ref) => get(s"buyer?of=${of.key}&ref=" + Query.encode(ref)).map(r => read(r)(o =>
+        InvoiceSide(o.get("buyer").collect { case j: Json.Obj => Buyer.fromJson(j) },
+          o.get("invoice").collect { case j: Json.Obj => (str(j, "id"), str(j, "number"), str(j, "ksef")) },
+          o.get("invoicing").contains(Json.Bool(true)))))
+      case Staff.SetBuyer(of, ref, b) => post("buyer", "of" -> of.key, "ref" -> ref, "name" -> b.name, "nip" -> b.nip,
+        "street" -> b.street, "postcode" -> b.postcode, "city" -> b.city).map(r => read(r)(o =>
+        o.get("buyer").collect { case j: Json.Obj => Buyer.fromJson(j) }.get))
+      case Staff.Issue(of, ref) => post("invoice/issue", "of" -> of.key, "ref" -> ref).map(r => read(r)(o =>
+        o.get("invoice").collect { case j: Json.Obj => (str(j, "number"), str(j, "ksef")) }.get))
       case Staff.More() => get("more").map(r => read(r)(o => arr(o, "more").collect { case j: Json.Obj =>
         str(j, "text") -> str(j, "href") }.filter((t, h) => t.nonEmpty && h.nonEmpty)).getOrElse(Vector.empty))
 
