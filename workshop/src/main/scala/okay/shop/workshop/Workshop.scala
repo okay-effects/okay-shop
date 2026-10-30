@@ -129,7 +129,8 @@ object Workshop:
         invoiceButtons(side, pay.exists(_.paid) || o.status == Status.Paid, OnOrder.Buyer, OnOrder.Issue) ++
         letter :+ Button("Назад")(OnOrder.Back))*)).flatMap {
       case OnOrder.Back => orders[R](site, None)
-      case OnOrder.Buyer => buyer[R](Of.Order, o.ref, side.flatMap(_.buyer)).flatMap(told => order[R](site, o.ref, told))
+      case OnOrder.Buyer => buyer[R](Of.Order, o.ref, side.flatMap(_.buyer)).flatMap(told =>
+          order[R](site, o.ref, told))
       case OnOrder.Issue => issued[R](Of.Order, o.ref).flatMap(told => order[R](site, o.ref, told))
       case OnOrder.Letter => write[R](site, opened)
       case OnOrder.Paying(action) => paid[R](Of.Order, o.ref, pay, o.amount max offerPrice(opened.job), action)

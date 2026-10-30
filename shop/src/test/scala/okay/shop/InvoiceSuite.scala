@@ -242,7 +242,8 @@ class InvoiceSuite extends munit.FunSuite:
     assertEquals(b.get("/workshop/api/invoices.csv").status, 403)
     val csv = in(w, owner).get("/workshop/api/invoices.csv?comma=1").text
     assert(csv.startsWith("﻿Lp;Numer;Rodzaj"))
-    assert(csv.contains("1;FV/2026/10/1;VAT;2026-10-29;2026-10-30;2222222222;TEST Kupiec Sp. z o.o.;BFK;100,00;23,00"), csv)
+    assert(csv.contains("1;FV/2026/10/1;VAT;2026-10-29;2026-10-30;2222222222;TEST Kupiec Sp. z o.o.;BFK;" +
+      "100,00;23,00"), csv)
   }
 
   test("KSeF: issued while connected, queued; the alarm sends it, then its number and UPO; the QR on its page") {

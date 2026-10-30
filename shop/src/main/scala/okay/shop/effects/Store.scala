@@ -130,7 +130,8 @@ object Store:
   def noShow[R[_]](ref: String, now: Long)(using In[Store, R]): Option[Booking] ! R = perform[Store](NoShow(ref, now))
   def keepBuyer[R[_]](kind: String, ref: String, b: Option[Buyer])(using In[Store, R]): Unit ! R =
     perform[Store](KeepBuyer(kind, ref, b))
-  def buyer[R[_]](kind: String, ref: String)(using In[Store, R]): Option[Buyer] ! R = perform[Store](FindBuyer(kind, ref))
+  def buyer[R[_]](kind: String, ref: String)(using In[Store, R]): Option[Buyer] ! R =
+    perform[Store](FindBuyer(kind, ref))
   def issue[R[_]](draft: Invoice, pattern: String)(using In[Store, R]): Either[String, Invoice] ! R =
     perform[Store](Issue(draft, pattern))
   def invoice[R[_]](id: String)(using In[Store, R]): Option[Invoice] ! R = perform[Store](FindInvoice(id))
