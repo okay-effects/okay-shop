@@ -114,11 +114,20 @@ border:0;border-radius:12px;background:#2a1f14;color:#fff;cursor:pointer}</style
       // the host's pages, then the engine's own for the owner: the reports (specs/shop.md "Reports")
       case ("GET", List("more")) => pure(ok(Json.obj("more" -> Json.Arr((c.more(email) ++
           Option.when(c.owner(email))(reports -> s"${c.desk.path}/reports/") ++
-          Option.when(c.seller.isDefined)(Invoicing.link -> s"${c.desk.path}/invoices/")).map((text, href) =>
+          Option.when(c.seller.isDefined)(Invoicing.link -> s"${c.desk.path}/invoices/") ++
+          Option.when(c.site.reviews)(Reviewing.link -> s"${c.desk.path}/reviews/")).map((text, href) =>
           Json.obj("text" -> Json.str(text), "href" -> Json.str(href)))))))
       // money (specs/shop.md "Money")
       case ("GET", List("payment")) => Accounts.payment(c, r, email)
-      case ("POST", List("pay")) => Accounts.pay(c, json(r), email, now)
+      case ("POST", List("pay")) => Accounts.pay(c, json(r), email, now).flatMap(res =>
+          // an order paid: its client asked for a review (specs/shop.md "Reviews")
+          val f = json(r)
+          if res.status != 200 || f.get("of").contains("order") == false || f.get("action").contains("paid") == false
+          then pure(res)
+          else Store.find[R](f.getOrElse("ref", "").trim).flatMap(_.fold(unit[R])(o => Reviewing.done[R](c, o, now)))
+            .as(res))
+      case ("GET", List("reviews")) => Reviewing.list(c, email)
+      case ("POST", List("review")) => Reviewing.moderate(c, json(r), email, now)
       case ("POST", List("income")) => Accounts.income(c, json(r), email, now)
       case ("GET", List("incomes")) => Accounts.incomes(c, email)
       case ("POST", List("booking", "noshow")) => Accounts.noShow(json(r), now)
@@ -172,7 +181,7 @@ border:0;border-radius:12px;background:#2a1f14;color:#fff;cursor:pointer}</style
         "emailed" -> Json.str(emailed)))))
     }
 
-  private def move[R[_]](c: Conf, f: Map[String, String], now: Long)(using In[Store, R], In[Mail, R])
+  private def move[R[_]](c: Conf, f: Map[String, String], now: Long)(using In[Store, R], In[Mail, R], In[Ids, R])
     : Response ! R =
     val ref = f.getOrElse("ref", "")
     Store.find[R](ref).flatMap {
@@ -189,11 +198,15 @@ border:0;border-radius:12px;background:#2a1f14;color:#fff;cursor:pointer}</style
             Store.record[R](ref, Event.Moved(to, note, amount, f.getOrElse("tracking", "").trim.take(60)), now)
               .flatMap {
                 case None => pure(None)
-                case Some(moved) => (moved.email, Letters.moved(c, moved)) match
+                case Some(moved) => ((moved.email, Letters.moved(c, moved)) match
                   case (Some(to), Some(n)) => Mail.toClient[R](to, n).flatMap(sent =>
                       Store.record[R](ref, Event.Emailed(to, n.subject, sent), now)
                         .flatMap(_ => opened(c, ref, if sent then "sent" else "not sent")))
                   case _ => opened(c, ref, "")
+                ).flatMap(res =>
+                  // delivered or paid: its client asked for a review (specs/shop.md "Reviews"), once
+                  (if moved.status == Status.Delivered || moved.status == Status.Paid then
+                    Reviewing.done[R](c, moved, now) else unit[R]).as(res))
               }.map(_.getOrElse(missing))
     }
 

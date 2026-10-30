@@ -45,11 +45,13 @@ final case class Offer(key: String, name: T, description: T, price: Long, order:
   def priceShort: String = Money.zl(price)
 
 /** A SITE: what its pages and letters say of it; `invoices`: its forms offer "Potrzebuję faktury" (specs/shop.md
- * "Invoices") */
+ * "Invoices"); `reviews`: its clients asked for a review, `rated` what its storefront shows of them (specs/shop.md
+ * "Reviews") */
 final case class Site(id: String, slug: String, name: String, tagline: T, lang: Lang, logoText: String,
                       color: String, contact: T, kind: Kind, refPrefix: String, domain: String,
                       offers: Vector[Offer], schedule: Option[Schedule] = None, work: Option[Work] = None,
-                      masters: Vector[Master] = Vector.empty, invoices: Boolean = false):
+                      masters: Vector[Master] = Vector.empty, invoices: Boolean = false,
+                      reviews: Boolean = false, rated: Option[Rated] = None):
   def clothing: Boolean = kind == Kind.Atelier
   /** whether `o` is booked here: it lasts, and the shop has a schedule — or, by its work, a mode with hours */
   def books(o: Offer): Boolean = work match

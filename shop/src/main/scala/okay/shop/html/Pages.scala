@@ -86,7 +86,8 @@ $switchStyle
     val cards = if ordered.isEmpty then s"""<p class="offer-desc">${t("Скоро.", "Wkrótce.", "Coming soon.",
       "Незабаром.")}</p>""" else ordered.map(serviceCard).mkString
     val seo = look.seo(site)
-    s"""${head(at, seo.title, seo.description, storefrontStyle(look.theme, site.color), seo.head)}
+    s"""${head(at, seo.title, seo.description, storefrontStyle(look.theme, site.color),
+      seo.head + ReviewPage.structured(site))}
   <div class="bg"><i class="seam s1"></i><i class="seam s2"></i><i class="seam s3"></i></div>
   <div class="glow"></div>
   <div class="wrap">
@@ -105,7 +106,7 @@ $switchStyle
         "Gotowe oferty", "Ready-made offers", "Готові пропозиції")}</p>
       $cards
     </section>
-    ${look.sections(at)}
+    ${look.sections(at)}${ReviewPage.block(site)}
     <section class="contact" id="contact">
       <p class="label">${t("Связаться", "Kontakt", "Contact", "Звʼязатися")}</p>
       <p class="body">${tt(site.contact)}</p>

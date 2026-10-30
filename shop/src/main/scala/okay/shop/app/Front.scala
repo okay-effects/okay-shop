@@ -41,6 +41,7 @@ object Front:
       case "workshop" :: "api" :: _ => true
       case "workshop" :: "reports" :: _ => true
       case "workshop" :: "invoices" :: _ => true
-      case l :: ("track" | "receipt" | "booking" | "quote" | "invoice") :: Nil => Lang.parse(l).isDefined
+      case "workshop" :: "reviews" :: _ => true
+      case l :: ("track" | "receipt" | "booking" | "quote" | "invoice" | "review") :: Nil => Lang.parse(l).isDefined
       case "calendar" :: file :: Nil => file.endsWith(".ics")
       case _ => false

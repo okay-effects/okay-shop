@@ -1,7 +1,7 @@
 package okay.shop.effects
 
 import okay.scala3.*
-import okay.shop.model.{Booking, Inquiry, Order, Quote}
+import okay.shop.model.{Booking, Inquiry, Order, Quote, Review}
 
 /** WHAT HAPPENED in a shop that its people may want to know at once (specs/shop.md "Notices"): the data, never its
  * words — a host says it where it likes (a chat, a push), the shop's site in hand */
@@ -14,6 +14,8 @@ enum Notice:
   case Asked(quote: Quote)
   /** a quote decided by its client: accepted (`result` the booking's or the order's ref) or declined */
   case Decided(quote: Quote, accepted: Boolean, result: String)
+  /** a client's review written (specs/shop.md "Reviews") */
+  case Reviewed(review: Review)
 
 /** A NOTICE GIVEN: beside the owner's letter, the same moment; what a host does with it is its handler's */
 enum Notify[X]:

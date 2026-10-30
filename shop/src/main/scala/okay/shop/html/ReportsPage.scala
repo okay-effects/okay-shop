@@ -83,7 +83,7 @@ object ReportsPage:
       val d = Math.round((now - before) * 100.0 / Math.abs(before))
       if d > 0 then s"+$d %" else if d < 0 then s"−${-d} %" else "±0 %"
 
-  private val style = """:root{--ink:#1f2328;--mist:#59636e;--line:#d8dee4;--card:#fff;--bg:#f4f5f7;--acc:#1f6feb;
+  private[html] val style = """:root{--ink:#1f2328;--mist:#59636e;--line:#d8dee4;--card:#fff;--bg:#f4f5f7;--acc:#1f6feb;
 --good:#1a7f37;--bad:#b42318;--sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 *{box-sizing:border-box}body{margin:0;font:15px/1.5 var(--sans);color:var(--ink);background:var(--bg)}
 header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 20px;

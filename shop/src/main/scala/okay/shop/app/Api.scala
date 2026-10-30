@@ -29,6 +29,10 @@ object Api:
       // the invoices (specs/shop.md "Invoices"): the list and an invoice's pages beside the workshop's
       case ("GET", ps) if ps.startsWith(desk.init :+ "invoices") => Invoicing.pages(c, r, ps.drop(desk.size))
       case ("GET", List(l, "invoice")) if Lang.parse(l).isDefined => Invoicing.page(c, r)
+      // reviews (specs/shop.md "Reviews"): the workshop's screen, the client's form by its link
+      case ("GET", ps) if ps.startsWith(desk.init :+ "reviews") => Reviewing.pages(c, r)
+      case ("GET", List(l, "review")) if Lang.parse(l).isDefined => Reviewing.page(c, Lang.parse(l).get, r)
+      case ("POST", List(l, "review")) if Lang.parse(l).isDefined => Reviewing.write(c, Lang.parse(l).get, r)
       case ("POST", List("api", "order")) => order(c, r)
       case ("POST", List("api", "inquiry")) => inquiry(c, r)
       case ("GET", List(l, "track")) if Lang.parse(l).isDefined => trackLink(c, Lang.parse(l).get, r)

@@ -29,6 +29,10 @@ import okay.shop.model.*
  *   site/invoiceseq/id           the last id given; site/invoiceseq/<series> the last number of a series
  *   site/ksefq/<id>              an invoice to send to KSeF again: when (the object's alarm)
  *   site/upo/<id>                its UPO, as KSeF gave it
+ *   site/review/<of>/<ref>      a client's review of an order or a booking, its reply, hidden or not, its log
+ *   site/reviewlink/<hash>       a review link not yet used: {of, ref, until}
+ *   site/reviewask/<of>/<ref>   when its review was asked (asked once)
+ *   site/reviewq/<ref>           a booking's review to ask for: when (the object's alarm)
  *
  * A change is ONE `Durable.step`: the event and the order it moves written together or not at all; a reading is a
  * read of what is committed, no step. Only the SHA-256 of a link's or a session's secret is a key
@@ -82,7 +86,9 @@ object StoreDurable:
   /** the object's alarm at the earliest reminder still due — a day before a booking not yet reminded — or KSeF's next
    * try of an invoice in its queue (specs/shop.md "Invoices"), whichever comes first */
   private def nextReminder[D[_]: Has[Durable]](all: Vector[Booking], now: Long): Unit ! D =
-    Durable.keys[D](s"$scope/ksefq/").flatMap(ks => ks.foldLeft(pure[Vector[Long], D](Vector.empty))((acc, k) =>
+    // and the reviews to ask for (specs/shop.md "Reviews")
+    Durable.keys[D](s"$scope/ksefq/").flatMap(a => Durable.keys[D](s"$scope/reviewq/").map(a ++ _)).flatMap(ks =>
+      ks.foldLeft(pure[Vector[Long], D](Vector.empty))((acc, k) =>
       acc.flatMap(ts => Durable.get[Long, D](k).map(ts ++ _)))).flatMap { tries =>
       (all.filter(b => b.active && !b.reminded && b.start > now).map(_.start - day) ++ tries).minOption match
         case Some(at) => Durable.wakeAt[D](at.max(now + 1000))
@@ -304,9 +310,55 @@ object StoreDurable:
       case Store.FindUpo(id) =>
         perform[Storage](Storage.Read(List(s"$scope/upo/$id"))).map(_.get(s"$scope/upo/$id").map(_.value)
           .flatMap(v => Descent.parse(v).toOption).collect { case Json.Str(x) => x })
+      // ---- REVIEWS (specs/shop.md "Reviews")
+      case Store.ReviewLater(ref, at, now) => step[Unit](Durable.put[Long, D](s"$scope/reviewq/$ref", at)
+        .andThen(allBookings[D].flatMap(all => nextReminder[D](all, now))))
+      case Store.ReviewsDue(now) => step[Vector[String]](Durable.keys[D](s"$scope/reviewq/").flatMap(ks =>
+        ks.foldLeft(pure[Vector[String], D](Vector.empty))((acc, k) => acc.flatMap(due => Durable.get[Long, D](k)
+          .flatMap {
+            case Some(at) if at <= now => Durable.delete[D](k).as(due :+ k.stripPrefix(s"$scope/reviewq/"))
+            case _ => pure(due)
+          }))).flatMap(due => allBookings[D].flatMap(all => nextReminder[D](all, now)).as(due)))
+      case Store.Invite(of, ref, hash, until, now) => step[Boolean](
+        Durable.get[Long, D](s"$scope/reviewask/${of.key}/$ref").flatMap {
+          case Some(_) => pure(false)
+          case None => Durable.put[Long, D](s"$scope/reviewask/${of.key}/$ref", now)
+              .andThen(Durable.put[Json, D](s"$scope/reviewlink/$hash", Json.obj("of" -> Json.str(of.key),
+                "ref" -> Json.str(ref), "until" -> Json.num(until)))).as(true)
+        })
+      case Store.Invitation(hash, now) => read[R](List(s"$scope/reviewlink/$hash")).map(_.get(
+          s"$scope/reviewlink/$hash").flatMap(invitation(_, now)))
+      case Store.Write(rv, hash, now) => step[Either[String, Review]](
+        Durable.get[Json, D](s"$scope/reviewlink/$hash").flatMap {
+          case Some(j: Json.Obj) if invitation(j, now).contains((rv.of, rv.ref)) =>
+            val key = s"$scope/review/${rv.of.key}/${rv.ref}"
+            Durable.get[Json, D](key).flatMap {
+              case Some(_) => Durable.delete[D](s"$scope/reviewlink/$hash").as(Left("reviewed"))
+              case None => Durable.put[Json, D](key, Codec.review(rv))
+                  .andThen(Durable.delete[D](s"$scope/reviewlink/$hash")).as(Right(rv))
+            }
+          case _ => pure(Left("link"))
+        })
+      case Store.AllReviews() => readAll[R](s"$scope/review/").map(_.map((_, j) => Codec.review(j)).toVector
+          .sortBy(r => -r.at))
+      case Store.Moderate(id, action, value, who, owner, now) =>
+        val key = s"$scope/review/${id.replaceFirst("-", "/")}"
+        step[Either[String, Review]](Durable.get[Json, D](key).flatMap {
+          case Some(j: Json.Obj) => Reviews.moderate(Codec.review(j), action, value, who, owner, now) match
+              case Left(why) => pure(Left(why))
+              case Right(x) => Durable.put[Json, D](key, Codec.review(x)).as(Right(x))
+          case _ => pure(Left("no such review"))
+        })
       case Store.Remind(now) => step[Vector[Booking]](allBookings[D].flatMap { all =>
           val due = all.filter(b => b.active && !b.reminded && b.start - day <= now && b.start > now)
           val marked = due.map(_.copy(reminded = true))
           marked.foldLeft(unit[D])((p, b) => p.andThen(Durable.put[Json, D](bookingKey(b.ref), Codec.booking(b))))
             .andThen(nextReminder[D](all.filterNot(b => due.exists(_.ref == b.ref)) ++ marked, now)).as(marked)
         })
+
+  /** a review link's order or booking, while it is not past */
+  private def invitation(j: Json.Obj, now: Long): Option[(Of, String)] =
+    (j.get("of"), j.get("ref"), j.get("until")) match
+      case (Some(Json.Str(of)), Some(Json.Str(ref)), Some(Json.Num(until))) if until.toLong >= now =>
+        Of.parse(of).map(_ -> ref)
+      case _ => None

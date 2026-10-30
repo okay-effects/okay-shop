@@ -161,6 +161,8 @@ object Bookings:
         case Right(Some((cs, keys))) => Store.bookWith[R](b, cs, keys, now)
         case Right(None) => Store.book[R](b, s, now)
         case Left(why) => pure(Left(why))
+      // its review asked two hours after it (specs/shop.md "Reviews")
+      _ <- made.fold(_ => unit[R], x => Reviewing.later[R](c, x, now))
     yield made
 
   /** the client (when an email) and the owner told; the notice given (specs/shop.md "Notices") */
@@ -206,8 +208,8 @@ object Bookings:
             case Right(Some((cs, keys))) => Store.rebookWith[R](b.ref, at, cs, keys, now)
             case Right(None) => Store.rebook[R](b.ref, at, s, now)).flatMap {
             case Left(why) => pure(Web.refused(why, 409))
-            case Right(x) => told(c, x, Letters.rebooked(c, x), Letters.rebookedOwner(c, x), Notice.Moved(x))
-                .as(answer(c, x))
+            case Right(x) => Clock.now[R].flatMap(n => Reviewing.later[R](c, x, n)).flatMap(_ =>
+                told(c, x, Letters.rebooked(c, x), Letters.rebookedOwner(c, x), Notice.Moved(x))).as(answer(c, x))
           }
     }
 
@@ -227,7 +229,9 @@ object Bookings:
         Calendar.ics(c.site, bs.filter(_.active), now))))
 
   /** THE REMINDERS, the object's alarm: the bookings due marked, each client told; the next alarm set by the store */
-  def remind[R[_]](c: Conf)(using In[Store, R], In[Mail, R], In[Clock, R]): Int ! R =
+  def remind[R[_]](c: Conf)(using In[Store, R], In[Mail, R], In[Clock, R], In[Ids, R]): Int ! R =
     Clock.now[R].flatMap(now => Store.remind[R](now)).flatMap(due =>
       due.foldLeft(unit[R])((p, b) => p.andThen(b.email.fold(unit[R])(to =>
         Mail.toClient[R](to, Letters.reminder(c, b)).map(_ => ())))).as(due.size))
+      // and the reviews due (specs/shop.md "Reviews")
+      .flatMap(n => Reviewing.due[R](c).as(n))

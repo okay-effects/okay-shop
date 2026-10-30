@@ -290,3 +290,24 @@ object Letters:
         q.address.fold("")(a => row("Адреса", a.line) + row("Примітки", a.notes)) + row("Ціна", q.priced) +
         row("Клієнт", q.name) + row("Контакт", q.contact) +
         row("Згода RODO", s"${Day.time(q.consent.at)} · політика ${q.consent.policy}")), q.email)
+
+  // ---- REVIEWS (specs/shop.md "Reviews")
+
+  /** to the client after a visit or an order done: "how was it?", the one-use link to the review, in their language */
+  def reviewAsk(c: Conf, l: Lang, service: String, link: String): Note =
+    val a = accent(c.site)
+    def w(t: T) = t(l)
+    note(s"${w(T("Как всё прошло?", "Jak było?", "How was it?", "Як усе пройшло?"))} — ${c.site.name}",
+      page(a, s"<h2 style='color:$a'>${e(c.site.name)}</h2>" +
+        s"<p>${e(w(T("Спасибо, что выбрали нас! Как вам ", "Dziękujemy, że nas wybrałeś! Jak oceniasz: ",
+          "Thank you for choosing us! How was ", "Дякуємо, що обрали нас! Як вам ")))}<b>${e(service)}</b>?</p>" +
+        s"<p>${e(w(T("Оцените нас — это займёт минуту. Отзыв увидят другие клиенты.",
+          "Oceń nas — to zajmie minutę. Opinię zobaczą inni klienci.",
+          "Rate us — it takes a minute. Other clients will see your review.",
+          "Оцініть нас — це займе хвилину. Відгук побачать інші клієнти.")))}</p>" +
+        s"<p><a href='${e(link)}' style='background:$a;color:#fff;padding:10px 20px;border-radius:8px;" +
+        "text-decoration:none;font-size:14px'>" + e(w(T("★ Оставить отзыв →", "★ Wystaw opinię →",
+          "★ Write a review →", "★ Залишити відгук →"))) + "</a></p>" +
+        s"<p style='color:#888;font-size:13px'>${e(w(T("Ссылка одноразовая, действует 60 дней.",
+          "Link jest jednorazowy i ważny 60 dni.", "The link works once, for 60 days.",
+          "Посилання одноразове, діє 60 днів.")))}</p>" + questions(c, l)), Some(c.contact))

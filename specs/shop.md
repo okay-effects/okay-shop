@@ -582,6 +582,69 @@ https://github.com/CIRFMF/ksef-client-java, -csharp). Environments (`KsefEnv`): 
 - **Production is never asked** by anything here: the host decides the environment, and the mall keeps production
   disabled until its operator enables it (specs/mall.md).
 
+## Reviews (operator, 2026-10-30)
+
+A shop's clients rate what they got; only real clients, once each; the shop answers in public but cannot bury the bad
+ones. The host's switch: `Site.reviews` (off — every site before this, both single sites — nothing is asked, no
+page changes); what the storefront shows is `Site.rated` (the host keeps it from the store: `Reviews.rated`).
+
+- **Who is asked, when**: a BOOKING's client two hours after the visit ends (`Reviews.after`) — made or moved, the
+  booking puts its ref in a queue (`site/reviewq/<ref>`, the time; `Store.ReviewLater`), the object's alarm
+  (`Bookings.remind` → `Reviewing.due`, the store's `nextReminder` counts the queue) takes the due ones and asks
+  those still `booked` (not cancelled, not a no-show) and past; an ORDER's client at once when the workshop moves it
+  to `delivered` or `paid`, or marks it paid (`Reviewing.done`). Only a client with an email. ASKED ONCE per order or
+  booking (`site/reviewask/<of>/<ref>`, `Store.Invite` false the second time).
+- **The link**: a secret (`Ids.secret`, 120 bits) mailed in a letter in the client's language ("Jak było?",
+  `Letters.reviewAsk`, the shop's contact as reply-to) as `/{lang}/review?t=<secret>`; only its SHA-256 is kept
+  (`site/reviewlink/<hash>`: of, ref, until — 60 days). SINGLE USE: the review written and the link deleted in ONE
+  store step (`Store.Write`); a second review of the same order or booking refused (`reviewed`); a forged, used or
+  past link answers "used or expired" (404), nothing written.
+- **The form** (`ReviewPage.form`, a plain HTML form, no script; `POST /{lang}/review` with `t`, `rating`, `text`,
+  `name`): what it is of and when; the stars 1–5 (`rating`), a text up to 1000 characters (`text`; may be empty), a
+  name to sign with — shown as its first word and the last word's initial, "Anna K." (`Reviews.shownName`; none:
+  "Klient"); "do not put phone numbers or addresses in it". Refused by field (400, the form again with the words
+  kept). Thanks page; the notice `Notify.Reviewed(review)` (the host tells its people).
+- **A review** (`Review`, `site/review/<of>/<ref>`): of, ref, its service and master, the stars, the text, the name
+  shown, the language, when; the owner's reply and when; `hidden` (a reason, empty: shown); its log (when, who,
+  `reply`, `hide:<reason>`, `show`). Never deleted: there is no call that deletes one.
+- **The workshop** (`<desk>/reviews/`, "Opinie · Відгуки · Reviews" in `more` when the site takes reviews; signed
+  out: to the sign-in): every review, newest first, hidden ones marked with their reason; the average and the counts
+  (shown, hidden apart). `GET <desk>/api/reviews`, `POST <desk>/api/review {id, action, value}`: the OWNER only (403
+  `owner`) — `reply` (1–1000 characters; again: edited, one reply), `hide` with a reason of the list ONLY — `spam`,
+  `personal` (personal data in it), `offensive` — else 400 `reason`: never because it is negative; `show` (hidden
+  by mistake). Every change logged on the review.
+- **The storefront** (`ReviewPage.block`, after the look's sections; NOTHING while nothing is shown — the page then
+  byte for byte as before): "Opinie", the stars, the average to one decimal, the count ("12 opinii", the language's
+  plural), the line "Opinie zweryfikowane: wystawiają je tylko klienci po wizycie lub zamówieniu — przez link z
+  wiadomości.", the latest six shown, each with its stars, name, day, service, text and the owner's reply. Escaped.
+  **Structured data** (`ReviewPage.structured`, in the head): a schema.org `LocalBusiness` (`@id` `<origin>/#business`,
+  name, url) with its `AggregateRating` (ratingValue, reviewCount, best 5, worst 1) ONLY from 3 shown reviews on.
+  Google shows no stars for a business's own reviews of itself on its own site (its "self-serving reviews" rule,
+  2019) — the data is still correct, and other readers take it.
+- Tests: `ReviewsSuite` (asked two hours after a visit, once, in the client's language; none for a cancelled visit
+  or with the switch off; only by the link, a wrong rating or text refused, single use; an order asked on delivery,
+  not again on payment; the owner's reply and hide by reason, staff refused, never deleted, the log; the name and the
+  averages; the block and the JSON-LD threshold; the pages unchanged without reviews); `OldPagesSuite` unchanged.
+
+### Reviews and the law — TO VERIFY (research of 2026-10-30)
+
+- **The Omnibus directive** (2019/2161, art. 3: UCPD art. 7(6) and annex I points 23b, 23c), in Poland the act on
+  unfair market practices (ustawa z 23 sierpnia 2007 o przeciwdziałaniu nieuczciwym praktykom rynkowym, as amended
+  from 1 Jan 2023): a trader who gives access to consumers' reviews must say WHETHER AND HOW it ensures they come
+  from consumers who used or bought the product (material information, art. 6 ust. 4 pkt 7 as commentators cite it —
+  MEDIUM confidence on the numbering); stating that reviews are by real users without reasonable and proportionate
+  steps to check it, and posting or commissioning false reviews or distorting them (e.g. showing only the positive),
+  are unfair in all circumstances (art. 7 pkt 25–26 as cited — MEDIUM). So the storefront says how it verifies
+  ("tylko klienci po wizycie lub zamówieniu — przez link z wiadomości") and the hide rule allows no "negative"
+  reason. UOKiK fined traders for fake or filtered reviews (e.g. decision RKT-3/2022, Opinie.pro). Sources:
+  https://eur-lex.europa.eu/eli/dir/2019/2161/oj, https://lexlege.pl/ustawa-o-przeciwdzialaniu-nieuczciwym-praktykom-rynkowym/art-7/,
+  https://bezprawnik.pl/moderowanie-opinii-konsumentow/,
+  https://czasopismo.legeartis.org/2022/12/zamieszczanie-falszywych-opinii-konsumentow-obowiazek-weryfikacji-recenzji-klientow/
+- **RODO**: a review is personal data of its author (the name shown, the text); its basis the author's own act of
+  publishing; shown only as "Anna K."; the form asks for no personal data in the text, and `personal` is a reason to
+  hide. The email that asked is the order's or the booking's (its existing basis). The privacy policy's wording: OPEN
+  for the host (the mall's legal drafts).
+
 ## Clients' letters: the ways (operator, 2026-10-30)
 
 The owner's and the staff's letters go by Email Routing's `send_email` (`MAIL`: verified destinations, any plan). A

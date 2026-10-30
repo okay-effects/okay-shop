@@ -84,6 +84,22 @@ enum Store[X]:
   /** an invoice's UPO (KSeF's receipt, XML) kept, read */
   case KeepUpo(id: String, xml: String) extends Store[Unit]
   case FindUpo(id: String) extends Store[Option[String]]
+  // ---- REVIEWS (specs/shop.md "Reviews")
+  /** a booking's review to ask for at `at` (its end and two hours): kept in the queue the object's alarm reads */
+  case ReviewLater(ref: String, at: Long, now: Long) extends Store[Unit]
+  /** the bookings whose review is due at `now`, taken off the queue; the next alarm set */
+  case ReviewsDue(now: Long) extends Store[Vector[String]]
+  /** a review link kept (the SHA-256 of its secret) for an order or a booking — once: false when it was asked */
+  case Invite(of: Of, ref: String, hash: String, until: Long, now: Long) extends Store[Boolean]
+  /** what a review link is for, while it is kept and not past */
+  case Invitation(hash: String, now: Long) extends Store[Option[(Of, String)]]
+  /** a review written by its link, in one step: the link used up, one review an order or a booking — `Left("link")`
+   * when the link is gone or past, `Left("reviewed")` when there is one */
+  case Write(review: Review, hash: String, now: Long) extends Store[Either[String, Review]]
+  case AllReviews() extends Store[Vector[Review]]
+  /** a review changed by the shop as `Reviews.moderate` says, in one step */
+  case Moderate(id: String, action: String, value: String, who: String, owner: Boolean, now: Long)
+    extends Store[Either[String, Review]]
 
 object Store:
   def place[R[_]](o: Order)(using In[Store, R]): Unit ! R = perform[Store](Place(o))
@@ -141,3 +157,15 @@ object Store:
     perform[Store](KsefMarked(id, k))
   def keepUpo[R[_]](id: String, xml: String)(using In[Store, R]): Unit ! R = perform[Store](KeepUpo(id, xml))
   def upo[R[_]](id: String)(using In[Store, R]): Option[String] ! R = perform[Store](FindUpo(id))
+  def reviewLater[R[_]](ref: String, at: Long, now: Long)(using In[Store, R]): Unit ! R =
+    perform[Store](ReviewLater(ref, at, now))
+  def reviewsDue[R[_]](now: Long)(using In[Store, R]): Vector[String] ! R = perform[Store](ReviewsDue(now))
+  def invite[R[_]](of: Of, ref: String, hash: String, until: Long, now: Long)(using In[Store, R]): Boolean ! R =
+    perform[Store](Invite(of, ref, hash, until, now))
+  def invitation[R[_]](hash: String, now: Long)(using In[Store, R]): Option[(Of, String)] ! R =
+    perform[Store](Invitation(hash, now))
+  def write[R[_]](r: Review, hash: String, now: Long)(using In[Store, R]): Either[String, Review] ! R =
+    perform[Store](Write(r, hash, now))
+  def reviews[R[_]](using In[Store, R]): Vector[Review] ! R = perform[Store](AllReviews())
+  def moderate[R[_]](id: String, action: String, value: String, who: String, owner: Boolean, now: Long)(
+    using In[Store, R]): Either[String, Review] ! R = perform[Store](Moderate(id, action, value, who, owner, now))

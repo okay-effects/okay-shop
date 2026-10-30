@@ -124,3 +124,18 @@ object Codec:
     j.get("log").collect { case Json.Arr(xs) => xs.collect { case l: Json.Obj => PayLog(n(l, "at"), s(l, "by"),
       s(l, "what"), n(l, "amount"), Method.parse(s(l, "method")).getOrElse(Method.Other), s(l, "day")) } }
       .getOrElse(Vector.empty))
+
+  // ---- a review (specs/shop.md "Reviews")
+
+  def review(r: Review): Json.Obj = Json.obj("of" -> Json.str(r.of.key), "ref" -> Json.str(r.ref),
+    "service" -> Json.str(r.service), "master" -> Json.str(r.master), "rating" -> Json.num(r.rating),
+    "text" -> Json.str(r.text), "name" -> Json.str(r.name), "lang" -> Json.str(r.lang.code), "at" -> Json.num(r.at),
+    "reply" -> Json.str(r.reply), "replied" -> Json.num(r.replied), "hidden" -> Json.str(r.hidden),
+    "log" -> Json.Arr(r.log.map(l => Json.obj("at" -> Json.num(l.at), "who" -> Json.str(l.who),
+      "what" -> Json.str(l.what)))))
+
+  def review(j: Json.Obj): Review = Review(Of.parse(s(j, "of")).getOrElse(Of.Booking), s(j, "ref"), s(j, "service"),
+    s(j, "master"), n(j, "rating").toInt, s(j, "text"), s(j, "name"), Lang.parse(s(j, "lang")).getOrElse(Lang.pl),
+    n(j, "at"), s(j, "reply"), n(j, "replied"), s(j, "hidden"),
+    j.get("log").collect { case Json.Arr(xs) => xs.collect { case l: Json.Obj => ReviewLog(n(l, "at"), s(l, "who"),
+      s(l, "what")) } }.getOrElse(Vector.empty))
