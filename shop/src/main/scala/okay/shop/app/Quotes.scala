@@ -3,7 +3,7 @@ package okay.shop.app
 import okay.effects.json.Json
 import okay.scala3.*
 import okay.scala3.std.Clock
-import okay.serverless.cloud.{Request, Response}
+import okay.serverless.cloud.{Bytes, Request, Response}
 import okay.shop.effects.*
 import okay.shop.html.{Conf, Letters, QuotePage}
 import okay.shop.model.*
@@ -18,12 +18,14 @@ object Quotes:
     s"${c.origin}/${q.lang.code}/quote?ref=${okay.http.Query.encode(q.ref)}&k=${okay.http.Query.encode(q.key)}"
 
   def ask[R[_]](c: Conf, r: Request)(using In[Store, R], In[Mail, R], In[Captcha, R], In[Ids, R], In[Clock, R],
-    In[Notify, R]): Response ! R =
+    In[Notify, R], In[Media, R]): Response ! R =
     val f = Web.fields(r)
     def g(k: String, n: Int) = f.getOrElse(k, "").trim.take(n)
     val name = g("name", 120)
     val contact = g("contact", 200)
     val description = f.getOrElse("description", "").trim
+    // the client's photos, checked and cleaned once (specs/shop.md "Photos")
+    lazy val shots = photos(c, r)
     val offer = c.site.offer(g("service", 60)).filter(o => o.quote && !o.hidden)
     val mode = offer.flatMap(o => c.site.work.map(_.modesOf(o.key))).getOrElse(Vector.empty)
     val m = Mode.parse(g("mode", 20)).filter(mode.contains).orElse(mode.headOption)
@@ -39,6 +41,7 @@ object Quotes:
     else if description.isEmpty || description.length > 2000 then pure(Web.refused("description"))
     else if !f.get("rodo_consent").exists(v => v.nonEmpty && v != "false") then pure(Web.refused("consent"))
     else if Invoicing.asked(c, f).isLeft then pure(Web.refused(Invoicing.asked(c, f).left.toOption.get))
+    else if shots.isLeft then pure(Web.refused(shots.left.toOption.get))
     else address match
       case Left(why) => pure(Web.refused(why, if why == "area" then 409 else 400))
       case Right(where) => Clock.now[R].flatMap { now =>
@@ -49,8 +52,12 @@ object Quotes:
               else for
                 ref <- Ids.ref[R](c.site.refPrefix + "Q")
                 key <- Ids.secret[R]
+                pictures = shots.getOrElse(Vector.empty)
+                _ <- pictures.foldLeft(unit[R])((a, i) => a.flatMap(_ =>
+                  Media.keep[R](file(ref, i.file), Bytes(i.bytes), i.kind.contentType)))
                 q = Quote(ref, key, offer.get.key, name, contact, description, m, where, g("preferred", 200),
-                  Lang.parse(g("lang", 5)).getOrElse(c.site.lang), Consent(now, c.policy), now)
+                  Lang.parse(g("lang", 5)).getOrElse(c.site.lang), Consent(now, c.policy), now).copy(photos =
+                  pictures.map(i => Attachment(i.file, i.width, i.height, i.bytes.length)))
                 _ <- Store.ask[R](q)
                 _ <- Invoicing.keep[R]("quote", q.ref, Invoicing.asked(c, f).toOption.flatten)
                 _ <- Mail.toOwner[R](Letters.quoteOwner(c, q, "Новий запит на оцінку"))
@@ -62,17 +69,47 @@ object Quotes:
           }
         }
 
+  /** the most photos a quote takes */
+  val maxPhotos = 3
+
+  /** a quote's photo's private name */
+  def file(ref: String, f: String): String = s"quote/$ref/$f"
+
+  /** the client's photos (the JSON's `photos`, each `{data}` in base64), checked and cleaned: none when the site
+   * keeps none and none was sent; else `photos` (too many, or the site keeps none), `photo.type`, `photo.size` */
+  def photos(c: Conf, r: Request): Either[String, Vector[Image]] =
+    val sent = r.json.toOption.flatMap(_.field("photos")).collect { case Json.Arr(xs) => xs }.getOrElse(Vector.empty)
+    // base64's four characters a three bytes, and a data URL's prefix
+    val longest = Images.maxBytes / 3 * 4 + 200
+    if sent.isEmpty then Right(Vector.empty)
+    else if !c.site.photos || sent.size > maxPhotos then Left("photos")
+    else sent.foldLeft[Either[String, Vector[Image]]](Right(Vector.empty)) { (acc, p) =>
+      acc.flatMap { got =>
+        val data = p.field("data").collect { case Json.Str(v) => v }.getOrElse("")
+        val b64 = data.drop(data.indexOf(',') + 1)
+        if b64.length > longest then Left("photo.size")
+        else scala.util.Try(java.util.Base64.getDecoder.decode(b64)).toOption.toRight("photo.type")
+          .flatMap(b => Images.clean(b).left.map(why => if why == "size" then "photo.size" else "photo.type"))
+          .map(i => if got.exists(_.file == i.file) then got else got :+ i)
+      }
+    }
+
   /** the quote of the request's ref, when its key is right; else none */
   private def owned[R[_]](f: Map[String, String])(using In[Store, R]): Option[Quote] ! R =
     val ref = f.getOrElse("ref", "").trim.toUpperCase
     if ref.isEmpty then pure(None)
     else Store.quote[R](ref).map(_.filter(q => Api.same(q.key, f.getOrElse("k", f.getOrElse("key", "")))))
 
-  def page[R[_]](c: Conf, l: Lang, r: Request)(using In[Store, R]): Response ! R =
-    owned[R](Map("ref" -> r.param("ref").getOrElse(""), "k" -> r.param("k").getOrElse(""))).map {
-      case Some(q) => Web.page(QuotePage.page(c, l, q))
-      case None => Web.page(QuotePage.missing(c, l), 404)
+  def page[R[_]](c: Conf, l: Lang, r: Request)(using In[Store, R], In[Media, R]): Response ! R =
+    owned[R](Map("ref" -> r.param("ref").getOrElse(""), "k" -> r.param("k").getOrElse(""))).flatMap {
+      case Some(q) => links[R](q).map(ls => Web.page(QuotePage.page(c, l, q, ls)))
+      case None => pure(Web.page(QuotePage.missing(c, l), 404))
     }
+
+  /** a link to each of the quote's photos, made for the one who sees them */
+  def links[R[_]](q: Quote)(using In[Media, R]): Vector[String] ! R =
+    q.photos.foldLeft(pure[Vector[String], R](Vector.empty))((acc, a) => acc.flatMap(all =>
+      Media.link[R](file(q.ref, a.file)).map(all :+ _)))
 
   def decline[R[_]](c: Conf, r: Request)(using In[Store, R], In[Mail, R], In[Notify, R]): Response ! R =
     owned[R](Web.fields(r)).flatMap {
@@ -124,10 +161,13 @@ object Quotes:
 
   // ---- THE WORKSHOP'S
 
-  def list[R[_]](c: Conf)(using In[Store, R]): Response ! R =
-    Store.quotes[R](200).map(qs => Web.json(Json.obj("quotes" -> Json.Arr(qs.map(q => Json.Obj(
-      okay.shop.handlers.Codec.quote(q).fields :+ ("serviceName" -> Json.str(c.site.offer(q.service)
-        .map(_.name(Lang.pl)).getOrElse(q.service)))))))))
+  def list[R[_]](c: Conf)(using In[Store, R], In[Media, R]): Response ! R =
+    Store.quotes[R](200).flatMap(qs => qs.foldLeft(pure[Vector[Json], R](Vector.empty))((acc, q) =>
+      acc.flatMap(all =>
+      links[R](q).map(ls => all :+ Json.Obj(okay.shop.handlers.Codec.quote(q).fields ++ Vector(
+        "serviceName" -> Json.str(c.site.offer(q.service).map(_.name(Lang.pl)).getOrElse(q.service))) ++
+        Option.when(ls.nonEmpty)("links" -> Json.Arr(ls.map(Json.str))))))))
+      .map(all => Web.json(Json.obj("quotes" -> Json.Arr(all))))
 
   /** the workshop's answer: a price (zł), maybe up to a second, maybe a time (`2026-11-03 14:00`), a note */
   def reply[R[_]](c: Conf, f: Map[String, String])(using In[Store, R], In[Mail, R]): Response ! R =

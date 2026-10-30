@@ -46,12 +46,14 @@ final case class Offer(key: String, name: T, description: T, price: Long, order:
 
 /** A SITE: what its pages and letters say of it; `invoices`: its forms offer "Potrzebuję faktury" (specs/shop.md
  * "Invoices"); `reviews`: its clients asked for a review, `rated` what its storefront shows of them (specs/shop.md
- * "Reviews") */
+ * "Reviews"); `logo`, `gallery`: its pictures shown, `photos`: a quote may carry the client's photos (specs/shop.md
+ * "Photos") */
 final case class Site(id: String, slug: String, name: String, tagline: T, lang: Lang, logoText: String,
                       color: String, contact: T, kind: Kind, refPrefix: String, domain: String,
                       offers: Vector[Offer], schedule: Option[Schedule] = None, work: Option[Work] = None,
                       masters: Vector[Master] = Vector.empty, invoices: Boolean = false,
-                      reviews: Boolean = false, rated: Option[Rated] = None):
+                      reviews: Boolean = false, rated: Option[Rated] = None,
+                      logo: Option[Photo] = None, gallery: Vector[Photo] = Vector.empty, photos: Boolean = false):
   def clothing: Boolean = kind == Kind.Atelier
   /** whether `o` is booked here: it lasts, and the shop has a schedule — or, by its work, a mode with hours */
   def books(o: Offer): Boolean = work match
@@ -295,7 +297,8 @@ object QuoteStatus:
 final case class Quote(ref: String, key: String, service: String, name: String, contact: String,
                        description: String, mode: Option[Mode], address: Option[Address], preferred: String,
                        lang: Lang, consent: Consent, placed: Long, status: QuoteStatus = QuoteStatus.Asked,
-                       price: Long = 0, priceTo: Long = 0, start: Long = 0, note: String = "", result: String = ""):
+                       price: Long = 0, priceTo: Long = 0, start: Long = 0, note: String = "", result: String = "",
+                       photos: Vector[Attachment] = Vector.empty):
   def email: Option[String] = Contact.email(contact)
   /** `120 zł` or `120 zł – 200 zł` */
   def priced: String = if price <= 0 then "" else if priceTo > price then s"${Money.zl(price)} – ${Money.zl(priceTo)}"
@@ -316,3 +319,12 @@ final case class Booking(ref: String, key: String, service: String, master: Stri
   def overlaps(from: Long, until: Long): Boolean =
     active && start - before * 60000L < until && from < end + after * 60000L
   def email: Option[String] = Contact.email(contact)
+
+/** A PICTURE SHOWN on the storefront (specs/shop.md "Photos"): where the host serves it, its size, its words for
+ * those who cannot see it */
+final case class Photo(src: String, width: Int, height: Int, alt: T = T("", "", "", ""))
+
+/** A PICTURE KEPT PRIVATE with a quote (specs/shop.md "Photos"): its file (`<hash>.<ext>`), its size, its bytes' */
+final case class Attachment(file: String, width: Int, height: Int, size: Int):
+  def contentType: String = ImageKind.ofExt(file.dropWhile(_ != '.').drop(1)).fold("application/octet-stream")(
+    _.contentType)

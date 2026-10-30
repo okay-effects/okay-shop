@@ -1,5 +1,6 @@
 package okay.shop.page
 
+import okay.effects.json.Json
 import okay.scala3.+
 import okay.scala3.std.Async
 import okay.serverless.cloud.{Fetch, Port, WebJs}
@@ -37,8 +38,9 @@ object Site:
 
   private def fields(f: HTMLFormElement): Vector[(String, String)] =
     val out = Vector.newBuilder[(String, String)]
+    // a file is not a field: a quote's photos go as `photos` (`pictures`)
     js.Dynamic.newInstance(js.Dynamic.global.FormData)(f)
-      .forEach((v: js.Any, k: String) => out += k -> v.toString)
+      .forEach((v: js.Any, k: String) => if !v.isInstanceOf[dom.File] then out += k -> v.toString)
     out.result()
 
   /** Turnstile's widget, when the page has it (`typeof`: a page without its script has no such name at all) */
@@ -199,8 +201,12 @@ object Site:
       val fs = fields(f)
       val lang = fs.collectFirst { case ("lang", v) => v }.flatMap(Lang.parse).getOrElse(Lang.pl)
       val picks = f.querySelector("[data-slots]") != null
-      def sent = Async.start(Port.handle(WebJs.fetch)(Submit.send[Async + Fetch](dom.window.location.origin,
-        f.getAttribute("data-send"), fs)))(using queue).future
+      def sent = pictures(f).flatMap {
+        case Left(why) => scala.concurrent.Future.successful(Outcome.Refused(why))
+        case Right(ps) => Async.start(Port.handle(WebJs.fetch)(Submit.send[Async + Fetch](dom.window.location.origin,
+          f.getAttribute("data-send"), fs, if ps.isEmpty then Vector.empty else Vector("photos" -> Json.Arr(ps)))))(
+          using queue).future
+      }
       val chosen = !picks || fs.exists((k, v) => k == "start" && v.nonEmpty)
       // no answer at all — the network — is a refusal like the others: the form kept, said why
       (if chosen then sent else scala.concurrent.Future.successful(Outcome.Refused("start")))
@@ -215,6 +221,28 @@ object Site:
           dom.window.alert(Submit.refusal(lang, why))
       }
     }
+
+  /** a quote's photos (specs/shop.md "Photos"), checked as the server checks them — at most 3, JPEG, PNG or WebP,
+   * 5 MB each — and read as data URLs; none: none */
+  private def pictures(f: HTMLFormElement): scala.concurrent.Future[Either[String, Vector[Json]]] =
+    input(f, "input[type=file][data-photos]").fold(scala.concurrent.Future.successful(Right(Vector.empty))) { in =>
+      val files = (0 until in.files.length).map(in.files(_)).toVector
+      val kinds = Set("image/jpeg", "image/png", "image/webp")
+      val most = Option(in.getAttribute("data-photos")).flatMap(_.toIntOption).getOrElse(3)
+      if files.size > most then scala.concurrent.Future.successful(Left("photos"))
+      else if files.exists(x => !kinds(x.`type`)) then scala.concurrent.Future.successful(Left("photo.type"))
+      else if files.exists(_.size > 5 * 1024 * 1024) then scala.concurrent.Future.successful(Left("photo.size"))
+      else scala.concurrent.Future.sequence(files.map(read)).map(urls =>
+        Right(urls.map(u => Json.obj("data" -> Json.str(u)))))
+    }
+
+  private def read(file: dom.File): scala.concurrent.Future[String] =
+    val p = scala.concurrent.Promise[String]()
+    val r = new dom.FileReader()
+    r.onload = _ => p.success(r.result.asInstanceOf[String])
+    r.onerror = _ => p.failure(RuntimeException("read"))
+    r.readAsDataURL(file)
+    p.future
 
   /** a booking's done panel: the ref, the time, the link that manages it */
   private def booked(f: HTMLFormElement, ref: String, l: Lang, when: String, manage: String): Unit =

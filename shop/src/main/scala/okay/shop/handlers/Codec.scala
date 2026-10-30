@@ -90,20 +90,25 @@ object Codec:
   private def address(j: Json.Obj, k: String): Option[Address] = j.get(k).collect { case a: Json.Obj =>
     Address(s(a, "name"), s(a, "street"), s(a, "postcode"), s(a, "city"), s(a, "notes"), s(a, "map")) }
 
-  def quote(q: Quote): Json.Obj = Json.obj("ref" -> Json.str(q.ref), "key" -> Json.str(q.key),
+  /** a quote; its photos only when it has some (an old quote's JSON as before) */
+  def quote(q: Quote): Json.Obj = Json.Obj(Json.obj("ref" -> Json.str(q.ref), "key" -> Json.str(q.key),
     "service" -> Json.str(q.service), "name" -> Json.str(q.name), "contact" -> Json.str(q.contact),
     "description" -> Json.str(q.description), "mode" -> Json.str(q.mode.fold("")(_.key)),
     "address" -> q.address.fold(Json.Null)(address), "preferred" -> Json.str(q.preferred),
     "lang" -> Json.str(q.lang.code), "consentAt" -> Json.num(q.consent.at), "policy" -> Json.str(q.consent.policy),
     "placed" -> Json.num(q.placed), "status" -> Json.str(q.status.key), "price" -> Json.num(q.price),
     "priceTo" -> Json.num(q.priceTo), "start" -> Json.num(q.start), "note" -> Json.str(q.note),
-    "result" -> Json.str(q.result))
+    "result" -> Json.str(q.result)).fields ++ Option.when(q.photos.nonEmpty)("photos" -> Json.Arr(q.photos.map(a =>
+      Json.obj("file" -> Json.str(a.file), "width" -> Json.num(a.width), "height" -> Json.num(a.height),
+        "size" -> Json.num(a.size))))))
 
   def quote(j: Json.Obj): Quote = Quote(s(j, "ref"), s(j, "key"), s(j, "service"), s(j, "name"), s(j, "contact"),
     s(j, "description"), Mode.parse(s(j, "mode")), address(j, "address"), s(j, "preferred"),
     Lang.parse(s(j, "lang")).getOrElse(Lang.pl), Consent(n(j, "consentAt"), s(j, "policy")), n(j, "placed"),
     QuoteStatus.parse(s(j, "status")).getOrElse(QuoteStatus.Asked), n(j, "price"), n(j, "priceTo"), n(j, "start"),
-    s(j, "note"), s(j, "result"))
+    s(j, "note"), s(j, "result"), j.get("photos").collect { case Json.Arr(xs) => xs.collect { case a: Json.Obj =>
+      Attachment(s(a, "file"), n(a, "width").toInt, n(a, "height").toInt, n(a, "size").toInt) } }
+      .getOrElse(Vector.empty))
 
   // ---- a payment (specs/shop.md "Money")
 

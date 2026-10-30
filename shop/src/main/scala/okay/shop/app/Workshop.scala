@@ -20,7 +20,7 @@ object Workshop:
   val cookie: String = Desk().cookie
 
   def answer[R[_]](c: Conf, r: Request, path: List[String])(using In[Store, R], In[Mail, R], In[Captcha, R],
-    In[Ids, R], In[Clock, R]): Response ! R =
+    In[Ids, R], In[Clock, R], In[Media, R]): Response ! R =
     (r.method, path) match
       case ("POST", List("link")) => link(c, r)
       case ("GET", List("enter")) => pure(enterPage(c, r.param("t").getOrElse("")))
@@ -107,7 +107,7 @@ border:0;border-radius:12px;background:#2a1f14;color:#fff;cursor:pointer}</style
   // ---- SIGNED IN
 
   private def signedIn[R[_]](c: Conf, r: Request, path: List[String], email: String, now: Long)(using In[Store, R],
-    In[Mail, R], In[Ids, R], In[Clock, R]): Response ! R =
+    In[Mail, R], In[Ids, R], In[Clock, R], In[Media, R]): Response ! R =
     // the invoices' calls (specs/shop.md "Invoices")
     Invoicing.desk[R](c, r, path, email, now).getOrElse((r.method, path) match
       case ("GET", List("me")) => pure(ok(Json.obj("email" -> Json.str(email))))

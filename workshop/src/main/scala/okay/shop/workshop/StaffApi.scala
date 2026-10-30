@@ -42,7 +42,7 @@ object StaffApi:
       case Staff.Unbook(ref) => post("booking/cancel", "ref" -> ref)
         .map(r => read(r)(o => o.get("sent").contains(Json.Bool(true))))
       case Staff.Quotes() => get("quotes").map(r => read(r)(o => arr(o, "quotes").collect { case j: Json.Obj =>
-        Codec.quote(j) -> str(j, "serviceName") }))
+        (Codec.quote(j), str(j, "serviceName"), arr(j, "links").collect { case Json.Str(v) => v }) }))
       case Staff.Reply(ref, price, priceTo, start, note) => post("quote/reply", "ref" -> ref, "price" -> price,
         "priceTo" -> priceTo, "start" -> start, "note" -> note)
         .map(r => read(r)(o => o.get("sent").contains(Json.Bool(true))))

@@ -19,7 +19,7 @@ object Api:
   val tenMinutes: Long = 10 * 60 * 1000L
 
   def answer[R[_]](c: Conf, r: Request)(using In[Store, R], In[Mail, R], In[Captcha, R], In[Ids, R], In[Clock, R],
-    In[Notify, R]): Response ! R =
+    In[Notify, R], In[Media, R]): Response ! R =
     val parts = r.path.split('/').toList.filter(_.nonEmpty)
     val desk = c.desk.path.split('/').toList.filter(_.nonEmpty) :+ "api"
     (r.method, parts) match

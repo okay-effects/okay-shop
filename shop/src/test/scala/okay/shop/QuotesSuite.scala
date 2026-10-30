@@ -76,3 +76,49 @@ class QuotesSuite extends munit.FunSuite:
     }, Vector(s"asked ${a("ref")}", s"decided ${a("ref")} true $order", s"asked ${b("ref")}",
       s"decided ${b("ref")} false "))
   }
+
+  // ---- PHOTOS (specs/shop.md "Photos")
+
+  private def withPhotos(w: World, photos: Seq[Array[Byte]], fields: (String, String)*) =
+    import okay.effects.json.Json
+    val base = Map("service" -> "fix", "name" -> "Anna", "contact" -> "anna@example.com",
+      "description" -> "Cieknie kran w kuchni", "street" -> "ul. Kwiatowa 7", "postcode" -> "00-950",
+      "city" -> "Warszawa", "rodo_consent" -> "on", "lang" -> "pl", "cf-turnstile-response" -> "token") ++ fields
+    w.postJson("/api/quote", Json.Obj(base.toVector.map((k, v) => k -> Json.str(v)) :+ ("photos" -> Json.Arr(
+      photos.toVector.map(p => Json.obj("data" -> Json.str("data:image/jpeg;base64," +
+        java.util.Base64.getEncoder.encodeToString(p))))))))
+
+  test("photos: kept cleaned and private, linked for the client and the staff; the quote's form asks for them") {
+    val w = World("visits", edit = _.copy(photos = true))
+    val j = w.json(withPhotos(w, Seq(TestImages.jpeg, TestImages.png, TestImages.jpeg)))
+    assert(j.contains("ref"), j)
+    // the same picture twice is one; each cleaned, by its hash
+    assertEquals(w.files.keySet.map(_.split('/').take(2).mkString("/")), Set(s"quote/${j("ref")}"))
+    assertEquals(w.files.size, 2)
+    val (jpg, kind) = w.files.find(_._1.endsWith(".jpg")).get._2
+    assertEquals(kind, "image/jpeg")
+    assert(!String(jpg.toArray, "ISO-8859-1").contains("GPS"))
+    val page = w.get(s"/pl/quote?ref=${j("ref")}&k=${j("key")}").text
+    assert(page.contains("Zdjęcia") && page.contains(s"""<img src="/media/quote/${j("ref")}/""") &&
+      page.contains("""width="20" height="30""""), page)
+    val staff = WorkshopApiSuite().signedIn(w)
+    val listed = staff.get("/workshop/api/quotes").text
+    assert(listed.contains(""""links":["/media/quote/""") && listed.contains(""""photos":[{"file":"""), listed)
+    val pages = StaticPages.of(Fixtures.site("visits").copy(photos = true), OldPages.Plain, "K").toMap
+    assert(pages("pl/offer/fix/index.html").contains("""<input type="file" name="photos""""))
+    assert(!StaticPages.of(Fixtures.site("visits"), OldPages.Plain, "K").toMap.apply("pl/offer/fix/index.html")
+      .contains("type=\"file\""))
+  }
+
+  test("photos refused: more than 3, a GIF or an SVG, too large, or a site that keeps none — nothing kept") {
+    val w = World("visits", edit = _.copy(photos = true))
+    assertEquals(w.json(withPhotos(w, Seq.fill(4)(TestImages.png)))("error"), "photos")
+    assertEquals(w.json(withPhotos(w, Seq(TestImages.gif)))("error"), "photo.type")
+    assertEquals(w.json(withPhotos(w, Seq(TestImages.svg)))("error"), "photo.type")
+    assertEquals(w.json(withPhotos(w, Seq(TestImages.jpeg.take(50))))("error"), "photo.type")
+    assertEquals(w.json(withPhotos(w, Seq(Array.fill(5 * 1024 * 1024 + 10)(1.toByte))))("error"), "photo.size")
+    assertEquals(w.files.size, 0)
+    assertEquals(w.letters.size, 0)
+    val plain = visits
+    assertEquals(plain.json(withPhotos(plain, Seq(TestImages.png)))("error"), "photos")
+  }

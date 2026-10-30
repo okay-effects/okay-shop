@@ -21,8 +21,10 @@ object Submit:
     /** refused, and why: `name`, `contact`, `consent`, `captcha`, `limit`, … — or the network */
     case Refused(why: String)
 
-  def send[R[_]](base: String, kind: String, fields: Vector[(String, String)])(using In[Fetch, R]): Outcome ! R =
-    val body = Json.print(Json.Obj(fields.map((k, v) => k -> Json.str(v))))
+  /** a form's fields sent as JSON, with `extra` values beside them (a quote's `photos`) */
+  def send[R[_]](base: String, kind: String, fields: Vector[(String, String)], extra: Vector[(String, Json)] =
+    Vector.empty)(using In[Fetch, R]): Outcome ! R =
+    val body = Json.print(Json.Obj(fields.map((k, v) => k -> Json.str(v)) ++ extra))
     Fetch[R](base, Request.post(s"/api/$kind", body))
       .map { r =>
         val j = Descent.parse(r.text).toOption.collect { case o: Json.Obj => o }
@@ -127,6 +129,11 @@ object Submit:
         "inny.", "No seats left at that time — please choose another.",
         "Місць на цей час уже немає — оберіть інший.")(l)
     case "description" => T("Опишите работу.", "Opisz pracę.", "Please describe the job.", "Опишіть роботу.")(l)
+    case "photos" => T("Не больше 3 фото.", "Najwyżej 3 zdjęcia.", "At most 3 photos.", "Не більше 3 фото.")(l)
+    case "photo.type" => T("Фото — только JPEG, PNG или WebP.", "Zdjęcia — tylko JPEG, PNG lub WebP.",
+        "Photos — JPEG, PNG or WebP only.", "Фото — лише JPEG, PNG або WebP.")(l)
+    case "photo.size" => T("Фото — не больше 5 МБ каждое.", "Zdjęcia — najwyżej 5 MB każde.",
+        "Photos — at most 5 MB each.", "Фото — не більше 5 МБ кожне.")(l)
     case "master" => T("Этот мастер не делает эту услугу так — выберите другого.", "Ten specjalista nie wykonuje " +
         "tej usługi w ten sposób — wybierz innego.", "That master does not do this service this way — choose another.",
         "Цей майстер не робить цю послугу так — оберіть іншого.")(l)

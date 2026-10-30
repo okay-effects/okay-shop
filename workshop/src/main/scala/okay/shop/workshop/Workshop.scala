@@ -425,14 +425,14 @@ object Workshop:
   // ---- THE INQUIRIES FOR A QUOTE (specs/shop.md "Inquiry and quote")
 
   private enum OnQuotes:
-    case Open(q: (Quote, String))
+    case Open(q: (Quote, String, Vector[String]))
     case Back
 
   def quotes[R[_]: Has[Ui]: Has[Staff]: Has[Human]](site: Shown, said: Option[Part]): Unit ! R =
     Staff.quotes[R].flatMap {
       case Left(why) => orders[R](site, Some(refusal(why)))
       case Right(qs) =>
-        type Q = (Quote, String)
+        type Q = (Quote, String, Vector[String])
         val table = Table(qs.toList)(Column.text[Q]("Коли")(q => Day.time(q._1.placed)),
           Column.text[Q]("Послуга")(_._2), Column.text[Q]("Клієнт")(_._1.name),
           Column.text[Q]("Стан")(_._1.status.label(uk)), Column.text[Q]("Ціна")(_._1.priced),
@@ -440,7 +440,7 @@ object Workshop:
         show[OnQuotes, R](Screen[OnQuotes](s"Запити ціни · ${site.name}")((said.toSeq :+ table)*)(
           Button.select("Відкрити", table)(OnQuotes.Open(_)), Button("Назад")(OnQuotes.Back))).flatMap {
           case OnQuotes.Back => orders[R](site, None)
-          case OnQuotes.Open(q) => quote[R](site, q._1, q._2)
+          case OnQuotes.Open(q) => quote[R](site, q._1, q._2, q._3)
         }
     }
 
@@ -448,16 +448,20 @@ object Workshop:
     case Sent(price: String, priceTo: String, start: String, note: String)
     case Back
 
-  private def quote[R[_]: Has[Ui]: Has[Staff]: Has[Human]](site: Shown, q: Quote, service: String): Unit ! R =
+  private def quote[R[_]: Has[Ui]: Has[Staff]: Has[Human]](site: Shown, q: Quote, service: String,
+    links: Vector[String]): Unit ! R =
     val details = Part.details(Seq("Послуга" -> service, "Опис" -> q.description, "Бажані дати" -> q.preferred,
       "Як" -> q.mode.fold("")(_.label(uk)), "Адреса" -> q.address.fold("")(_.line),
       "Примітки" -> q.address.fold("")(_.notes), "Клієнт" -> q.name, "Контакт" -> q.contact,
       "Стан" -> q.status.label(uk), "Ціна" -> q.priced, "Коли" -> (if q.start > 0 then Day.time(q.start) else ""),
       "Коментар" -> q.note, "Стало" -> q.result).filter(_._2.nonEmpty)*)
+    // the client's photos (specs/shop.md "Photos"): a link each, made for the staff signed in
+    val photos = links.zipWithIndex.map((u, i) => Part.link(s"Фото ${i + 1}", u))
     val open = q.status == QuoteStatus.Asked || q.status == QuoteStatus.Quoted
     val form = Form((Field.text("Ціна, zł").keyed("price"), Field.text("До, zł (діапазон)").keyed("priceTo"),
       Field.text("Час (2026-11-03 14:00)").keyed("start"), Field.longText("Коментар").keyed("note")))
-    show[OnQuote, R](Screen[OnQuote](s"${q.ref} · ${q.name}")((Seq(details) ++ Option.when(open)(form))*)(
+    val parts = Seq(details) ++ photos ++ Option.when(open)(form)
+    show[OnQuote, R](Screen[OnQuote](s"${q.ref} · ${q.name}")(parts*)(
       ((if open then Seq(Button.submit("Надіслати оцінку", form)((p, t, w, n) => OnQuote.Sent(p, t, w, n)))
         else Nil) :+
         Button("Назад")(OnQuote.Back))*)).flatMap {

@@ -42,7 +42,7 @@ enum Staff[X]:
   /** a booking cancelled by the staff: whether its client was mailed */
   case Unbook(ref: String) extends Staff[Either[String, Boolean]]
   /** the inquiries for a quote, newest first, each with its service's name */
-  case Quotes() extends Staff[Either[String, Vector[(Quote, String)]]]
+  case Quotes() extends Staff[Either[String, Vector[(Quote, String, Vector[String])]]]
   /** the workshop's quote: a price (zł), maybe up to a second, maybe a time (`2026-11-03 14:00`), a note; whether the
    * client was mailed */
   case Reply(ref: String, price: String, priceTo: String, start: String, note: String)
@@ -76,7 +76,7 @@ object Staff:
   def out[R[_]: Has[Staff]]: Unit ! R = perform[Staff](Out())
   def bookings[R[_]: Has[Staff]]: Either[String, (Vector[Booked], Boolean)] ! R = perform[Staff](Bookings())
   def unbook[R[_]: Has[Staff]](ref: String): Either[String, Boolean] ! R = perform[Staff](Unbook(ref))
-  def quotes[R[_]: Has[Staff]]: Either[String, Vector[(Quote, String)]] ! R = perform[Staff](Quotes())
+  def quotes[R[_]: Has[Staff]]: Either[String, Vector[(Quote, String, Vector[String])]] ! R = perform[Staff](Quotes())
   def reply[R[_]: Has[Staff]](ref: String, price: String, priceTo: String, start: String, note: String)
     : Either[String, Boolean] ! R = perform[Staff](Reply(ref, price, priceTo, start, note))
   def more[R[_]: Has[Staff]]: Vector[(String, String)] ! R = perform[Staff](More())

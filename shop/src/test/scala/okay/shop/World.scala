@@ -34,12 +34,15 @@ final class World(val id: String = "atelier", var human: Boolean = true,
 
   /** the notices the shop gave (specs/shop.md "Notices") */
   val notices: scala.collection.mutable.Buffer[Notice] = scala.collection.mutable.Buffer.empty
-  type W[X] = (Pure + Storage + Store + Ids + Captcha + Mail + Clock + Notify)[X]
+  /** the private files kept (specs/shop.md "Photos"): by name, their bytes and type */
+  val files: scala.collection.mutable.Map[String, (okay.serverless.cloud.Bytes, String)] =
+    scala.collection.mutable.Map.empty
+  type W[X] = (Pure + Storage + Store + Ids + Captcha + Mail + Clock + Notify + Media)[X]
 
   def ask(r: Request): Response =
     seed += 1
     val (kept, (_, res)) = run(storage.handler(StoreDurable.run(Ids.seeded(seed)(Captcha.always(human)(Mail.kept()(
-      Clock.virtual(now)(Notify.kept(notices)(Api.answer[W](conf, r)))))))))
+      Clock.virtual(now)(Notify.kept(notices)(Media.kept(files)(Api.answer[W](conf, r))))))))))
     letters ++= kept
     res
 
@@ -48,7 +51,7 @@ final class World(val id: String = "atelier", var human: Boolean = true,
     storage.alarm = None
     seed += 1
     val (kept, (_, n)) = run(storage.handler(StoreDurable.run(Ids.seeded(seed)(Captcha.always(human)(Mail.kept()(
-      Clock.virtual(now)(Notify.kept(notices)(Bookings.remind[W](conf)))))))))
+      Clock.virtual(now)(Notify.kept(notices)(Media.kept(files)(Bookings.remind[W](conf))))))))))
     letters ++= kept
     n
 
@@ -65,6 +68,9 @@ final class World(val id: String = "atelier", var human: Boolean = true,
   def post(path: String, fields: (String, String)*): Response =
     ask(at(Request.post(path, Json.print(Json.Obj(fields.toVector.map((k, v) => k -> Json.str(v))))),
       "cf-connecting-ip" -> "1.2.3.4"))
+  /** a JSON body as it is (a quote's photos: an array) */
+  def postJson(path: String, j: Json): Response =
+    ask(at(Request.post(path, Json.print(j)), "cf-connecting-ip" -> "1.2.3.4"))
   def form(path: String, fields: (String, String)*): Response =
     ask(at(Request.post(path, Query.print(fields.toMap.map((k, v) => k -> List(v))),
       "application/x-www-form-urlencoded"), "cf-connecting-ip" -> "1.2.3.4"))

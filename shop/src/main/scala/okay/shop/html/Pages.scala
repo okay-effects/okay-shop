@@ -86,12 +86,12 @@ $switchStyle
     val cards = if ordered.isEmpty then s"""<p class="offer-desc">${t("Скоро.", "Wkrótce.", "Coming soon.",
       "Незабаром.")}</p>""" else ordered.map(serviceCard).mkString
     val seo = look.seo(site)
-    s"""${head(at, seo.title, seo.description, storefrontStyle(look.theme, site.color),
+    s"""${head(at, seo.title, seo.description, storefrontStyle(look.theme, site.color) + Gallery.style(site),
       seo.head + ReviewPage.structured(site))}
   <div class="bg"><i class="seam s1"></i><i class="seam s2"></i><i class="seam s3"></i></div>
   <div class="glow"></div>
   <div class="wrap">
-    <div class="top"><span class="mark">${e(site.logoText)}</span>${switch(at)}</div>
+    <div class="top"><span class="mark">${Gallery.logo(site) + e(site.logoText)}</span>${switch(at)}</div>
     <section class="hero">
       ${look.kicker}
       <h1 class="headline">${tt(site.tagline)}</h1>
@@ -106,7 +106,7 @@ $switchStyle
         "Gotowe oferty", "Ready-made offers", "Готові пропозиції")}</p>
       $cards
     </section>
-    ${look.sections(at)}${ReviewPage.block(site)}
+    ${look.sections(at)}${Gallery.block(site)}${ReviewPage.block(site)}
     <section class="contact" id="contact">
       <p class="label">${t("Связаться", "Kontakt", "Contact", "Звʼязатися")}</p>
       <p class="body">${tt(site.contact)}</p>
@@ -186,12 +186,13 @@ $scripts
       else s"""<span class="chip">${t("Обсудим объём и сроки до старта", "Omówimy zakres i terminy przed startem",
         "We agree scope and timing before we start", "Обговоримо обсяг і терміни до старту")}</span>"""
     val title = s"${o.name(l)} · ${site.name}"
+    val mark = Gallery.logo(site) + e(site.logoText)
     s"""${head(at, title, if o.description(l).nonEmpty then o.description(l) else site.tagline(l),
-      storefrontStyle(look.theme, site.color))}
+      storefrontStyle(look.theme, site.color) + Gallery.style(site))}
   <div class="bg"><i class="seam s1"></i><i class="seam s2"></i><i class="seam s3"></i></div>
   <div class="glow"></div>
   <div class="wrap">
-    <div class="top"><a class="mark" href="/${l.code}/">← ${e(site.logoText)}</a>${switch(at)}</div>
+    <div class="top"><a class="mark" href="/${l.code}/">← $mark</a>${switch(at)}</div>
     <section class="hero" style="padding: 12vh 0 5vh">
       <p class="label">${t("Готовое предложение", "Gotowa oferta", "Ready-made offer", "Готова пропозиція")}</p>
       <h1 class="headline">${tt(o.name)}</h1>
@@ -401,7 +402,7 @@ color:var(--mist);margin:0 0 6px}</style>
             "Що потрібно зробити?")}</span><textarea name="description" maxlength="2000" required></textarea></label>
           <label class="fld"><span>${t("Удобные даты", "Dogodne terminy", "Dates that suit you", "Зручні дати")
             }</span><input name="preferred" maxlength="200"></label>
-          $address
+          $address${Gallery.photoField(site)}
           $contactFields
           ${invoiceFields(site.invoices)}${rodoConsent(site.slug)}
           ${turnstile(at.sitekey)}

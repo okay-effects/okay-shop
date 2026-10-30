@@ -179,7 +179,7 @@ with a quote; the client accepts or declines by their link.
   rodo_consent, lang, turnstile}`): the description (1–2000 characters), the mode and the address when the service
   is at the client's (the area checked as a booking's), the preferred dates in the client's words; Turnstile, 5 per IP
   in 10 minutes, the consent kept. Answered `{ref, key, manage}`; the client mailed the link to its page, the owner
-  the inquiry. Text only: no photos (no blob store in the engine yet).
+  the inquiry. Up to 3 photos when the host keeps them ("Photos" below).
 - **Quoted** by the workshop (`POST /workshop/api/quote/reply {ref, price, priceTo, start, note}`): a price, or a
   range (`price`–`priceTo`), optionally a proposed time (an instant) and a note; the client mailed. The workshop's
   list (`GET /workshop/api/quotes`): every inquiry with its status — asked, quoted, accepted, declined.
@@ -668,6 +668,48 @@ why not is logged — the status and the provider's error name, never an address
   (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`).
 - A site's Worker (`ShopWorker`) reads `MAIL_CLIENT`, `RESEND_API_KEY` as the rest: a site that sets neither behaves
   as before. Tests: `MailCloudSuite` (a fake HTTP: the request, the key per letter, the refusals and the log).
+
+## Photos: the logo, the gallery, a quote's photos (operator, 2026-10-30)
+
+A shop shows its logo and its work; a client shows the job to be quoted. The engine gives the model, the checks, the
+markup and the quote's attachments as data; where the files live and who uploads the logo and the gallery is the
+host's (the mall: R2 and its workshop screens).
+
+- **An image accepted** (`Images.clean(bytes, max)`, pure, the same on the JVM and in a Worker): JPEG, PNG or WebP
+  ONLY, known by its first bytes (magic), never by its name or the type it claims; at most `max` bytes (5 MB);
+  its width and height read from its own header (JPEG's SOF, PNG's IHDR, WebP's VP8/VP8L/VP8X); anything else —
+  GIF, SVG, HTML, a PDF, a truncated or malformed file — refused (`type`, `broken`, `size`). Its METADATA STRIPPED
+  without decoding the picture (no codec runs in a Worker, so no re-encoding): JPEG — every APPn segment but APP0
+  (JFIF), APP2 `ICC_PROFILE` and APP14 (Adobe colour), and every comment, dropped: EXIF (camera, GPS, time), XMP,
+  IPTC/Photoshop; the EXIF orientation kept as a minimal EXIF of that one tag (so a phone's portrait photo stays
+  upright), the size given as shown; PNG — only IHDR, PLTE, IDAT, IEND, tRNS, cHRM, gAMA, iCCP, sBIT, sRGB, bKGD,
+  pHYs, cICP and APNG's acTL, fcTL, fdAT kept (text, eXIf, tIME and anything unknown dropped); WebP — EXIF, XMP and
+  unknown chunks dropped, VP8X's EXIF and XMP flags cleared, the RIFF size fixed. Its name is the SHA-256 of the
+  cleaned bytes (20 hex) and its kind's extension: `<hash>.jpg|png|webp`; its content type from the kind, never the
+  client's.
+- **The model**: `Photo(src, width, height, alt: T)` (a picture shown; `src` the host's path); `Site.logo:
+  Option[Photo]`, `Site.gallery: Vector[Photo]` (none, none: every page byte for byte as before); `Site.photos`
+  (the host keeps a quote's photos; off: the quote form as before, photos sent refused).
+- **The storefront**: the logo in the header's mark, before the logo text (storefront and offer pages; `alt` the
+  site's name, its width and height given, at most 40 px high); "Nasze prace · Our work · Наши работы · Наші
+  роботи" (`Gallery.block`) after the look's sections and before the reviews when the gallery has photos: a grid,
+  each picture `loading="lazy" decoding="async"` with its width, height and alt in the page's language (the site's
+  own language's when that one is empty), a link to the full picture. Its style added to the page only then.
+- **A quote's photos** (specs "Inquiry and quote"): with `Site.photos` the form has a file field (up to 3, JPEG, PNG
+  or WebP, 5 MB each; the page's script checks them first and sends each as base64 in the JSON's `photos`, an array
+  of `{data}`); `POST /api/quote` refuses more than 3 (`photos`), a wrong kind (`photo.type`), a broken file
+  (`photo.type`), one too large (`photo.size`) — before Turnstile and the limit are spent nothing is kept. Each
+  cleaned picture KEPT PRIVATE by the `Media` effect (`Media.keep(name, bytes, type)`; the name
+  `quote/<ref>/<hash>.<ext>`), the quote keeping `photos` (`Attachment`: file, width, height, size). Shown ONLY by a
+  link the host makes for that viewer (`Media.link(name)`: the mall's is signed and expires) — on the client's quote
+  page (its key checked as before) and in the workshop's list (`GET <desk>/api/quotes`: `links` beside each
+  quote, the staff signed in), the workshop's quote screen a link a photo. Never on a public page.
+- **Handlers**: `Media.none` (a site on its own Worker: `Site.photos` off, nothing kept, no link) and `Media.kept`
+  (in memory, tests: the link `/media/<name>`); the host's onto its blob store (the mall: okay-serverless' `Blobs`).
+- Tests: `ImagesSuite` (each kind's metadata gone and the picture's bytes kept, the orientation kept, the sizes, GIF,
+  SVG, HTML and broken files refused), `GallerySuite` (the logo and the gallery drawn, escaped, lazy; none: the same
+  bytes), `QuotesSuite` (photos kept and linked for the client and the staff only; too many, wrong kind, too large
+  refused; a site without photos refuses them).
 
 ## Open core (operator, 2026-10-29)
 

@@ -10,7 +10,8 @@ object QuotePage:
   private def e(s: String) = Html.escape(s)
   private val title = T("Ваш запрос", "Twoje zapytanie", "Your inquiry", "Ваш запит")
 
-  def page(c: Conf, l: Lang, q: Quote): String =
+  /** the page; `links` a link to each of its photos, made for this client (specs/shop.md "Photos") */
+  def page(c: Conf, l: Lang, q: Quote, links: Vector[String] = Vector.empty): String =
     def w(t: T) = e(t(l))
     val service = c.site.offer(q.service).map(_.name(l)).getOrElse(q.service)
     def row(k: T, v: String) = if v.isEmpty then "" else
@@ -32,7 +33,7 @@ ${form("decline", T("Отклонить", "Odrzucam", "Decline", "Відхили
     ${row(T("Где", "Gdzie", "Where", "Де"), q.address.fold("")(_.line))}
     ${row(T("Цена", "Cena", "Price", "Ціна"), q.priced)}
     ${row(T("Когда", "Kiedy", "When", "Коли"), if q.start > 0 then Day.time(q.start) else "")}
-    ${row(T("Комментарий", "Uwagi", "Note", "Коментар"), q.note)}
+    ${row(T("Комментарий", "Uwagi", "Note", "Коментар"), q.note)}${photos(l, q, links)}
     <div class="ref" style="margin-top:8px">${e(q.ref)}</div>
   </div>
 $decide
@@ -44,3 +45,13 @@ $decide
       "письма.", "Nie znaleziono zapytania — sprawdź link z wiadomości.", "No such inquiry — check the link in the " +
       "letter.", "Запит не знайдено — перевірте посилання з листа.")(l))}</div></div></body></html>
 """
+
+  /** the client's photos, each a small picture linking to itself; none: nothing */
+  def photos(l: Lang, q: Quote, links: Vector[String]): String =
+    if links.isEmpty then "" else
+      val word = T("Фото", "Zdjęcie", "Photo", "Фото")(l)
+      s"""<div class="label" style="margin-top:10px">${e(T("Фото", "Zdjęcia", "Photos", "Фото")(l))}</div>
+    <div class="val" style="display:flex;gap:8px;flex-wrap:wrap">${q.photos.zip(links).zipWithIndex.map {
+        case ((a, href), i) => s"""<a href="${e(href)}" target="_blank" rel="noopener"><img src="${e(href)}" width="${
+          a.width}" height="${a.height}" alt="${e(s"$word ${i + 1}")}" loading="lazy" style="width:120px;height:auto;
+border-radius:8px"></a>""" }.mkString}</div>"""
