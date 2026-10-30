@@ -42,7 +42,8 @@ class MailCloudSuite extends munit.FunSuite:
   private val note = Note("Potwierdzenie TST-1", "<p>Dziękujemy</p>", "Dziękujemy", Some("atelier@example.com"))
 
   /** the letters each binding took (`CLIENT_MAIL` refusing: an unverified destination), Brevo's requests, the log */
-  private def sending(m: Mailing, relay: Relay = Relay())(p: Boolean ! C)
+  private def sending(m: Mailing, relay: Relay = Relay(), reply: Response = Response(201, Map.empty, "{}"))(
+    p: Boolean ! C)
     : (Boolean, Vector[(String, Letter)], Vector[Request], List[String]) =
     var letters = Vector.empty[(String, Letter)]
     var asked = Vector.empty[Request]
@@ -64,7 +65,7 @@ class MailCloudSuite extends munit.FunSuite:
         case Tcp.Close(_) => ()))
     val fetched = handle(connected, Handler.tail[Fetch, Pure + Log, Boolean, Boolean](pure)([X] => (op: Fetch[X]) =>
       op match
-        case okay.http.Fetch.Send(_, r, answer) => asked :+= r; answer(Response(201, Map.empty, "{}"))
+        case okay.http.Fetch.Send(_, r, answer) => asked :+= r; answer(reply)
         case okay.http.Fetch.Call(_, _, _, _, answer) => answer(Response(500, Map.empty, ""))))
     val (log, sent) = run(Log.collect[Pure + Log, Pure, Boolean](Level.Debug)(fetched))
     (sent, letters, asked, log.map(_.toString))
@@ -117,4 +118,46 @@ class MailCloudSuite extends munit.FunSuite:
     val (none, _, _, log) = sending(cloudflare.copy(client = "brevo"))(Mail.toClient[C]("anna@example.com", note))
     assert(!none)
     assert(log.exists(_.contains("no BREVO_API_KEY")), log)
+  }
+
+  test("a client by Resend: its API asked with the key, the name, the reply-to, a key per letter; no key: said why") {
+    val resend = cloudflare.copy(client = "resend", resendKey = Some("re_k"))
+    val (sent, letters, asked, _) = sending(resend, reply = Response(200, Map.empty, "{\"id\":\"x\"}"))(
+      Mail.toClient[C]("anna@example.com", note))
+    assert(sent)
+    assert(letters.isEmpty)
+    val r = asked.head
+    assertEquals((r.path, r.header("authorization")), ("/emails", Some("Bearer re_k")))
+    val body = okay.effects.json.Descent.parse(r.text).toOption.get.asInstanceOf[okay.effects.json.Json.Obj]
+    def str(k: String) = body.get(k).collect { case okay.effects.json.Json.Str(s) => s }
+    assertEquals(str("from"), Some("Test Atelier <atelier@example.com>"))
+    assertEquals(str("reply_to"), Some("atelier@example.com"))
+    assertEquals((str("subject"), str("html"), str("text")), (Some(note.subject), Some(note.html), Some(note.text)))
+    assert(r.text.contains("\"to\":[\"anna@example.com\"]"), r.text)
+    // the same letter, the same key; another letter, another
+    val key = r.header("idempotency-key").get
+    val (_, _, again, _) = sending(resend)(Mail.toClient[C]("anna@example.com", note))
+    assertEquals(again.head.header("idempotency-key"), Some(key))
+    val (_, _, other, _) = sending(resend)(Mail.toClient[C]("anna@example.com", note.copy(subject = "Inny")))
+    assertNotEquals(other.head.header("idempotency-key"), Some(key))
+    assert(key.length <= 256 && key.startsWith("okay-"))
+    val (none, _, _, log) = sending(resend.copy(resendKey = None))(Mail.toClient[C]("anna@example.com", note))
+    assert(!none)
+    assert(log.exists(_.contains("no RESEND_API_KEY")), log)
+  }
+
+  test("Resend refusing: not sent, the status and its name logged — never the address nor the letter") {
+    val resend = cloudflare.copy(client = "resend", resendKey = Some("re_k"))
+    for (status, name, says) <- Seq((403, "validation_error", "domain not verified"), (422, "invalid_from_address",
+        "invalid"), (429, "rate_limit_exceeded", "limit"), (500, "internal_server_error", "Resend failing")) do
+      val reply = Response(status, Map.empty, s"""{"statusCode":$status,"name":"$name","message":"anna@example.com"}""")
+      val (sent, _, _, log) = sending(resend, reply = reply)(Mail.toClient[C]("anna@example.com", note))
+      assert(!sent)
+      assert(log.exists(l => l.contains(s"Resend answered $status ($name)") && l.contains(says)), log)
+      assert(!log.exists(l => l.contains("anna@") || l.contains("Dziękujemy") || l.contains("TST-1")), log)
+  }
+
+  test("a display name with a special character is quoted") {
+    assertEquals(okay.shop.handlers.Resend.display("Test Atelier"), "Test Atelier")
+    assertEquals(okay.shop.handlers.Resend.display("Kowalski, Jan \"Szycie\""), "\"Kowalski, Jan Szycie\"")
   }

@@ -6,16 +6,16 @@ import okay.serverless.cloud.{Fetch, Mail as Letter, Mails, Smtp, SmtpServer, Tc
 import okay.shop.effects.{Mail, Note}
 
 /** how a site mails: who from, the owner, and how clients are reached (`MAIL_CLIENT`: `smtp`, `cloudflare`,
- * `brevo`) with what that way needs — the SMTP relay and its sign-in, Brevo's key */
+ * `brevo`, `resend`) with what that way needs — the SMTP relay and its sign-in, Brevo's key, Resend's key */
 final case class Mailing(from: String, name: String, owner: String, client: String, brevoKey: Option[String],
-                         smtp: Option[SmtpServer] = None)
+                         smtp: Option[SmtpServer] = None, resendKey: Option[String] = None)
 
 /**
  * `Mail` ON THE CLOUD'S EFFECTS (specs/sites.md "Mail"): the owner and staff by `Mails` through the `MAIL` binding
  * (Email Routing's `send_email`: verified destinations, any plan); clients by `MAIL_CLIENT` — `smtp` (the default):
  * the relay busi used (Brevo's, port 587, STARTTLS) by `Smtp.deliver` over the cloud's `Tcp`; `cloudflare`: `Mails`
- * through `CLIENT_MAIL` (Email Service: any recipient, Workers Paid); `brevo`: Brevo's API over `Fetch`. Every
- * letter answers whether it went (`Mails.deliver`, Brevo's status); why not is logged — never a failure of the
+ * through `CLIENT_MAIL` (Email Service: any recipient, Workers Paid, the domain onboarded); `brevo`: Brevo's API over
+ * `Fetch`; `resend`: Resend's API over `Fetch`. Every letter answers whether it went (`Mails.deliver`, the API's status); why not is logged — never a failure of the
  * program, and never skipped silently
  */
 object MailCloud:
@@ -39,8 +39,14 @@ object MailCloud:
             if Brevo.sent(r) then k(true)
             else Log.warn[Rest](s"mail to a client not sent: Brevo answered ${r.status}").flatMap(_ => k(false))
           }
+        case ("resend", _) if m.resendKey.isDefined =>
+          Fetch[Rest](Resend.base, Resend.request(m.resendKey.get, m.from, m.name, to, n)).flatMap { r =>
+            if Resend.sent(r) then k(true)
+            else Log.warn[Rest](s"mail to a client not sent: ${Resend.why(r)}").flatMap(_ => k(false))
+          }
         case (way, _) => Log.warn[Rest](s"mail to a client not sent: no way set up (MAIL_CLIENT=$way" +
-            s"${if way == "brevo" then ", no BREVO_API_KEY" else if way == "smtp" then ", no SMTP relay" else ""})")
+            s"${if way == "brevo" then ", no BREVO_API_KEY" else if way == "resend" then ", no RESEND_API_KEY"
+              else if way == "smtp" then ", no SMTP relay" else ""})")
             .flatMap(_ => k(false))))
 
   def letter(m: Mailing, to: String, n: Note): Letter =

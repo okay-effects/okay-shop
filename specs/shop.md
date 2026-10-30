@@ -582,6 +582,30 @@ https://github.com/CIRFMF/ksef-client-java, -csharp). Environments (`KsefEnv`): 
 - **Production is never asked** by anything here: the host decides the environment, and the mall keeps production
   disabled until its operator enables it (specs/mall.md).
 
+## Clients' letters: the ways (operator, 2026-10-30)
+
+The owner's and the staff's letters go by Email Routing's `send_email` (`MAIL`: verified destinations, any plan). A
+client's letter goes the way `MAIL_CLIENT` names (`MailCloud`, `Mailing.client`); each answers whether it went, and
+why not is logged — the status and the provider's error name, never an address nor the letter's words:
+
+- `cloudflare` — Cloudflare Email Service's Email Sending through the `CLIENT_MAIL` binding (`[[send_email]]`, the
+  same `EmailMessage` as `MAIL`): any recipient once the account has Workers Paid AND the sending domain is
+  onboarded (dashboard → Compute → Email Service → Email Sending → Onboard Domain: Cloudflare adds the `cf-bounce`
+  MX, SPF and DKIM records and `_dmarc`); before that only verified destinations. Beta (2026-10-30); 3 000 letters a
+  month included, then $0.35 per 1 000; a new account's daily quota starts low and grows. The `from` must be on an
+  onboarded domain. Sources: https://developers.cloudflare.com/email-service/get-started/send-emails/,
+  …/platform/pricing/, …/platform/limits/, …/api/send-emails/workers-api/ (read 2026-10-30).
+- `resend` — Resend's API over `Fetch` (`Resend`): `POST https://api.resend.com/emails`, `Authorization: Bearer
+  <RESEND_API_KEY>` (a secret), `from` as `Name <address>` (the name quoted when it has a special character),
+  `to`, `subject`, `html`, `text`, `reply_to` (the note's); an `Idempotency-Key` per letter — `okay-` and the SHA-256
+  of its address, subject, text and HTML: the same letter given twice within Resend's 24 hours is sent once. A 2xx
+  sent; 401/403 (key, or domain not verified), 422 (invalid), 429 (limit), 5xx (Resend failing) not, logged so.
+  Without the key: not sent, "no RESEND_API_KEY". Source: https://resend.com/docs/api-reference/emails/send-email.
+- `brevo` — Brevo's API (`BREVO_API_KEY`); `smtp` (the default) — a relay by `Smtp.deliver` over `Tcp`
+  (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`).
+- A site's Worker (`ShopWorker`) reads `MAIL_CLIENT`, `RESEND_API_KEY` as the rest: a site that sets neither behaves
+  as before. Tests: `MailCloudSuite` (a fake HTTP: the request, the key per letter, the refusals and the log).
+
 ## Open core (operator, 2026-10-29)
 
 okay-shop is public (Apache-2.0) and is the engine of ONE site: its storefront, orders, tracking and workshop — and,

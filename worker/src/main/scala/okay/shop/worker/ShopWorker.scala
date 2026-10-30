@@ -22,15 +22,15 @@ object Settings:
       sitekey <- v("TURNSTILE_SITEKEY"); secret <- s("TURNSTILE_SECRET")
       from <- v("MAIL_FROM"); name <- v("MAIL_NAME"); owner <- v("OWNER_EMAIL"); client <- v("MAIL_CLIENT")
       brevo <- s("BREVO_API_KEY"); staff <- v("STAFF_EMAILS"); blik <- v("BLIK_PHONE"); paczkomat <- v("PACZKOMAT")
-      calendar <- s("CALENDAR_KEY"); origin <- v("ORIGIN")
+      calendar <- s("CALENDAR_KEY"); origin <- v("ORIGIN"); resend <- s("RESEND_API_KEY")
       smtpHost <- v("SMTP_HOST"); smtpPort <- v("SMTP_PORT"); smtpUser <- s("SMTP_USER"); smtpPass <- s("SMTP_PASS")
     yield Settings(sitekey, secret.getOrElse(""),
       Mailing(if from.isEmpty then s"kontakt@${site.domain}" else from, if name.isEmpty then site.name else name,
         owner, if client.isEmpty then "smtp" else client, brevo,
         // the relay, when all of it is set (Brevo's SMTP, 587, STARTTLS), its sign-in the Worker's secrets
-        for host <- Option(smtpHost).filter(_.nonEmpty); user <- smtpUser; pass <- smtpPass
+        (for host <- Option(smtpHost).filter(_.nonEmpty); user <- smtpUser; pass <- smtpPass
         yield SmtpServer(host, smtpPort.toIntOption.getOrElse(587), Tls.StartTls, user, pass,
-          site.domain.split('.').takeRight(2).mkString("."))),
+          site.domain.split('.').takeRight(2).mkString("."))), resend),
       staff.split(',').map(_.trim.toLowerCase).filter(_.nonEmpty).toSet, blik, paczkomat, calendar.getOrElse(""),
       // where the letters' links point when no request says it (the reminders, the object's alarm)
       if origin.isEmpty then s"https://${site.domain}" else origin)
