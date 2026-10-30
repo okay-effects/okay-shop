@@ -292,3 +292,11 @@ class InvoiceSuite extends munit.FunSuite:
     assertEquals(b.post("/workshop/api/invoice/ksef", "id" -> "000001").status, 403)
     assertEquals(in(w, owner).post("/workshop/api/invoice/ksef", "id" -> "000001").status, 409)
   }
+
+  test("the invoice's pages are the object's: never a static page, never a slash added") {
+    def r(path: String) = okay.serverless.cloud.Request.get(path)
+    assert(okay.shop.app.Front.dynamic(r("/pl/invoice")) && okay.shop.app.Front.dynamic(r("/workshop/invoices/")))
+    assert(okay.shop.app.Front.dynamic(r("/workshop/invoices/view")))
+    assertEquals(okay.shop.app.Front.redirect(Fixtures.site("salon"), r("/pl/invoice")), None)
+  }
+
