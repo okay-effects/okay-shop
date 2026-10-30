@@ -68,4 +68,11 @@ class QuotesSuite extends munit.FunSuite:
     assertEquals(w.post("/api/quote/decline", "ref" -> b("ref"), "k" -> b("key")).status, 200)
     assert(w.letters.last._2.subject.contains("Оцінку відхилено"))
     assert(staff.get("/workshop/api/quotes").text.contains(""""status":"declined""""))
+    import okay.shop.effects.Notice
+    assertEquals(w.notices.toVector.map {
+      case Notice.Asked(q) => s"asked ${q.ref}"
+      case Notice.Decided(q, ok, result) => s"decided ${q.ref} $ok $result"
+      case other => other.toString
+    }, Vector(s"asked ${a("ref")}", s"decided ${a("ref")} true $order", s"asked ${b("ref")}",
+      s"decided ${b("ref")} false "))
   }

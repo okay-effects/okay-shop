@@ -18,8 +18,8 @@ object Api:
     "itemValue" -> 20, "subject" -> 200, "body" -> 4000)
   val tenMinutes: Long = 10 * 60 * 1000L
 
-  def answer[R[_]](c: Conf, r: Request)(using In[Store, R], In[Mail, R], In[Captcha, R], In[Ids, R], In[Clock, R])
-    : Response ! R =
+  def answer[R[_]](c: Conf, r: Request)(using In[Store, R], In[Mail, R], In[Captcha, R], In[Ids, R], In[Clock, R],
+    In[Notify, R]): Response ! R =
     val parts = r.path.split('/').toList.filter(_.nonEmpty)
     val desk = c.desk.path.split('/').toList.filter(_.nonEmpty) :+ "api"
     (r.method, parts) match
@@ -54,8 +54,8 @@ object Api:
 
   // ---- AN ORDER
 
-  def order[R[_]](c: Conf, r: Request)(using In[Store, R], In[Mail, R], In[Captcha, R], In[Ids, R], In[Clock, R])
-    : Response ! R =
+  def order[R[_]](c: Conf, r: Request)(using In[Store, R], In[Mail, R], In[Captcha, R], In[Ids, R], In[Clock, R],
+    In[Notify, R]): Response ! R =
     val f = fields(r)
     val site = c.site
     val name = field(f, "name")
@@ -76,7 +76,7 @@ object Api:
     yield res
 
   private def place[R[_]](c: Conf, f: Map[String, String], name: String, contact: String, offerKey: String, now: Long)
-    (using In[Store, R], In[Mail, R], In[Ids, R]): Response ! R =
+    (using In[Store, R], In[Mail, R], In[Ids, R], In[Notify, R]): Response ! R =
     val site = c.site
     val lang = Lang.parse(f.getOrElse("lang", "")).getOrElse(site.lang)
     def oneOf(k: String, allowed: Set[String]) = Some(field(f, k)).filter(allowed).getOrElse("")
@@ -92,6 +92,7 @@ object Api:
         field(f, "fabric"), lang, Consent(now, c.policy), now)
       _ <- Store.place[R](o)
       _ <- Mail.toOwner[R](Letters.owner(c, o))
+      _ <- Notify.tell[R](Notice.Ordered(o))
       _ <- o.email match
         case Some(to) =>
           val n = Letters.confirmation(c, o)
@@ -108,8 +109,8 @@ object Api:
 
   // ---- AN INQUIRY (IT's /products)
 
-  def inquiry[R[_]](c: Conf, r: Request)(using In[Store, R], In[Mail, R], In[Captcha, R], In[Ids, R], In[Clock, R])
-    : Response ! R =
+  def inquiry[R[_]](c: Conf, r: Request)(using In[Store, R], In[Mail, R], In[Captcha, R], In[Ids, R], In[Clock, R],
+    In[Notify, R]): Response ! R =
     val f = fields(r)
     val name = field(f, "name")
     val contact = field(f, "contact")
@@ -132,6 +133,7 @@ object Api:
             Lang.parse(f.getOrElse("lang", "")).getOrElse(c.site.lang), Consent(now, c.policy), now)
           _ <- Store.inquire[R](i)
           _ <- Mail.toOwner[R](Letters.inquiry(c, i))
+          _ <- Notify.tell[R](Notice.Inquired(i))
         yield Web.json(Json.obj("ok" -> Json.bool(true), "ref" -> Json.str(ref)))
     yield res
 

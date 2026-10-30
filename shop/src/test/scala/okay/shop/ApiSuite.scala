@@ -18,6 +18,7 @@ class ApiSuite extends munit.FunSuite:
     assertEquals(j.get("price"), Some("40 zł"))
     assertEquals(j.get("blik"), Some("+48 600 000 000"))
     assertEquals(j.get("paczkomat"), Some("TST01A"))
+    assertEquals(w.notices.toVector.collect { case okay.shop.effects.Notice.Ordered(o) => o.ref }, Vector(j("ref")))
     assertEquals(w.letters.map(_._1), Vector("owner", "anna@example.com"))
     val client = w.letters(1)._2
     // the letter's ref is the one the track page takes, its link this site's, with the key
@@ -101,4 +102,6 @@ class ApiSuite extends munit.FunSuite:
     assert(w.json(r)("ref").startsWith("TSDQ-"))
     assertEquals(w.letters.map(_._1), Vector("owner"))
     assert(w.letters.head._2.html.contains("Need CI"))
+    assertEquals(w.notices.toVector.collect { case okay.shop.effects.Notice.Inquired(i) => i.ref }, Vector(w.json(r)
+      ("ref")))
   }

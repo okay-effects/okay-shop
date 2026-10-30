@@ -107,8 +107,8 @@ object Bookings:
       r.param("postcode").getOrElse("")))
     Web.json(Json.obj("inside" -> Json.bool(inside)))
 
-  def book[R[_]](c: Conf, r: Request)(using In[Store, R], In[Mail, R], In[Captcha, R], In[Ids, R], In[Clock, R])
-    : Response ! R =
+  def book[R[_]](c: Conf, r: Request)(using In[Store, R], In[Mail, R], In[Captcha, R], In[Ids, R], In[Clock, R],
+    In[Notify, R]): Response ! R =
     val f = Web.fields(r)
     val name = f.getOrElse("name", "").trim.take(120)
     val contact = f.getOrElse("contact", "").trim.take(200)
@@ -134,11 +134,11 @@ object Bookings:
 
   /** the booking made, if its start is still free: the store decides, in its step */
   private def taken[R[_]](c: Conf, f: Map[String, String], p: Plan, at: Long, name: String, contact: String,
-                          now: Long)(using In[Store, R], In[Mail, R], In[Ids, R]): Response ! R =
+                          now: Long)(using In[Store, R], In[Mail, R], In[Ids, R], In[Notify, R]): Response ! R =
     val lang = Lang.parse(f.getOrElse("lang", "")).getOrElse(c.site.lang)
     reserve[R](c, p, at, name, contact, lang, f.getOrElse("master", ""), now).flatMap {
       case Left(why) => pure(Web.refused(why, 409))
-      case Right(b) => told(c, b, Letters.booked(c, b), Letters.bookedOwner(c, b)).as(answer(c, b))
+      case Right(b) => told(c, b, Letters.booked(c, b), Letters.bookedOwner(c, b), Notice.Booked(b)).as(answer(c, b))
     }
 
   /** A BOOKING TAKEN for `p` at `at`, no letter yet: a class's seat, a master's time, or the one calendar's — the
@@ -161,9 +161,11 @@ object Bookings:
         case Left(why) => pure(Left(why))
     yield made
 
-  /** the client (when an email) and the owner told */
-  private def told[R[_]](c: Conf, b: Booking, client: Note, owner: Note)(using In[Mail, R]): Unit ! R =
-    Mail.toOwner[R](owner).flatMap(_ => b.email.fold(unit[R])(to => Mail.toClient[R](to, client).map(_ => ())))
+  /** the client (when an email) and the owner told; the notice given (specs/shop.md "Notices") */
+  private def told[R[_]](c: Conf, b: Booking, client: Note, owner: Note, notice: Notice)(using In[Mail, R],
+    In[Notify, R]): Unit ! R =
+    Mail.toOwner[R](owner).flatMap(_ => Notify.tell[R](notice)).flatMap(_ =>
+      b.email.fold(unit[R])(to => Mail.toClient[R](to, client).map(_ => ())))
 
   private def answer(c: Conf, b: Booking): Response = Web.json(Json.Obj(Vector("ok" -> Json.bool(true),
     "ref" -> Json.str(b.ref), "key" -> Json.str(b.key), "start" -> Json.num(b.start),
@@ -177,17 +179,18 @@ object Bookings:
     if ref.isEmpty then pure(None)
     else Store.booking[R](ref).map(_.filter(b => Api.same(b.key, f.getOrElse("k", f.getOrElse("key", "")))))
 
-  def cancel[R[_]](c: Conf, r: Request)(using In[Store, R], In[Mail, R], In[Clock, R]): Response ! R =
+  def cancel[R[_]](c: Conf, r: Request)(using In[Store, R], In[Mail, R], In[Clock, R], In[Notify, R])
+    : Response ! R =
     owned[R](Web.fields(r)).flatMap {
       case None => pure(Web.refused("no such booking", 404))
       case Some(b) => Clock.now[R].flatMap(now => Store.cancelBooking[R](b.ref, now)).flatMap {
           case None => pure(Web.refused("cancelled already", 409))
-          case Some(x) => told(c, x, Letters.unbooked(c, x), Letters.unbookedOwner(c, x))
+          case Some(x) => told(c, x, Letters.unbooked(c, x), Letters.unbookedOwner(c, x), Notice.Cancelled(x))
               .as(Web.json(Json.obj("ok" -> Json.bool(true), "ref" -> Json.str(x.ref))))
         }
     }
 
-  def move[R[_]](c: Conf, r: Request)(using In[Store, R], In[Mail, R], In[Clock, R]): Response ! R =
+  def move[R[_]](c: Conf, r: Request)(using In[Store, R], In[Mail, R], In[Clock, R], In[Notify, R]): Response ! R =
     val f = Web.fields(r)
     owned[R](f).flatMap {
       case None => pure(Web.refused("no such booking", 404))
@@ -201,7 +204,8 @@ object Bookings:
             case Right(Some((cs, keys))) => Store.rebookWith[R](b.ref, at, cs, keys, now)
             case Right(None) => Store.rebook[R](b.ref, at, s, now)).flatMap {
             case Left(why) => pure(Web.refused(why, 409))
-            case Right(x) => told(c, x, Letters.rebooked(c, x), Letters.rebookedOwner(c, x)).as(answer(c, x))
+            case Right(x) => told(c, x, Letters.rebooked(c, x), Letters.rebookedOwner(c, x), Notice.Moved(x))
+                .as(answer(c, x))
           }
     }
 

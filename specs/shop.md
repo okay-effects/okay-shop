@@ -16,9 +16,9 @@ this is a business's domain on top of both.
 
 ## The rule
 
-THE ARCHITECTURE IS EFFECTS. The data model is effects (`Store`, `Mail`, `Captcha`, `Ids`; the workshop's `Staff`,
-`Human`); every implementation a handler — onto okay-serverless' effects in the cloud (`StoreDurable`, `MailCloud`,
-`Turnstile`), in memory in tests. A site's object runs `Api.answer` on one line of handlers.
+THE ARCHITECTURE IS EFFECTS. The data model is effects (`Store`, `Mail`, `Captcha`, `Ids`, `Notify`; the workshop's
+`Staff`, `Human`); every implementation a handler — onto okay-serverless' effects in the cloud (`StoreDurable`,
+`MailCloud`, `Turnstile`), in memory in tests. A site's object runs `Api.answer` on one line of handlers.
 
 ## Modules (package `okay.shop`)
 
@@ -237,6 +237,20 @@ RODO): the policy must name it among the recipients and point to its own policy.
   engine's processors (Cloudflare, Turnstile, Brevo, InPost for an atelier). None (the default, every site on its own
   Worker): the page exactly as before, byte for byte.
 - Tests: `PagesSuite` (the host's item first in the list, in its language; without one the same bytes).
+
+## Notices (operator, 2026-10-30)
+
+Beside the owner's letter, the shop GIVES A NOTICE of what happened — data, not words — for a host to tell its people
+at once where it likes (the mall: a Telegram chat). An effect, `Notify` (`Tell(notice)`), its handler the host's:
+
+- **The notices** (`Notice`): `Ordered(order)`, `Booked(booking)`, `Moved(booking)`, `Cancelled(booking)` (by the
+  client's link), `Inquired(inquiry)`, `Asked(quote)` (an inquiry for a quote), `Decided(quote, accepted, result)`
+  (the client's accept — `result` the booking's or the order's ref — or decline). Each given right after the owner's
+  letter, in the same program.
+- **Handlers**: `Notify.ignore` (a site on its own Worker: its owner has the letter; `ShopWorker` uses it, so its
+  sites behave exactly as before) and `Notify.kept(buffer)` (tests).
+- Tests: `ApiSuite` (an order, an inquiry), `BookingSuite` (booked, moved, cancelled), `QuotesSuite` (asked, accepted,
+  declined).
 
 ## The owner edits the content (operator, 2026-10-29)
 

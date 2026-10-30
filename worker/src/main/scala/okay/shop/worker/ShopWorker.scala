@@ -50,11 +50,12 @@ final class ShopWorker(site: Site, look: Look):
 
   /** the site's object: its state okay-serverless' `Durable` (the object's SQLite); its requests one at a time */
   object actor extends Actor:
-    type Live[X] = (InActor + Store + Ids + Captcha + Mail)[X]
+    type Live[X] = (InActor + Store + Ids + Captcha + Mail + Notify)[X]
     private def conf(s: Settings, origin: String) =
       Conf(site, origin, s.blik, s.paczkomat, s.sitekey, s.staff, s.mailing.from, look.policy, s.calendarKey)
     private def live[A](s: Settings)(p: A ! Live): A ! InActor =
-      MailCloud.run(s.mailing)(Turnstile.run(s.turnstileSecret)(Ids.from(Platform.randomInt)(StoreDurable.run(p))))
+      MailCloud.run(s.mailing)(Turnstile.run(s.turnstileSecret)(Ids.from(Platform.randomInt)(StoreDurable.run(
+        Notify.ignore(p)))))
 
     def fetch(name: String, r: Request): Response ! InActor = Settings.read[InActor](site).flatMap(s =>
       live(s)(Api.answer[Live](conf(s, Web.origin(r)), r)))

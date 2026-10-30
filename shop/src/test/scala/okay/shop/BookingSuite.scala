@@ -109,6 +109,13 @@ class BookingSuite extends munit.FunSuite:
     assert(starts(w, "2026-10-31").contains(sat10))
     assertEquals(w.post("/api/booking/cancel", "ref" -> j("ref"), "k" -> j("key")).status, 409)
     assert(w.get(s"/pl/booking?ref=${j("ref")}&k=${j("key")}").text.contains("Odwołane"))
+    // the notices given beside the owner's letters (specs/shop.md "Notices")
+    assertEquals(w.notices.toVector.map {
+      case okay.shop.effects.Notice.Booked(b) => s"booked ${b.ref}"
+      case okay.shop.effects.Notice.Moved(b) => s"moved ${b.start == sat10}"
+      case okay.shop.effects.Notice.Cancelled(b) => s"cancelled ${b.ref}"
+      case other => other.toString
+    }, Vector(s"booked ${j("ref")}", "moved true", s"cancelled ${j("ref")}"))
     assertEquals(w.post("/api/booking/move", "ref" -> j("ref"), "k" -> j("key"), "start" -> fri10.toString).status,
       409)
   }

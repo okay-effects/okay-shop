@@ -17,8 +17,8 @@ object Quotes:
   def manageLink(c: Conf, q: Quote): String =
     s"${c.origin}/${q.lang.code}/quote?ref=${okay.http.Query.encode(q.ref)}&k=${okay.http.Query.encode(q.key)}"
 
-  def ask[R[_]](c: Conf, r: Request)(using In[Store, R], In[Mail, R], In[Captcha, R], In[Ids, R], In[Clock, R])
-    : Response ! R =
+  def ask[R[_]](c: Conf, r: Request)(using In[Store, R], In[Mail, R], In[Captcha, R], In[Ids, R], In[Clock, R],
+    In[Notify, R]): Response ! R =
     val f = Web.fields(r)
     def g(k: String, n: Int) = f.getOrElse(k, "").trim.take(n)
     val name = g("name", 120)
@@ -52,6 +52,7 @@ object Quotes:
                   Lang.parse(g("lang", 5)).getOrElse(c.site.lang), Consent(now, c.policy), now)
                 _ <- Store.ask[R](q)
                 _ <- Mail.toOwner[R](Letters.quoteOwner(c, q, "Новий запит на оцінку"))
+                _ <- Notify.tell[R](Notice.Asked(q))
                 _ <- q.email.fold(unit[R])(to => Mail.toClient[R](to, Letters.quoteAsked(c, q)).map(_ => ()))
               yield Web.json(Json.obj("ok" -> Json.bool(true), "ref" -> Json.str(ref), "key" -> Json.str(key),
                 "manage" -> Json.str(manageLink(c, q)), "quote" -> Json.bool(true)))
@@ -71,18 +72,20 @@ object Quotes:
       case None => Web.page(QuotePage.missing(c, l), 404)
     }
 
-  def decline[R[_]](c: Conf, r: Request)(using In[Store, R], In[Mail, R]): Response ! R =
+  def decline[R[_]](c: Conf, r: Request)(using In[Store, R], In[Mail, R], In[Notify, R]): Response ! R =
     owned[R](Web.fields(r)).flatMap {
       case None => pure(Web.refused("no such quote", 404))
       case Some(q) => Store.decide[R](q.ref, accepted = false, "").flatMap {
           case None => pure(Web.refused("not quoted", 409))
           case Some(d) => Mail.toOwner[R](Letters.quoteOwner(c, d, "Оцінку відхилено"))
+              .flatMap(_ => Notify.tell[R](Notice.Decided(d, accepted = false, "")))
               .as(Web.json(Json.obj("ok" -> Json.bool(true), "ref" -> Json.str(d.ref))))
         }
     }
 
   /** accepted: a booking when it has a time and its service is booked (the store's check), else an order */
-  def accept[R[_]](c: Conf, r: Request)(using In[Store, R], In[Mail, R], In[Ids, R], In[Clock, R]): Response ! R =
+  def accept[R[_]](c: Conf, r: Request)(using In[Store, R], In[Mail, R], In[Ids, R], In[Clock, R], In[Notify, R])
+    : Response ! R =
     owned[R](Web.fields(r)).flatMap {
       case None => pure(Web.refused("no such quote", 404))
       case Some(q) if q.status != QuoteStatus.Quoted => pure(Web.refused("not quoted", 409))
@@ -93,10 +96,11 @@ object Quotes:
             case Some(p) => Bookings.reserve[R](c, p, q.start, q.name, q.contact, q.lang, "", now).flatMap {
                 case Left(why) => pure(Web.refused(why, 409))
                 case Right(b) => Store.decide[R](q.ref, accepted = true, b.ref).flatMap(_ =>
-                  Mail.toOwner[R](Letters.bookedOwner(c, b)).flatMap(_ => b.email.fold(unit[R])(to =>
+                  Mail.toOwner[R](Letters.bookedOwner(c, b))).flatMap(_ => Notify.tell[R](Notice.Decided(q,
+                    accepted = true, b.ref))).flatMap(_ => b.email.fold(unit[R])(to =>
                     Mail.toClient[R](to, Letters.booked(c, b)).map(_ => ()))).as(Web.json(Json.obj(
                       "ok" -> Json.bool(true), "ref" -> Json.str(b.ref), "booking" -> Json.str(
-                        Letters.manageLink(c, b))))))
+                        Letters.manageLink(c, b)))))
               }
             case None =>
               for
@@ -107,6 +111,7 @@ object Quotes:
                 _ <- Store.place[R](o)
                 _ <- Store.decide[R](q.ref, accepted = true, ref)
                 _ <- Mail.toOwner[R](Letters.owner(c, o))
+                _ <- Notify.tell[R](Notice.Decided(q, accepted = true, ref))
                 _ <- o.email.fold(unit[R])(to => Mail.toClient[R](to, Letters.confirmation(c, o)).map(_ => ()))
               yield Web.json(Json.obj("ok" -> Json.bool(true), "ref" -> Json.str(ref),
                 "track" -> Json.str(Letters.trackLink(c, o))))

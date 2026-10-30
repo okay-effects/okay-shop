@@ -28,12 +28,14 @@ final class World(val id: String = "atelier", var human: Boolean = true,
     "1x00000000000000000000AA", staff, "atelier@example.com", "2026-10-28",
     "CALENDAR-KEY-0123456789", more, desk, owner)
 
-  type W[X] = (Pure + Storage + Store + Ids + Captcha + Mail + Clock)[X]
+  /** the notices the shop gave (specs/shop.md "Notices") */
+  val notices: scala.collection.mutable.Buffer[Notice] = scala.collection.mutable.Buffer.empty
+  type W[X] = (Pure + Storage + Store + Ids + Captcha + Mail + Clock + Notify)[X]
 
   def ask(r: Request): Response =
     seed += 1
     val (kept, (_, res)) = run(storage.handler(StoreDurable.run(Ids.seeded(seed)(Captcha.always(human)(Mail.kept()(
-      Clock.virtual(now)(Api.answer[W](conf, r))))))))
+      Clock.virtual(now)(Notify.kept(notices)(Api.answer[W](conf, r)))))))))
     letters ++= kept
     res
 
@@ -42,7 +44,7 @@ final class World(val id: String = "atelier", var human: Boolean = true,
     storage.alarm = None
     seed += 1
     val (kept, (_, n)) = run(storage.handler(StoreDurable.run(Ids.seeded(seed)(Captcha.always(human)(Mail.kept()(
-      Clock.virtual(now)(Bookings.remind[W](conf))))))))
+      Clock.virtual(now)(Notify.kept(notices)(Bookings.remind[W](conf)))))))))
     letters ++= kept
     n
 
