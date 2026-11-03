@@ -150,6 +150,11 @@ class ShopRouterSuite extends munit.FunSuite:
           "a jutro?", c = conv(first))))
       case d => fail(said(d))
     assertEquals(said(turn(w, "a konsultacja?", c = conv(first))), "Konsultacja: 50,00 zł, czas trwania 30 minut.")
+    // the service the last answer named, though found earlier: never the last one the price list found
+    val list = turn(w, "Jakie są wasze ceny?")
+    val again = turn(w, "Ile kosztuje strzyżenie?", c = conv(list))
+    assert(said(turn(w, "a jutro?", c = conv(again))).startsWith("Strzyżenie, piątek"), said(turn(w, "a jutro?",
+      c = conv(again))))
 
   test("the words' evidence: a service named and a time — its free times, whatever the probe thought"):
     val w = World("crew")

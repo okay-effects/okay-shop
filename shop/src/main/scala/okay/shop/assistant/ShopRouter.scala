@@ -164,8 +164,16 @@ object ShopRouter:
       else None)
     def scope: Scope = shopId.map(Scope.Source(_)).orElse(context.map(x => Scope.Source(x.ent.source)))
       .getOrElse(Scope.All)
-    /** the service the conversation spoke of last */
-    def context: Option[okay.facts.Handle] = h.all.reverse.find(_.ent.cls == "Service")
+    /** the service the conversation spoke of last: one its last answer named (or a free time's service of it), else
+     * the last one found — a handle found again keeps its first place, so the last found is not always the last said */
+    def context: Option[okay.facts.Handle] =
+      val said = c.history.reverseIterator.collectFirst {
+        case j if j.field("role").contains(Json.Str("assistant")) =>
+          j.field("content").collect { case Json.Str(t) => t }
+      }.flatten.toVector.flatMap(t => "#[a-z]+\\d+".r.findAllIn(t).toVector).distinct.flatMap(h.get)
+      said.find(_.ent.cls == "Service").orElse(said.find(_.ent.cls == "Slot").flatMap(s => h.all.find(x =>
+        x.ent.cls == "Service" && x.ent.source == s.ent.source && x.ent.key == s.ent.key.takeWhile(_ != '|'))))
+        .orElse(h.all.reverse.find(_.ent.cls == "Service"))
     /** a follow-up: short, or pointing back ("a ile trwa?", "that one", "тот") */
     def followUp: Boolean =
       val ws = Words.split(user)
