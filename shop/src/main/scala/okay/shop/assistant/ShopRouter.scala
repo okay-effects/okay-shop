@@ -425,7 +425,8 @@ object ShopRouter:
         val near = ranked.filter(r => r._2 >= ctx.lane.serviceAt && r._2 >= best - 0.12).map(r => cands(r._1.toInt)._1)
         val cheap: Set[Ent] ! R = ctx.amount.max match
           case None => pure(near.map(_.ent).toSet)
-          case Some(m) => Facts.find[R](Query("Service", filters = Vector(Filter("price", Op.Le, Value.Money(m, "PLN"))),
+          case Some(m) => Facts.find[R](Query("Service", filters = Vector(Filter("price", Op.Le,
+              Value.Money(m, "PLN"))),
               scope = Scope.All, limit = 200, lang = ctx.l)).map(_.map(_.ent).toSet)
         cheap.flatMap { under =>
           val kept = near.filter(f => under(f.ent)).take(5)
