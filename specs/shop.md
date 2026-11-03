@@ -722,6 +722,49 @@ and `priceCurrency` `PLN` when it has a price and is not quoted. No offers: no c
 puts it in its `Seo.head`; a look that does not has its pages byte for byte as before (`OldPagesSuite`). Without
 the shared `@id` the look's node and the rating's would read as two businesses. Tests: `StructuredSuite`.
 
+## The assistant (operator, 2026-11-03: okay-facts, a single shop's facts — the multi-tenant chat is the host's)
+
+A chat on the storefront answers a client's questions about the shop — services, prices, durations, free times, the
+masters, the address, the rating — and books, on okay-facts (`io.github.okay-effects:okay-facts`): the model never
+receives, writes or computes a fact. It sees handles (`#v1`), answers with a template and named parameters bound to
+expressions over them; okay-facts renders every value from the shop's data. Package `okay.shop.assistant`.
+
+- **The shop's facts** (`ShopFacts`): the schema (schema.org's words, with the overlay's keys and cardinalities) —
+  `Shop` (LocalBusiness: name, category, city visible; address, url, hours, rating, reviews hidden), `Service`
+  (Service: name, description visible; price, duration, bookable hidden; its shop, its masters — a set), `Master`
+  (Person: name hidden; shop, services — a set), `Slot` (a free start: time, date, available hidden; master,
+  service, shop; its service's name visible), `Review` (rating, text hidden; only shown reviews), `Booking` (made in
+  the chat: its values pinned). Rows from the site: the SHOWN offers (a hidden one is not there), the masters, the
+  rated reviews; the shop's category and city are the host's (`About`), else none. Slots are COMPUTED by the
+  resolver, never listed whole to the model: a find of `Slot` takes the service it is of (else every bookable one),
+  its days (a date filter, else the next 7), each eligible master's free starts by `Bookings.plan`, `masters`,
+  `Slots.free` / `Slots.classes` (the default mode and place), filtered on time, master, date; a slot's key
+  `service|master|start`; `available` asked again when rendered. Values are current when rendered; the shop's
+  version is the host's (its config's).
+- **Find, open, book** (the handler of okay-facts' `Facts`): `find` over the rows and the computed slots; `open` a
+  shop → a card linking its storefront in the user's language; `book` a slot → a card (the service, the day and time,
+  the price, the master — rendered by the resolver) the client confirms with their name, contact and consent. The
+  model never types the client's data.
+- **A booking from the chat** (`Bookings.chat`): the booking form's checks and path — name, contact, consent, the
+  service shown and bookable, its plan and master, the store deciding in its step (`409 taken`) — Turnstile replaced
+  by limits: 5 per IP in 10 minutes (the form's) and 3 per conversation a day (the host's key); the letters and the
+  notice as the form's. Its confirmation is rendered by the resolver from the booking (pinned: service, time, price,
+  master, ref, its manage link) — `ShopFacts.confirmation`.
+- **The widget** (the pages' script, `site.js`): only where the page carries the chat's marker — `Look.chat`
+  (`Chat(endpoint, focus)`; none by default: every page byte for byte as before, `OldPagesSuite`) puts
+  `<div id="okay-chat" …>` before the scripts of the storefront and the offers' pages. A button opens a panel (a
+  dialog; full screen on a phone): the conversation, the input, the answers' values as chips (the value; its entity
+  and source on hover and focus), a slot's chip clickable (its booking card), a shop's card a link, "delete this
+  conversation", "what the model wrote" (the raw `{params, template}`, hidden by default). pl, uk, ru, en by the
+  page's language; announced (`aria-live`), keyboard and Escape. It talks to the host: `POST <endpoint>` `{text,
+  focus, lang}` → `{answer, cards, raw, …}`, `POST <endpoint>/book`, `POST <endpoint>/forget`, `GET
+  <endpoint>/history`.
+- **Privacy**: `Privacy.page(…, chat = days)` adds the assistant's section (purpose, what is kept, for how long,
+  deletion in the chat, the processor) when the shop has the chat; none: the page as before.
+- Tests: `AssistantSuite` — the dialogue of okay-facts' design §12 end to end on `Memory` (the fake model replaying
+  fixed outputs: find, find slots, the answer rendered from the data, the booking card, confirmed, the confirmation
+  pinned, the letters); the facts' visibility; limits; the widget's marker only where enabled.
+
 ## Open core (operator, 2026-10-29)
 
 okay-shop is public (Apache-2.0) and is the engine of ONE site: its storefront, orders, tracking and workshop — and,
@@ -731,5 +774,5 @@ auto-translation, themes, custom domains, subscriptions and billing, its admin, 
 
 ## Release
 
-Scala 3.3, the JVM and Scala.js, on okay-serverless 0.1.0, okay-ui 0.1.0, okay-scala 0.1.1. A Maven repository on
-GitHub Pages (RELEASING.md); while only the two sites use it, a change is republished under 0.1.0.
+Scala 3.3, the JVM and Scala.js, on okay-serverless 0.1.0, okay-ui 0.1.0, okay-scala 0.1.1, okay-facts 0.1.0. A Maven
+repository on GitHub Pages (RELEASING.md); while only the two sites use it, a change is republished under 0.1.0.
