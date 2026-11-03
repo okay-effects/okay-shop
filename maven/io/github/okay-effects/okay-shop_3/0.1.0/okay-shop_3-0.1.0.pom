@@ -39,6 +39,11 @@
             <version>0.1.0</version>
         </dependency>
         <dependency>
+            <groupId>io.github.okay-effects</groupId>
+            <artifactId>okay-facts-router_3</artifactId>
+            <version>0.1.0</version>
+        </dependency>
+        <dependency>
             <groupId>org.scalameta</groupId>
             <artifactId>munit_3</artifactId>
             <version>1.2.3</version>
