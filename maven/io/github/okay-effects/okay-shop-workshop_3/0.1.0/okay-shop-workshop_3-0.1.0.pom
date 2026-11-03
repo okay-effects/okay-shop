@@ -82,5 +82,17 @@
             <url>https://okay-effects.github.io/okay-serverless/maven/</url>
             <layout>default</layout>
         </repository>
+        <repository>
+            <id>okay-facts</id>
+            <name>okay-facts</name>
+            <url>https://okay-effects.github.io/okay-facts/maven/</url>
+            <layout>default</layout>
+        </repository>
+        <repository>
+            <id>okay-llm</id>
+            <name>okay-llm</name>
+            <url>https://okay-effects.github.io/okay-llm/maven/</url>
+            <layout>default</layout>
+        </repository>
     </repositories>
 </project>

@@ -34,6 +34,11 @@
             <version>0.1.0</version>
         </dependency>
         <dependency>
+            <groupId>io.github.okay-effects</groupId>
+            <artifactId>okay-facts_3</artifactId>
+            <version>0.1.0</version>
+        </dependency>
+        <dependency>
             <groupId>org.scalameta</groupId>
             <artifactId>munit_3</artifactId>
             <version>1.2.3</version>
@@ -75,6 +80,18 @@
             <id>okay-serverless</id>
             <name>okay-serverless</name>
             <url>https://okay-effects.github.io/okay-serverless/maven/</url>
+            <layout>default</layout>
+        </repository>
+        <repository>
+            <id>okay-facts</id>
+            <name>okay-facts</name>
+            <url>https://okay-effects.github.io/okay-facts/maven/</url>
+            <layout>default</layout>
+        </repository>
+        <repository>
+            <id>okay-llm</id>
+            <name>okay-llm</name>
+            <url>https://okay-effects.github.io/okay-llm/maven/</url>
             <layout>default</layout>
         </repository>
     </repositories>
