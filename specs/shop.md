@@ -711,6 +711,17 @@ host's (the mall: R2 and its workshop screens).
   bytes), `QuotesSuite` (photos kept and linked for the client and the staff only; too many, wrong kind, too large
   refused; a site without photos refuses them).
 
+## Structured data (operator, 2026-11-03)
+
+What a search engine reads of the business is ONE schema.org node, `@id` `<origin>/#business`: the rating of
+"Reviews" is given to it, and so is the look's description. `Structured.business(site, kind, fields)` writes it:
+its type the look's (`ClothingStore`, `HairSalon`; default `LocalBusiness`), name, url, the look's fields
+(`description`, `priceRange`, `areaServed`, ...) and `hasOfferCatalog` — every SHOWN offer as an `Offer` of a
+`Service` (its name and description in the page's language), its page `/<lang>/offer/<key>/`, `price` ("60.00")
+and `priceCurrency` `PLN` when it has a price and is not quoted. No offers: no catalog. Escaped as JSON. The look
+puts it in its `Seo.head`; a look that does not has its pages byte for byte as before (`OldPagesSuite`). Without
+the shared `@id` the look's node and the rating's would read as two businesses. Tests: `StructuredSuite`.
+
 ## Open core (operator, 2026-10-29)
 
 okay-shop is public (Apache-2.0) and is the engine of ONE site: its storefront, orders, tracking and workshop — and,
