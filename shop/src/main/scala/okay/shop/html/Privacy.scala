@@ -18,7 +18,7 @@ object Privacy:
   /** the page for this site in this language: a whole HTML document. `host`: the items its host (a platform the
    * site runs on: its processor) adds to the recipients, in `l`, said first — HTML of the host's (specs/shop.md
    * "The site's host in its privacy policy"); none: the page as it always was */
-  def page(site: Site, l: Lang, email: String = "", host: Vector[String] = Vector.empty): String =
+  def page(site: Site, l: Lang, email: String = "", host: Vector[String] = Vector.empty, chat: Int = 0): String =
     val address = Html.escape(if email.nonEmpty then email else this.email(site))
     val contact = s"""<a href="mailto:$address">$address</a>"""
     val name = Html.escape(site.name)
@@ -26,8 +26,10 @@ object Privacy:
     val t = texts(l, site.clothing, name, contact, host)
     val note = t.note.fold("")(n => s"\n<p><em>$n</em></p>")
     // a shop that comes to its clients keeps their addresses: said after what is collected
-    val visits = site.work.filter(_.has(Mode.AtClient)).fold(t.sections)(_ =>
+    val visits0 = site.work.filter(_.has(Mode.AtClient)).fold(t.sections)(_ =>
       t.sections.take(2) ++ (visit(l) +: t.sections.drop(2)))
+    // the assistant's chat (specs/shop.md "The assistant"): what it keeps and for how long, after what is collected
+    val visits = if chat <= 0 then visits0 else visits0.take(2) ++ (assistant(l, chat) +: visits0.drop(2))
     val sections = visits.zipWithIndex.map { case ((h, body), i) => s"<h2>${i + 1}. $h</h2>\n$body" }
     s"""<!doctype html><html lang="${l.code}"><head><meta charset="utf-8">""" +
       """<meta name="viewport" content="width=device-width,initial-scale=1">""" + "\n" +
@@ -58,6 +60,32 @@ object Privacy:
   private def p(s: String): String = s"<p>$s</p>"
 
   /** the section of a shop that comes to its clients (specs/shop.md "How the work happens": privacy) */
+  /** the assistant's section: its purpose, what it keeps, for `days` days of quiet, deletion in the chat, the AI */
+  private def assistant(l: Lang, days: Int): (String, String) = l match
+    case Lang.pl => "Asystent (czat)" -> p("Czat na stronie odpowiada na pytania o nasze usługi, ceny, wolne " +
+        "terminy i pomaga zarezerwować wizytę. Przechowujemy rozmowę (Twoje wiadomości i odpowiedzi) oraz dane, " +
+        "które podasz przy rezerwacji (imię, kontakt), by prowadzić rozmowę i zrealizować rezerwację; podstawą " +
+        "jest Twoje żądanie (art. 6 ust. 1 lit. b RODO). Odpowiedzi tworzy model językowy Cloudflare Workers AI, " +
+        "który nie otrzymuje naszych cen ani terminów — te wstawiamy sami. Rozmowa jest usuwana po " +
+        s"$days dniach bez aktywności, a w każdej chwili możesz ją usunąć przyciskiem w czacie.")
+    case Lang.en => "The assistant (chat)" -> p("The chat on the site answers questions about our services, " +
+        "prices and free times, and helps to book. We keep the conversation (your messages and the answers) and " +
+        "what you give for a booking (name, contact) to hold the conversation and make the booking, at your request " +
+        "(art. 6(1)(b) GDPR). The answers are written by a language model of Cloudflare Workers AI, which never " +
+        "receives our prices or times — we put them in ourselves. The conversation is deleted after " +
+        s"$days days without activity, and you can delete it at any time with the button in the chat.")
+    case Lang.uk => "Асистент (чат)" -> p("Чат на сайті відповідає на запитання про наші послуги, ціни, вільний " +
+        "час і допомагає записатися. Ми зберігаємо розмову (ваші повідомлення та відповіді) і дані, які ви надаєте " +
+        "для запису (ім’я, контакт), щоб вести розмову та виконати запис, на ваш запит (ст. 6 п. 1 б) GDPR). " +
+        "Відповіді пише мовна модель Cloudflare Workers AI, яка не отримує наших цін і часу — їх вставляємо ми. " +
+        s"Розмова видаляється через $days днів без активності, а видалити її можна будь-коли кнопкою в чаті.")
+    case Lang.ru => "Ассистент (чат)" -> p("Чат на сайте отвечает на вопросы о наших услугах, ценах, свободном " +
+        "времени и помогает записаться. Мы храним разговор (ваши сообщения и ответы) и данные, которые вы даёте " +
+        "для записи (имя, контакт), чтобы вести разговор и выполнить запись, по вашему запросу (ст. 6 п. 1 б) " +
+        "GDPR). Ответы пишет языковая модель Cloudflare Workers AI, которая не получает наших цен и времени — их " +
+        s"вставляем мы. Разговор удаляется через $days дней без активности, а удалить его можно в любой момент " +
+        "кнопкой в чате.")
+
   private def visit(l: Lang): (String, String) = l match
     case Lang.pl => "Adres wizyty" -> p("Gdy rezerwujesz wizytę u siebie, podajesz adres (ulica, kod, miasto, " +
         "uwagi o wejściu). Używamy go wyłącznie, by dojechać na umówioną wizytę: widzą go tylko nasi pracownicy " +

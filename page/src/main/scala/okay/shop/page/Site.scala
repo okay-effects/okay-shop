@@ -32,6 +32,8 @@ object Site:
       submit(f.asInstanceOf[HTMLFormElement])))
     doc.querySelectorAll("[data-slots]").foreach(d => picker(d.asInstanceOf[HTMLElement]))
     modes()
+    // the assistant (specs/shop.md "The assistant"): only where the page carries its marker
+    byId("okay-chat").foreach(Chat.start)
 
   private def byId(id: String): Option[HTMLElement] =
     Option(dom.document.getElementById(id)).map(_.asInstanceOf[HTMLElement])

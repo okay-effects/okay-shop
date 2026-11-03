@@ -133,6 +133,38 @@ object Bookings:
           }
         }
 
+  /**
+   * A BOOKING FROM THE ASSISTANT (specs/shop.md "The assistant"): the form's checks and path — name, contact, consent,
+   * the service shown and bookable, its plan (the default mode and place) and master, the store deciding in its step
+   * — Turnstile replaced by limits: the form's 5 per IP in 10 minutes and 3 per conversation (`conversation`, the
+   * host's key) a day; the letters and the notice as the form's. The booking, or why not and its status
+   */
+  def chat[R[_]](c: Conf, f: Map[String, String], ip: String, conversation: String)(using In[Store, R], In[Mail, R],
+    In[Ids, R], In[Clock, R], In[Notify, R]): Either[(String, Int), Booking] ! R =
+    val name = f.getOrElse("name", "").trim.take(120)
+    val contact = f.getOrElse("contact", "").trim.take(200)
+    val start = f.getOrElse("start", "").toLongOption
+    if name.isEmpty then pure(Left(("name", 400)))
+    else if !Contact.valid(contact) then pure(Left(("contact", 400)))
+    else if !f.get("rodo_consent").exists(v => v.nonEmpty && v != "false") then pure(Left(("consent", 400)))
+    else (plan(c, f.getOrElse("service", ""), "", "").filterOrElse(!_.offer.hidden, "service")
+      .flatMap(addressed(c, _, f)).flatMap(p => masters(c, p, f.getOrElse("master", "")).map(_ => p)), start) match
+      case (Left(why), _) => pure(Left((why, if why == "area" then 409 else 400)))
+      case (_, None) => pure(Left(("start", 400)))
+      case (Right(p), Some(at)) => Clock.now[R].flatMap { now =>
+          Store.allow[R](s"book:$ip", 5, Api.tenMinutes, now).flatMap(byIp =>
+            if !byIp then pure(false) else Store.allow[R](s"chat:$conversation", 3, 86400000L, now)).flatMap { ok =>
+            if !ok then pure(Left(("limit", 429)))
+            else
+              val lang = Lang.parse(f.getOrElse("lang", "")).getOrElse(c.site.lang)
+              reserve[R](c, p, at, name, contact, lang, f.getOrElse("master", ""), now).flatMap {
+                case Left(why) => pure(Left((why, 409)))
+                case Right(b) => told(c, b, Letters.booked(c, b), Letters.bookedOwner(c, b), Notice.Booked(b))
+                    .as(Right(b))
+              }
+          }
+        }
+
   /** the booking made, if its start is still free: the store decides, in its step */
   private def taken[R[_]](c: Conf, f: Map[String, String], p: Plan, at: Long, name: String, contact: String,
                           now: Long)(using In[Store, R], In[Mail, R], In[Ids, R], In[Notify, R]): Response ! R =

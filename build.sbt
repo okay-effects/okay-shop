@@ -13,7 +13,9 @@ ThisBuild / resolvers ++= Seq("okay-scala" at "https://okay-effects.github.io/ok
   "okay-faces" at "https://okay-effects.github.io/okay-faces/maven",
   "okay-http" at "https://okay-effects.github.io/okay-http/maven",
   "okay-ui" at "https://okay-effects.github.io/okay-ui/maven",
-  "okay-serverless" at "https://okay-effects.github.io/okay-serverless/maven")
+  "okay-serverless" at "https://okay-effects.github.io/okay-serverless/maven",
+  "okay-facts" at "https://okay-effects.github.io/okay-facts/maven",
+  "okay-llm" at "https://okay-effects.github.io/okay-llm/maven")
 /** RELEASES, ON GITHUB PAGES: `sbt publish` writes every module into `target/pages-maven/`, which goes to the
  * `gh-pages` branch under `maven/` (RELEASING.md) */
 val pagesRepository = settingKey[File]("the Maven repository a release is written to, for GitHub Pages")
@@ -43,7 +45,9 @@ lazy val fixtures = Def.task {
  * the pages of the storefront (given a site's look), of an order, the letters */
 lazy val shop = crossProject(JVMPlatform, JSPlatform).crossType(CrossType.Pure).in(file("shop"))
   .settings(name := "okay-shop",
-    libraryDependencies ++= Seq("io.github.okay-effects" %%% "okay-serverless" % okayServerless, munit.value),
+    libraryDependencies ++= Seq("io.github.okay-effects" %%% "okay-serverless" % okayServerless,
+      // the assistant (specs/shop.md "The assistant"): the facts resolved, the model never handling a value
+      "io.github.okay-effects" %%% "okay-facts" % "0.1.0", munit.value),
     Test / sourceGenerators += fixtures.taskValue)
 
 /** THE WORKSHOP: its program on okay-ui, `Staff` over `Fetch`; in a page `okay.shop.workshop.InThePage` */

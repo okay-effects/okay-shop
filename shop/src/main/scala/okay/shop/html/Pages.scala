@@ -56,6 +56,11 @@ $switchStyle
   def turnstile(sitekey: String): String =
     s"""<div class="cf-turnstile" data-sitekey="${e(sitekey)}" data-appearance="interaction-only"></div>"""
 
+  /** the assistant's marker (specs/shop.md "The assistant"): the pages' script draws the chat where it is; none
+   * without a chat */
+  def chat(look: Look): String = look.chat.fold("")(c => s"""<div id="okay-chat" data-endpoint="${e(c.endpoint)}" """ +
+    s"""data-focus="${e(c.focus)}" hidden></div>\n""")
+
   /** the scripts at the end of every page with a form */
   def scripts: String =
     """<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
@@ -151,7 +156,7 @@ $switchStyle
       </div>
     </div>
   </div>
-$scripts
+${chat(look)}$scripts
 </body></html>
 """
 
@@ -224,7 +229,7 @@ $scripts
     </section>
     ${foot(site, look)}
   </div>
-$scripts
+${chat(look)}$scripts
 </body></html>
 """
 

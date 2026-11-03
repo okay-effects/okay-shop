@@ -9,6 +9,10 @@ final case class Theme(root: String, background: String, extra: String = "")
  * (structured data) */
 final case class Seo(title: String, description: String, head: String = "")
 
+/** THE ASSISTANT'S CHAT on a site's pages (specs/shop.md "The assistant"): where the widget's calls go, and the
+ * conversation's focus there (`shop:<id>`, or `mall`) */
+final case class Chat(endpoint: String, focus: String)
+
 /**
  * A SITE'S LOOK, its own — the storefront's theme, its words for search engines, its sections between the offers
  * and the contact, its links in the foot, its privacy policy (and that policy's version, kept with every consent),
@@ -31,3 +35,6 @@ trait Look:
   def policy: String = Privacy.version
   /** pages of its own, by their path under the language (`products/`): each language's */
   def pages(at: Lang => (String => At)): Vector[(String, String)] = Vector.empty
+  /** the assistant's chat on the storefront's and the offers' pages: none (the default) — no widget, the pages as
+   * before */
+  def chat: Option[Chat] = None
