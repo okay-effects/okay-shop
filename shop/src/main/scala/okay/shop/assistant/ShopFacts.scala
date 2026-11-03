@@ -27,7 +27,10 @@ object ShopFacts:
       Prop("city", Type.Text, visible = true), Prop("address", Type.Text, about = "street, postcode and city"),
       Prop("url", Type.Url, about = "its storefront"), Prop("hours", Type.Text, about = "its opening hours"),
       Prop("rating", Type.Number, about = "its reviews' average, of 5"),
-      Prop("reviews", Type.Count(Noun.review), about = "how many reviews")),
+      Prop("reviews", Type.Count(Noun.review), about = "how many reviews"),
+      Prop("area", Type.Text, about = "the places it comes to (at the client's)"),
+      Prop("modes", Type.Text, about = "how it works: at its place, at the client's, by parcel, online"),
+      Prop("contact", Type.Text, about = "its e-mail")),
       key = Vector("id"), iri = "https://schema.org/LocalBusiness", about = "a shop"),
     Cls("Service", "v", Vector(
       Prop("name", Type.Text, visible = true), Prop("description", Type.Text, visible = true),
@@ -38,7 +41,10 @@ object ShopFacts:
     Cls("Master", "m", Vector(
       Prop("name", Type.Text), Prop("shop", Type.Entity("Shop")),
       Prop("services", Type.Entity("Service"), functional = false)),
-      key = Vector("shop", "key"), iri = "https://schema.org/Person", about = "a person doing the services"),
+      key = Vector("shop", "key"), iri = "https://schema.org/Person", about = "a person doing the services",
+      person = true),
+    Cls("Place", "pl", Vector(Prop("name", Type.Text, visible = true), Prop("shop", Type.Entity("Shop"))),
+      key = Vector("shop", "name"), iri = "https://schema.org/Place", about = "a place it comes to (its area)"),
     Cls("Slot", "s", Vector(
       Prop("name", Type.Text, visible = true, about = "its service's name"),
       Prop("time", Type.Time, about = "when it starts"), Prop("date", Type.Date, about = "its day"),
@@ -80,8 +86,10 @@ object ShopFacts:
     val location = site.work.flatMap(_.locations.headOption).map(_.address)
     val city = if about.city.nonEmpty then about.city else location.fold("")(_.city)
     val v = about.version
+    val area = site.work.flatMap(_.area).map(_.places).filter(_ => site.work.exists(_.has(Mode.AtClient)))
+    // the hours: its place's, else its visits' (a shop that comes to the client), else its schedule's
     val week = site.work.flatMap(_.locations.headOption).map(_.hours).filter(_.nonEmpty)
-      .orElse(site.schedule.map(_.week))
+      .orElse(site.work.flatMap(_.area).map(_.hours).filter(_.nonEmpty)).orElse(site.schedule.map(_.week))
     val shopRow = Row(shop, Map[String, Value]("name" -> Value.text(site.name), "url" -> Value.Url(
       s"${c.origin}/${site.lang.code}/")) ++
       Option.when(about.category.nonEmpty)("category" -> Value.Text(about.category)) ++
@@ -89,7 +97,11 @@ object ShopFacts:
       location.map(a => "address" -> Value.text(s"${a.street}, ${a.postcode} ${a.city}")) ++
       week.filter(_.nonEmpty).map(w => "hours" -> hours(w)) ++
       site.rated.filter(_.count > 0).toVector.flatMap(r => Vector("rating" -> Value.Num(BigDecimal(r.average)
-        .setScale(1, BigDecimal.RoundingMode.HALF_UP)), "reviews" -> Value.Count(r.count, Noun.review))), v)
+        .setScale(1, BigDecimal.RoundingMode.HALF_UP)), "reviews" -> Value.Count(r.count, Noun.review))) ++
+      area.filter(_.nonEmpty).map(ps => "area" -> Value.text(ps.mkString(", "))) ++
+      site.work.map(_.modes).filter(_.nonEmpty).map(ms => "modes" -> Value.Text(FLang.values.map(l => l ->
+        ms.map(_.label(shopLang(l))).mkString(", ")).toMap)) ++
+      Option.when(c.contact.nonEmpty)("contact" -> Value.text(c.contact)), v)
     val services = site.shown.map { o =>
       val masters = if site.masters.isEmpty then Vector.empty else site.masters.filter(m => m.services.isEmpty ||
         m.services.contains(o.key))
@@ -101,12 +113,17 @@ object ShopFacts:
         Option.when(masters.nonEmpty)("masters" -> Value.Many(masters.map(m => Value.Entity(Ent(source, "Master",
           m.key))))), v)
     }
-    val masters = site.masters.map(m => Row(Ent(source, "Master", m.key), Map("name" -> Value.text(m.name),
+    // a master's name, and its forms by case as the owner wrote them (`name.gen` → by language)
+    def forms(m: Master): Map[String, Value] = m.forms.toVector.groupBy(_._1.dropWhile(_ != '.').drop(1)).map((k, fs) =>
+      s"name.$k" -> Value.Text(fs.flatMap((lk, v) => FLang.parse(lk.takeWhile(_ != '.')).map(_ -> v)).toMap))
+    val masters = site.masters.map(m => Row(Ent(source, "Master", m.key), forms(m) ++ Map("name" -> Value.text(m.name),
       "shop" -> Value.Entity(shop), "services" -> Value.Many(site.shown.filter(o => m.services.isEmpty ||
         m.services.contains(o.key)).map(o => Value.Entity(Ent(source, "Service", o.key))))), v))
     val reviews = site.rated.toVector.flatMap(_.latest).filter(_.shown).map(r => Row(Ent(source, "Review", r.id),
       Map("rating" -> Value.Num(r.rating), "text" -> Value.text(r.text), "shop" -> Value.Entity(shop)), v))
-    (shopRow +: services) ++ masters ++ reviews
+    val places = area.toVector.flatten.map(name => Row(Ent(source, "Place", name), Map("name" -> Value.text(name),
+      "shop" -> Value.Entity(shop)), v))
+    (shopRow +: services) ++ masters ++ reviews ++ places
 
   /** a slot's key: `service|master|start` */
   def slotKey(service: String, master: String, start: Long): String = s"$service|$master|$start"

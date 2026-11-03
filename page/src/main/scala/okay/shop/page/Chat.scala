@@ -188,7 +188,9 @@ background:#2563eb;color:#fff;font:inherit;font-weight:600;cursor:pointer;text-d
               case None => box.appendChild(doc.createTextNode(text))
         }
         if a.flagged.asInstanceOf[Any] == true then box.appendChild(el("div", "okc-note", w.flagged))
-        val raw = el("div", "okc-raw", JSON.stringify(a.answer.raw, null: js.Function2[String, js.Any, js.Any], 1))
+        // the lane that answered, when the host says it (the router — no model —, or the model): in the debug view only
+        val lane = if js.isUndefined(a.selectDynamic("lane")) then "" else s"${a.lane} · "
+        val raw = el("div", "okc-raw", lane + JSON.stringify(a.answer.raw, null: js.Function2[String, js.Any, js.Any], 1))
         box.appendChild(raw)
       else box.textContent = if js.isUndefined(a.selectDynamic("notice")) then w.failed else a.notice.toString
       log.appendChild(box)

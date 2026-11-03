@@ -5,12 +5,14 @@ import okay.effects.json.Json
 /**
  * A MASTER of a shop with a calendar of their own (specs/shop.md "Masters"): a key, a name, initials, an optional
  * email (a team member who signs in; none: a name only), the services, modes and locations they work in (all of each
- * when none), their own week (none: the place's or the shop's hours), their days off (date ranges, both ends in)
+ * when none), their own week (none: the place's or the shop's hours), their days off (date ranges, both ends in),
+ * their name's forms by case as the owner writes them (optional: `pl.gen` → `Marka`; okay-facts renders a name in a
+ * case from these first, else by its rules — specs/shop.md "The assistant")
  */
 final case class Master(key: String, name: String, initials: String = "", email: String = "",
                         services: Vector[String] = Vector.empty, modes: Vector[Mode] = Vector.empty,
                         places: Vector[String] = Vector.empty, hours: Map[Int, Vector[Span]] = Map.empty,
-                        off: Vector[(String, String)] = Vector.empty):
+                        off: Vector[(String, String)] = Vector.empty, forms: Map[String, String] = Map.empty):
   /** whether they do service `o` in mode `m` (none: a shop before the modes) at place `p` */
   def does(o: String, m: Option[Mode], p: String): Boolean =
     (services.isEmpty || services.contains(o)) && m.forall(x => modes.isEmpty || modes.contains(x)) &&
@@ -46,14 +48,17 @@ object Masters:
       }
     case _ => Vector.empty
 
-  def toJson(ms: Vector[Master]): Json = Json.Arr(ms.map(m => Json.obj("key" -> Json.str(m.key),
+  def toJson(ms: Vector[Master]): Json = Json.Arr(ms.map(m => Json.Obj(Json.obj("key" -> Json.str(m.key),
     "name" -> Json.str(m.name), "initials" -> Json.str(m.initials), "email" -> Json.str(m.email),
     "services" -> Json.Arr(m.services.map(Json.str)), "modes" -> Json.Arr(m.modes.map(x => Json.str(x.key))),
     "places" -> Json.Arr(m.places.map(Json.str)),
     "hours" -> Json.Arr(m.hours.toVector.sortBy(_._1).flatMap((d, ss) => ss.map(s => Json.obj(
       "day" -> Json.str(Work.days(d - 1)), "from" -> Json.str(Span.label(s.from)),
       "to" -> Json.str(Span.label(s.to)))))),
-    "off" -> Json.Arr(m.off.map((a, b) => Json.obj("from" -> Json.str(a), "to" -> Json.str(b)))))))
+    "off" -> Json.Arr(m.off.map((a, b) => Json.obj("from" -> Json.str(a), "to" -> Json.str(b))))).fields ++
+    Option.when(m.forms.nonEmpty)("forms" -> Json.Obj(m.forms.toVector.groupBy(_._1.takeWhile(_ != '.')).toVector
+      .sortBy(_._1).map((l, fs) => l -> Json.Obj(fs.sortBy(_._1).map((k, v) => k.dropWhile(_ != '.').drop(1) ->
+      Json.str(v)))))))))
 
   /** the masters from their JSON (a list), checked by field against the services, the work's modes and locations */
   def fromJson(j: Json, offers: Set[String], work: Option[Work]): Either[String, Vector[Master]] = j match
@@ -81,6 +86,23 @@ object Masters:
                 .filter((a, b) => dates(a, b).nonEmpty).toRight("master.off")
             case _ => Left("master.off")
           }
+          // the name's forms by case: `{"pl": {"gen": "Marka", "ins": "Markiem"}, "uk": {…}}` (pl, uk, ru; cases
+          // gen, dat, acc, ins, loc), each at most 60 letters
+          val forms: Either[String, Map[String, String]] = o.get("forms") match
+            case None | Some(Json.Null) => Right(Map.empty)
+            case Some(Json.Obj(ls)) =>
+              val all = ls.flatMap {
+                case (l, Json.Obj(cs)) if Set("pl", "uk", "ru")(l) => cs.map {
+                    case (c, Json.Str(v)) if Set("gen", "dat", "acc", "ins", "loc")(c) && v.trim.nonEmpty &&
+                      v.trim.length <= 60 => Right(s"$l.$c" -> v.trim)
+                    case (c, Json.Str(v)) if v.trim.isEmpty => Right("" -> "")
+                    case _ => Left("master.forms")
+                  }
+                case _ => Vector(Left("master.forms"))
+              }
+              all.collectFirst { case Left(e) => e }.toLeft(all.collect { case Right(kv) if kv._1.nonEmpty => kv }
+                .toMap)
+            case _ => Left("master.forms")
           if !key.matches("[a-z0-9][a-z0-9-]{0,29}") || key == "main" then Left("master.key")
           else if name.isEmpty || name.length > 60 then Left("master.name")
           else if str(o, "initials").length > 3 then Left("master.name")
@@ -91,9 +113,10 @@ object Masters:
           else if strs(o, "places").exists(p => !work.exists(_.location(p).isDefined)) then Left("master.places")
           else if week.size > 21 || week.exists(_.isLeft) then Left("master.hours")
           else if off.size > 40 || off.exists(_.isLeft) then Left("master.off")
+          else if forms.isLeft then Left("master.forms")
           else Right(Master(key, name, str(o, "initials").toUpperCase, email, strs(o, "services"), modes.flatten,
             strs(o, "places"), week.collect { case Right(x) => x }.groupMap(_._1)(_._2).map((d, ss) =>
-              d -> ss.sortBy(_.from)), off.collect { case Right(x) => x }))
+              d -> ss.sortBy(_.from)), off.collect { case Right(x) => x }, forms.getOrElse(Map.empty)))
         case _ => Left("master.key")
       }
       ms.collectFirst { case Left(why) => why } match

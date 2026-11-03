@@ -755,10 +755,32 @@ expressions over them; okay-facts renders every value from the shop's data. Pack
   `<div id="okay-chat" …>` before the scripts of the storefront and the offers' pages. A button opens a panel (a
   dialog; full screen on a phone): the conversation, the input, the answers' values as chips (the value; its entity
   and source on hover and focus), a slot's chip clickable (its booking card), a shop's card a link, "delete this
-  conversation", "what the model wrote" (the raw `{params, template}`, hidden by default). pl, uk, ru, en by the
+  conversation", "what the model wrote" (the raw `{params, template}`, hidden by default; the lane that answered —
+  `router` or `model` — before it when the host says it). pl, uk, ru, en by the
   page's language; announced (`aria-live`), keyboard and Escape. It talks to the host: `POST <endpoint>` `{text,
   focus, lang}` → `{answer, cards, raw, …}`, `POST <endpoint>/book`, `POST <endpoint>/forget`, `GET
   <endpoint>/history`.
+- **The router lane** (operator, 2026-11-03; okay-facts' design §17): before the model, `ShopRouter` answers what it
+  understands with NO model — the intent by okay-facts-router (rules in its portable dialect, the static table, the
+  probe fitted at build time), the slots by rules and the table, the answer AUTHORED. The data (`assistant/`):
+  `intents.json` (16 intents — price, slots, book, manage, hours, address, area, modes, masters, reviews, compare,
+  search, human, help, greet, and `other`: the model's — their rules and their phrasings in pl, uk, ru, en),
+  `answers.json` (an ICU message per intent, variant and language; a list's item repeated with its parameters
+  numbered), `vocabulary.txt` (the domain's words for the table), `static.safetensors` (the table: okay-facts'
+  `tools/table.scala` over the examples, the vocabulary and MASSIVE's pl/ru/en words — 12 868 units × 256, F16),
+  `probe.json` (`tools/fit.scala`). The build turns the JSON into `AssistantData` (and the table's hash: a host reads
+  `router/static-<hash>.safetensors`, never another table with this probe); the JVM's jar carries the table
+  (`ShopRouter.resource`). Slots: the service — nearest among the shop's (its names in every language; words first,
+  the table's meaning beside them; several close: asked, with the candidates as chips; none named: the
+  conversation's on a follow-up, else the price list) —, the day and time (`When`), the price limit (`Amount`), the
+  master by name in any form or script (`Spell`; a name not the shop's: the masters listed), the city (the mall's
+  shops'), the place of the area. Answers bind handles found by `find` in code; a booking only gives the existing
+  card; a comparison is an expression whose boolean chooses the words; a master's name asks its case (`as gen`) in its
+  own select, the nominative otherwise. Not confident, `other`, nothing it can resolve: declined, the host asks the
+  model. A master's name forms (`forms`: `{"pl": {"gen": "Marka", "ins": "Markiem"}, …}`, optional) come first.
+  The shop's facts add `area` and `Place` (the places it comes to), `modes` (how it works) and `contact`; its hours
+  are its place's, else its visits', else its schedule's. Tests: `ShopRouterSuite` (every authored answer checked in
+  four languages; the intents on the crew's data, the model never asked).
 - **Privacy**: `Privacy.page(…, chat = days)` adds the assistant's section (purpose, what is kept, for how long,
   deletion in the chat, the processor) when the shop has the chat; none: the page as before.
 - Tests: `AssistantSuite` — the dialogue of okay-facts' design §12 end to end on `Memory` (the fake model replaying

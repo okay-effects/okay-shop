@@ -41,14 +41,38 @@ lazy val fixtures = Def.task {
   Seq(file)
 }
 
+/** THE ASSISTANT'S ROUTER LANE AS DATA (specs/shop.md "The assistant"): assistant/intents.json, answers.json and
+ * probe.json (tools/fit.scala's) as strings — intents, phrasings and answers are data, never code —, and the name of
+ * the static table they were fitted over (its SHA-256's first 12 hex digits: a host fetches that table and no other) */
+lazy val assistantData = Def.task {
+  val base = (ThisBuild / baseDirectory).value / "assistant"
+  def chunks(f: String): String = IO.read(base / f).grouped(20000).map(c => "\"\"\"" + c + "\"\"\"").mkString(",\n    ")
+  val file = (Compile / sourceManaged).value / "okay" / "shop" / "assistant" / "AssistantData.scala"
+  IO.write(file, "package okay.shop.assistant\n\n/** written by the build from assistant/ */\nobject AssistantData:\n" +
+    Seq("intents" -> "intents.json", "answers" -> "answers.json", "probe" -> "probe.json").map { case (n, f) =>
+      s"  val $n: String = Vector(\n    ${chunks(f)}).mkString\n" }.mkString +
+    "  val table: String = \"" + java.security.MessageDigest.getInstance("SHA-256").digest(IO.readBytes(base /
+      "static.safetensors")).take(6).map(b => f"${b & 0xff}%02x").mkString + "\"\n")
+  Seq(file)
+}
+
 /** THE ENGINE: the model, the content's reader, the effects and their handlers onto okay-serverless, the programs,
  * the pages of the storefront (given a site's look), of an order, the letters */
 lazy val shop = crossProject(JVMPlatform, JSPlatform).crossType(CrossType.Pure).in(file("shop"))
   .settings(name := "okay-shop",
     libraryDependencies ++= Seq("io.github.okay-effects" %%% "okay-serverless" % okayServerless,
       // the assistant (specs/shop.md "The assistant"): the facts resolved, the model never handling a value
-      "io.github.okay-effects" %%% "okay-facts" % "0.1.0", munit.value),
+      "io.github.okay-effects" %%% "okay-facts" % "0.1.0",
+      // its router lane (no model): rules, the static table, the probe (specs/shop.md "The assistant")
+      "io.github.okay-effects" %%% "okay-facts-router" % "0.1.0", munit.value),
+    Compile / sourceGenerators += assistantData.taskValue,
     Test / sourceGenerators += fixtures.taskValue)
+  // the static table in the JVM's jar (a host on the JVM reads it there; a Worker's host puts it in its storage)
+  .jvmSettings(Compile / resourceGenerators += Def.task {
+    val to = (Compile / resourceManaged).value / "okay" / "shop" / "assistant" / "static.safetensors"
+    IO.copyFile((ThisBuild / baseDirectory).value / "assistant" / "static.safetensors", to)
+    Seq(to)
+  }.taskValue)
 
 /** THE WORKSHOP: its program on okay-ui, `Staff` over `Fetch`; in a page `okay.shop.workshop.InThePage` */
 lazy val workshop = crossProject(JVMPlatform, JSPlatform).crossType(CrossType.Pure).in(file("workshop"))

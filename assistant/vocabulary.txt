@@ -1,0 +1,102 @@
+# okay-shop's assistant: the shop domain's words for the static table (okay-facts specs/design.md §17) — services,
+# niches, places, days and everyday words of the four languages, in their common forms. Authored; each word of a
+# line a unit of its own (pairs and triples come from the intents' examples). Lines starting with # are comments.
+# --- beauty, hair, barber (pl)
+strzyżenie strzyżenia strzyżeniu strzyżeniem strzyc ostrzyc ostrzyc się podciąć podcięcie grzywka
+fryzjer fryzjera fryzjerka fryzjerki fryzjerem fryzjerski salon fryzjerski barber barbera barberem barbershop
+broda brody brodę brodą zarost golenie golenia ogolić trymowanie trymer brzytwa kontur
+koloryzacja koloryzację koloryzacji farbowanie farbowania farba pasemka baleyage balayage refleksy odrost
+modelowanie modelowania czesanie upięcie fryzura fryzury fryzurę włosy włosów włosach keratyna prostowanie
+manicure manicuru manicurze paznokcie paznokci paznokciach paznokcia hybryda hybrydę hybrydowy hybrydowego żel żelowe
+pedicure pedicuru stopy stóp przedłużanie przedłużenie zdobienie lakier lakierowanie tipsy stylizacja paznokci
+brwi brwi henna henny regulacja regulację rzęsy rzęs laminacja lifting makijaż makijażu wizaż kosmetyczka kosmetyczny
+depilacja depilacji wosk woskiem laser laserowa zabieg zabiegi zabiegu pielęgnacja oczyszczanie twarzy maseczka
+masaż masażu masażysta relaksacyjny leczniczy klasyczny pleców sportowy gorącymi kamieniami spa
+# --- beauty (uk, ru, en)
+стрижка стрижку стрижки стрижкою підстригтися підстригти постригтися перукар перукаря перукарня барбер барбершоп
+борода бороду бороди бородою гоління поголити фарбування фарбувати пофарбувати укладка зачіска волосся
+манікюр манікюру педикюр педикюру нігті нігтів гель-лак гель покриття нарощування брови брів вії вій макіяж
+депіляція епіляція воск масаж масажу масажист косметолог чистка обличчя догляд салон краси
+стрижка стрижку стрижки стрижкой подстричься подстричь постричься парикмахер парикмахера парикмахерская
+борода бороду бороды бородой бритьё бритье побрить окрашивание покрасить покраска укладка причёска причёску волосы
+маникюр маникюра педикюр педикюра ногти ногтей гель-лак наращивание брови бровей ресницы ресниц макияж
+депиляция эпиляция воск массаж массажа массажист косметолог чистка лица уход салон красоты
+haircut haircuts hairdresser hair cut trim fringe barber beard shave shaving beard trim hot towel
+colouring coloring dye highlights balayage styling blow dry hairstyle hair keratin straightening
+manicure pedicure nails nail gel gel polish hybrid extensions brows eyebrows lashes eyelashes makeup make-up
+waxing wax hair removal laser treatment facial skincare cosmetics beautician massage massages relaxing deep tissue
+# --- clothes, tailoring, shoes (pl, uk, ru, en)
+krawiec krawcowa krawiectwo pracownia krawiecka szycie szyć uszyć przeróbki przeróbka poprawki skracanie skrócić skrócenie
+spodnie spodni nogawki rękawy rękawów sukienka sukienki sukienkę kurtka kurtki kurtkę płaszcz marynarka garnitur koszula
+zamek zamka wymiana zamka cerowanie łatanie podszewka guzik guziki zwężenie poszerzenie
+szewc szewca naprawa butów buty butów obuwie obuwia fleki flek zelówka zelówki podeszwa obcas obcasy czyszczenie butów
+кравець ательє пошиття пошити переробка вкоротити вкорочення штани штанів рукави сукня куртку пальто піджак сорочка
+блискавка заміна блискавки гудзик швець ремонт взуття взуття черевики підбори набійки підошва чистка взуття
+портной ателье пошив сшить переделка укоротить укорачивание брюки брюк рукава платье куртку пальто пиджак рубашка
+молния замена молнии пуговица сапожник ремонт обуви обувь ботинки каблуки набойки подошва чистка обуви
+tailor tailoring sewing alterations alteration hem hemming shorten shortening trousers pants sleeves dress jacket coat
+suit shirt zip zipper replacement button repair repairs cobbler shoe repair shoes boots heels soles sole cleaning
+# --- electronics (pl, uk, ru, en)
+naprawa naprawy naprawę naprawić naprawić telefon serwis serwisu telefon telefonu telefonów smartfon smartfona komórka
+ekran ekranu wyświetlacz wymiana ekranu szybka bateria baterii akumulator wymiana baterii ładowanie gniazdo ładowania
+laptop laptopa laptopów komputer komputera komputerów tablet tabletu iphone iphona samsung xiaomi konsola drukarka
+ремонт ремонту телефон телефону смартфон смартфона екран заміна екрану скло батарея батареї акумулятор зарядка
+ноутбук ноутбука комп'ютер комп'ютера планшет айфон ремонт ноутбука ремонт телефонів
+ремонт телефона смартфон экран экрана замена экрана стекло батарея батареи аккумулятор зарядка ноутбук ноутбука
+компьютер компьютера планшет айфон починить
+phone phones smartphone screen screen replacement cracked screen battery battery replacement charging port laptop
+laptops computer computers tablet iphone console printer fix fixing broken
+# --- cleaning, laundry (pl, uk, ru, en)
+sprzątanie sprzątania sprzątać posprzątać mieszkanie mieszkania mieszkaniu dom domu biuro biura mycie okien okna okien
+pranie prania prać wyprać pralnia pralni pralnię chemiczne pranie chemiczne prasowanie prasować dywan dywanów pościel
+прибирання прибрати квартира квартиру квартири будинок офіс миття вікон вікна прання прати пральня хімчистка прасування
+уборка убрать квартира квартиру квартиры дом офис мытьё окон окна стирка стирать прачечная химчистка глажка ковёр
+cleaning clean flat apartment house home office window cleaning windows laundry wash washing dry cleaning ironing carpet
+# --- home, repairs (pl, uk, ru, en)
+hydraulik hydraulika elektryk elektryka złota rączka fachowiec montaż montażu remont remontu malowanie malować
+kran kranu cieknie cieknący zlew rura rury gniazdko gniazdka oświetlenie lampa meble mebli skręcanie drzwi zamki
+сантехнік сантехніка електрик майстер на годину монтаж ремонт фарбування кран тече раковина труба розетка меблі
+сантехник сантехника электрик муж на час монтаж ремонт покраска кран течёт раковина труба розетка мебель
+plumber plumbing electrician handyman installation renovation painting tap leaking sink pipe socket furniture assembly
+# --- yoga, fitness, learning, pets, auto (pl, uk, ru, en)
+joga jogi jogę jogą zajęcia zajęć pilates trening treningi stretching medytacja karnet wejściówka grupa grupowe
+korepetycje lekcja lekcje lekcji kurs kursu angielski matematyka nauka
+groomer groomera strzyżenie psa psa psów kot kota weterynarz
+opony opon wymiana opon myjnia mechanik samochód auta
+йога йоги заняття заняття пілатес тренування розтяжка медитація абонемент урок уроки курс репетитор грумінг собака кіт шини
+йога йоги занятие занятия пилатес тренировка растяжка медитация абонемент урок уроки курс репетитор груминг собака кот шины
+yoga class classes pilates training workout stretching meditation pass lesson lessons course tutor tutoring grooming dog cat tyres tires car wash
+# --- places
+Warszawa Warszawie Warszawy Kraków Krakowie Krakowa Wrocław Wrocławiu Wrocławia Gdańsk Gdańsku Gdańska Poznań Poznaniu
+Łódź Łodzi Katowice Katowicach Lublin Lublinie Szczecin Szczecinie Gdynia Gdyni Sopot Sopocie Pruszków Pruszkowie
+Mokotów Mokotowie Mokotowa Wola Woli Śródmieście Śródmieściu Praga Pradze Ursynów Ursynowie Bemowo Bemowie Bielany Bielanach
+Żoliborz Żoliborzu Wilanów Wilanowie Targówek Targówku Białołęka Białołęce Ochota Ochocie Ursus Ursusie Wawer Wawrze
+Kazimierz Kazimierzu Podgórze Podgórzu Nowa Huta Krowodrza Krzyki Krzykach Psie Pole Fabryczna Wrzeszcz
+Варшава Варшаві Варшави Варшаву Краків Кракові Кракова Вроцлав Вроцлаві Гданськ Гданську Познань Познані Лодзь Люблін
+Мокотів Мокотові Мокотув Воля Волі Прага Урсинів Беморово Жолібож Вілянув Білоленка Охота Урсус Пружкув Прушків
+Варшава Варшаве Варшавы Краков Кракове Вроцлав Вроцлаве Гданьск Гданьске Познань Познани Лодзь Люблин Мокотов Мокотове
+Warsaw Krakow Cracow Wroclaw Gdansk Poznan Lodz city centre downtown district nearby near me around here
+# --- days and times
+dziś dzisiaj jutro pojutrze teraz zaraz rano rana południe popołudnie po południu wieczór wieczorem noc weekend tydzień
+poniedziałek wtorek środa środę czwartek piątek sobota sobotę niedziela niedzielę godzina godzinie godz minut
+сьогодні завтра післязавтра зараз зранку вранці вдень після обіду ввечері вечір вихідні тиждень понеділок вівторок
+середа середу четвер п'ятниця п'ятницю субота суботу неділя неділю година годині
+сегодня завтра послезавтра сейчас утром днём днем после обеда вечером вечер выходные неделя понедельник вторник
+среда среду четверг пятница пятницу суббота субботу воскресенье час часов
+today tomorrow day after tomorrow now soon morning noon afternoon evening tonight weekend week monday tuesday wednesday
+thursday friday saturday sunday hour o'clock am pm earliest latest next
+# --- everyday words of a shop's chat
+ile kosztuje kosztują cena ceny cennik koszt płacę zapłacę za tanio tanie tańszy tańsze taniej najtaniej drogo droższe drożej
+trwa trwać trwa długo jak długo czas czasu minut godzin zajmuje
+wolny wolne wolnego wolnych termin terminy terminu terminie okienko miejsce miejsca dostępne dostępny kiedy
+zapisać zapisz zapisać się umówić umów rezerwacja rezerwację rezerwacji zarezerwować zarezerwuj wizyta wizytę wizyty
+mistrz mistrza mistrzem mistrzowie pracownik specjalista stylistka kto u kogo z kim
+скільки коштує коштують ціна ціни прайс вартість дешево дешевше найдешевше дорого дорожче триває довго скільки часу
+вільний вільне вільні вільно вікно вікна час запис записатися записати забронювати бронювання візит прийом коли
+майстер майстра майстри спеціаліст хто у кого
+сколько стоит стоят цена цены прайс стоимость дешево дешевле дешевле всего дорого дороже длится долго сколько времени
+свободный свободное свободно окно окна время запись записаться записать забронировать бронь визит приём когда
+мастер мастера мастеров специалист кто у кого
+how much cost costs price prices price list cheap cheaper cheapest expensive more expensive long how long take takes
+free available slot slots time times opening appointment booking book reserve reservation visit when
+master masters barber specialist staff who with whom

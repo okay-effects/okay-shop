@@ -34,7 +34,8 @@ class AssistantSuite extends munit.FunSuite:
   val findSlots: String = Model.call("find",
     """{"class": "Slot", "where": ["service = #v1", "date = tomorrow", "time >= 17:00"]}""")
   val answer: String = """{"params": {"s": "name(#v1)", "p": "price(#v1)", "d": "duration(#v1)", "t1": "time(#s1)",
-    "m1": "name(master(#s1))", "t2": "time(#s2)"}, "template": "Tak, {s} kosztuje {p} i trwa {d}. Jutro wolne: {t1}
+    "m1": "name(master(#s1)) as nom", "t2": "time(#s2)"}, "template": "Tak, {s} kosztuje {p} i trwa {d}.
+    Jutro wolne: {t1}
     ({m1}) albo {t2}. Zapisać?"}""".replace("\n    ", " ")
 
   test("§12's dialogue end to end on Memory: found, rendered from the data, booked by the card, confirmed"):
