@@ -9,6 +9,6 @@ tools=../../okay-facts/tools
 models=../../okay-chat/models
 cache=${1:-${TMPDIR:-/tmp}/okay-shop-router-cache.tsv}
 scala-cli run "$tools/table.scala" -- --model "$models/paraphrase-multilingual-MiniLM-L12-v2" \
-  --intents intents.json --words vocabulary.txt --massive "$models/massive/1.1/data" --dim 256 \
+  --intents intents.json --words vocabulary.txt --massive "$models/massive/1.1/data" --dim 256 --int8 \
   --cache "$cache" --out static.safetensors
 scala-cli run "$tools/fit.scala" -- intents.json static.safetensors probe.json

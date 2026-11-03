@@ -41,15 +41,17 @@ lazy val fixtures = Def.task {
   Seq(file)
 }
 
-/** THE ASSISTANT'S ROUTER LANE AS DATA (specs/shop.md "The assistant"): assistant/intents.json, answers.json and
- * probe.json (tools/fit.scala's) as strings — intents, phrasings and answers are data, never code —, and the name of
- * the static table they were fitted over (its SHA-256's first 12 hex digits: a host fetches that table and no other) */
+/** THE ASSISTANT'S ROUTER LANE AS DATA (specs/shop.md "The assistant"): assistant/intents.json, answers.json,
+ * lexicon.json and probe.json (tools/fit.scala's) as strings — intents, phrasings and answers are data, never
+ * code —, and the name of the static table they were fitted over (its SHA-256's first 12 hex digits: a host fetches
+ * that table and no other) */
 lazy val assistantData = Def.task {
   val base = (ThisBuild / baseDirectory).value / "assistant"
   def chunks(f: String): String = IO.read(base / f).grouped(20000).map(c => "\"\"\"" + c + "\"\"\"").mkString(",\n    ")
   val file = (Compile / sourceManaged).value / "okay" / "shop" / "assistant" / "AssistantData.scala"
   IO.write(file, "package okay.shop.assistant\n\n/** written by the build from assistant/ */\nobject AssistantData:\n" +
-    Seq("intents" -> "intents.json", "answers" -> "answers.json", "probe" -> "probe.json").map { case (n, f) =>
+    Seq("intents" -> "intents.json", "answers" -> "answers.json", "probe" -> "probe.json",
+      "lexicon" -> "lexicon.json").map { case (n, f) =>
       s"  val $n: String = Vector(\n    ${chunks(f)}).mkString\n" }.mkString +
     "  val table: String = \"" + java.security.MessageDigest.getInstance("SHA-256").digest(IO.readBytes(base /
       "static.safetensors")).take(6).map(b => f"${b & 0xff}%02x").mkString + "\"\n")

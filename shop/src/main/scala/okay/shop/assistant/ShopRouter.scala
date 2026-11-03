@@ -3,7 +3,7 @@ package okay.shop.assistant
 import okay.effects.json.Json
 import okay.facts.{Answer, Audit, Bind, Card, Conversation, Ent, Facts, Filter, Found, Handles, Lang as FLang, Op,
   Query, Reply, Scope, Setup, Value, Words, Zone}
-import okay.facts.router.{Amount, Intents, Nearest, Probe, Route, Router, Spell, Table, When}
+import okay.facts.router.{Amount, Intents, Lexicon, Nearest, Probe, Route, Router, Spell, Table, When}
 import okay.scala3.*
 import okay.scala3.std.Clock
 
@@ -45,13 +45,15 @@ object ShopRouter:
   lazy val intents = Intents.parse(AssistantData.intents)
   lazy val answers: Answers = Answers.parse(AssistantData.answers)
   lazy val probe: Probe = Probe.fromJson(Json.fromText(AssistantData.probe))
+  lazy val lexicon: Lexicon = Lexicon.parse(AssistantData.lexicon)
 
   /** the lane: the router over the table, the answers, the thresholds (a route's probability and margin; a
-   * service's nearness and its lead over the next) */
-  final class Lane(val table: Table, val router: Router, val answers: Answers, val minP: Double = 0.6,
-                   val minMargin: Double = 0.2, val serviceAt: Double = 0.6, val serviceLead: Double = 0.06)
+   * service's nearness and its lead over the next), the words of one thing a service's name is said by */
+  final class Lane(val table: Table, val router: Router, val answers: Answers, val minP: Double = 0.7,
+                   val minMargin: Double = 0.2, val serviceAt: Double = 0.6, val serviceLead: Double = 0.06,
+                   val lexicon: Lexicon = Lexicon.empty)
 
-  def lane(table: Table): Lane = new Lane(table, Router(intents, probe), answers)
+  def lane(table: Table): Lane = new Lane(table, Router(intents, probe), answers, lexicon = lexicon)
 
   /** the static table the probe was fitted over: in the JVM's jar at `resource`; a Worker's host keeps it in its
    * storage under `key` (its name the table's hash: no other table is ever read with this probe) */
@@ -64,7 +66,7 @@ object ShopRouter:
     case Declined(route: Route, why: String, slots: Map[String, String] = Map.empty)
 
   private final case class Built(handles: Handles, answer: Answer, cards: Vector[Card] = Vector.empty,
-                                 slots: Map[String, String] = Map.empty)
+                                 slots: Map[String, String] = Map.empty, intent: Option[String] = None)
   private type Out = Either[(String, Map[String, String]), Built]
 
   /** the intents that answer a shop's own facts: no shop in sight, the model lane */
@@ -72,27 +74,82 @@ object ShopRouter:
 
   def turn[R[_]](lane: Lane, s: Setup, c: Conversation, user: String, l: FLang, focus: String)(using In[Facts, R],
     In[Clock, R], In[Audit, R]): Decision ! R =
-    val route = lane.router.route(lane.table, user)
-    if route.by == "unknown" then pure(Decision.Declined(route, "no word known"))
-    else if !route.confident(lane.minP, lane.minMargin) then pure(Decision.Declined(route, "not confident"))
-    else if route.intent == "other" then pure(Decision.Declined(route, "other"))
-    else Clock.now[R].flatMap { now =>
+    val first = lane.router.route(lane.table, user)
+    Clock.now[R].flatMap { now =>
       Bind.focused[R](s, c, focus, l).flatMap { (h0, note) =>
         val ctx = Ctx(lane, c, h0, user, l, focus, Zone.date(now))
-        // the day, the time, the price limit said: among the slots whatever the answer
-        val said = Map[String, String]() ++ ctx.when.day.map("day" -> _) ++ ctx.when.at.map(a => "at" -> clock(a)) ++
-          ctx.when.from.map(a => "from" -> clock(a)) ++ ctx.when.until.map(a => "until" -> clock(a)) ++
-          ctx.amount.max.map(m => "max" -> (m / 100).toString)
-        build[R](route.intent, ctx).flatMap {
-          case Left((why, slots)) => pure(Decision.Declined(route, why, said ++ slots))
-          case Right(b) => Bind.authored[R](s, c, user, l, focus, b.handles, note, b.answer, b.cards, route.intent,
-              route.p).map {
-              case Left(vs) => Decision.Declined(route, "invalid: " + vs.map(_.code).mkString(","), said ++ b.slots)
-              case Right((c2, reply)) => Decision.Answered(c2, reply, route, said ++ b.slots)
-            }
+        // a short follow-up takes the conversation's last question's intent; the words' evidence beside the probe
+        val followed = following(ctx, first)
+        evidence[R](ctx, followed.getOrElse(first)).flatMap { route =>
+          // the day, the time, the price limit said: among the slots whatever the answer
+          val said = Map[String, String]() ++ ctx.when.day.map("day" -> _) ++ ctx.when.at.map(a => "at" ->
+            clock(a)) ++ ctx.when.from.map(a => "from" -> clock(a)) ++ ctx.when.until.map(a => "until" -> clock(a)) ++
+            ctx.amount.max.map(m => "max" -> (m / 100).toString)
+          if route.by == "unknown" then pure(Decision.Declined(route, "no word known"))
+          else if !route.confident(lane.minP, lane.minMargin) then pure(Decision.Declined(route, "not confident"))
+          else if route.intent == "other" then pure(Decision.Declined(route, "other"))
+          else build[R](route.intent, ctx).flatMap {
+            case Left((why, slots)) => pure(Decision.Declined(route, why, said ++ slots))
+            case Right(b) =>
+              // the intent its answer is: a shop's question with no shop in sight answered by a search is a search
+              val answered = route.copy(intent = b.intent.getOrElse(route.intent))
+              Bind.authored[R](s, c, user, l, focus, b.handles, note, b.answer, b.cards, answered.intent,
+                route.p).map {
+                case Left(vs) => Decision.Declined(route, "invalid: " + vs.map(_.code).mkString(","),
+                  said ++ b.slots)
+                case Right((c2, reply)) => Decision.Answered(c2, reply, answered, said ++ b.slots)
+              }
+          }
         }
       }
     }
+
+  /** the conversation's last question in the user's words */
+  private def lastAsked(c: Conversation): Option[String] = c.history.reverseIterator.collectFirst {
+    case j if j.field("role").contains(Json.Str("user")) => j.field("content").collect { case Json.Str(t) => t }
+  }.flatten
+
+  /** intents a short follow-up continues ("a jutro?", "a u Ewy?", "a pedicure?", "and on Saturday?") */
+  private val continued = Set("price", "slots", "book", "masters", "compare", "search", "hours", "area", "address")
+
+  /** A FOLLOW-UP: a short message no rule names — opened by "a", "and", "а", "і", or that the probe is not sure of —
+   * after a question the router understood takes that question's intent; a day, a time or a master after a price or
+   * the masters asks for the free times */
+  private def following(ctx: Ctx, route: Route): Option[Route] =
+    val ws = Words.split(ctx.user)
+    val short = ws.count(_.length >= 3) <= 2 && ws.size <= 5
+    val opened = ws.headOption.exists(Set("a", "а", "and", "i", "і", "и", "й", "та", "ta", "what", "how", "also",
+      "też", "tez", "тоже", "також"))
+    if route.by == "rule" || !short || !(opened || !route.confident(ctx.lane.minP, ctx.lane.minMargin)) then None
+    else lastAsked(ctx.c).map(ctx.lane.router.route(ctx.lane.table, _)).filter(r =>
+      r.confident(ctx.lane.minP, ctx.lane.minMargin) && continued(r.intent)).map { prev =>
+      val timed = !ctx.when.isEmpty || ctx.namesPerson
+      val intent = if timed && Set("price", "masters", "compare")(prev.intent) then "slots" else prev.intent
+      Route(intent, "rule", prev.p, prev.margin, s"follow-up of ${prev.intent}")
+    }
+
+  /** THE WORDS' EVIDENCE beside an unsure probe: a service of the shop named by its words, or one of its masters, and
+   * a day or a time ("Macie jutro wolne na brodę po 16?", "Can I come for a beard trim tomorrow evening?") — its
+   * free times; with an exact time and a booking's word — its booking */
+  private def evidence[R[_]](ctx: Ctx, route: Route)(using In[Facts, R]): Route ! R =
+    val unsure = route.by == "unknown" || (route.by == "probe" && (!route.confident(ctx.lane.minP,
+      ctx.lane.minMargin) || Set("other", "help", "greet")(route.intent)))
+    val timed = ctx.when.day.isDefined || ctx.when.at.isDefined || ctx.when.from.isDefined || ctx.when.until.isDefined
+    // "Czy Ewa pracuje w czwartek?": one of its masters by name, and a day — her free times, not the list of masters
+    val ofMaster = route.by == "probe" && route.intent == "masters"
+    ctx.shopId match
+      case Some(id) if (unsure || ofMaster) && timed =>
+        named[R]("Service", Scope.Source(id), ctx.l).flatMap { cands =>
+          val service = !ofMaster && cands.exists(_._2.exists(n =>
+            Nearest.lexical(ctx.user, n, ctx.lane.lexicon) >= 0.999))
+          (if service then pure(true) else masters[R](id, ctx.l).map(_.exists((_, n) => n.nonEmpty &&
+            Spell.names(ctx.user, n)))).map { named =>
+            if !named then route
+            else Route(if ctx.when.at.isDefined && ctx.books then "book" else "slots", "rule", 1.0, 1.0,
+              "a service or a master, and a time")
+          }
+        }
+      case _ => pure(route)
 
   /** a turn's ground: the lane, the conversation, its handles as they stand, the words, where the user is */
   private final case class Ctx(lane: Lane, c: Conversation, h: Handles, user: String, l: FLang, focus: String,
@@ -115,8 +172,24 @@ object ShopRouter:
       ws.size <= 4 || ws.headOption.exists(Set("a", "а", "and", "i", "и", "і", "й", "to", "ta")) ||
         ws.exists(Set("to", "ten", "ta", "tamten", "tamto", "tamta", "it", "that", "this", "one", "це", "той", "цей",
           "то", "тот", "этот", "это"))
+    def rank(cs: Vector[Nearest.Candidate]): Vector[(String, Double)] =
+      Nearest.rank(lane.table, user, cs, lane.lexicon)
     lazy val when: When = When.of(user, today)
+    /** the persons named: a word in capitals after a person's preposition ("u Ewy", "do Kati", "з Марком", "к Оле",
+     * "with Anna"), never a day's ("for Friday") */
+    lazy val persons: Vector[String] = user.split("\\s+").toVector.map(_.filter(c => c.isLetter || c == '\''))
+      .sliding(2).collect { case Vector(p, w) if Ctx.toPerson(p.toLowerCase) && w.length >= 3 && w.head.isUpper => w }
+      .toVector.filter(w => When.of(w, today).day.isEmpty)
+    def namesPerson: Boolean = persons.nonEmpty
+    /** a booking's word ("zapisz", "book", "запишіть", "забронируйте") */
+    lazy val books: Boolean = Words.split(user).exists(w => Seq("zapis", "zarezerw", "umow", "book", "reserv",
+      "запис", "запиш", "заброн", "zapish", "zabron").exists(w.startsWith))
     lazy val amount: Amount = Amount.of(user)
+
+  private object Ctx:
+    /** the prepositions a person's name follows */
+    val toPerson: Set[String] = Set("u", "do", "z", "ze", "dla", "у", "до", "к", "ко", "з", "із", "с", "со", "для",
+      "with", "by", "for", "see")
 
   private def ok(b: Built): Out = Right(b)
   private def no(why: String, slots: Map[String, String] = Map.empty): Out = Left((why, slots))
@@ -155,30 +228,39 @@ object ShopRouter:
 
   /** the service a message names among the candidates: one, several too close (asked), none */
   private def service(ctx: Ctx, cands: Vector[(Found, Vector[String])]): Nearest.Pick =
-    val ranked = Nearest.rank(ctx.lane.table, ctx.user, cands.zipWithIndex.map((x, i) =>
+    val ranked = ctx.rank(cands.zipWithIndex.map((x, i) =>
       Nearest.Candidate(i.toString, x._2)))
     // the same words of two names ("strzyżenie": men's or children's?): asked, whatever the meaning says
-    def words(i: String) = cands(i.toInt)._2.map(Nearest.lexical(ctx.user, _)).maxOption.getOrElse(0.0)
+    def words(i: String) = cands(i.toInt)._2.map(Nearest.lexical(ctx.user, _, ctx.lane.lexicon)).maxOption
+      .getOrElse(0.0)
     val top = ranked.take(4).map((i, _) => i -> words(i))
     val tied = top.headOption.filter((_, w) => w >= 0.5 && w < 0.999).toVector.flatMap((_, w) =>
       top.filter(x => math.abs(x._2 - w) < 1e-9))
     if tied.size >= 2 && !(ctx.followUp && ctx.context.isDefined) then Nearest.Pick.Several(tied.map(_._1))
+    // no word of any name said, and the meaning not close: none named ("koloryzacja" at a barber's), never asked
+    else if top.forall(_._2 == 0.0) && ranked.headOption.forall(_._2 < 0.75) then Nearest.Pick.Nothing
     // a follow-up keeps the conversation's service unless it names another by its words
     else Nearest.pick(ranked, if ctx.followUp && ctx.context.isDefined then 0.75 else ctx.lane.serviceAt,
       ctx.lane.serviceLead)
 
   private def build[R[_]](intent: String, ctx: Ctx)(using In[Facts, R], In[Clock, R]): Out ! R =
+    // the shops compared by their reviews: a judgement across the mall, the model's
+    if intent == "reviews" && ctx.shop.isEmpty then pure(no("reviews with no shop in sight"))
     // a shop's own fact with no shop in sight: a search across the mall when it names something, else the model
-    if ofShop(intent) && ctx.shop.isEmpty && intent != "slots" && intent != "book" then
-      search(ctx).map(_.left.map((_, slots) => ("no shop in sight", slots)))
+    else if ofShop(intent) && ctx.shop.isEmpty && intent != "slots" && intent != "book" then
+      search(ctx).map(_.left.map((_, slots) => ("no shop in sight", slots)).map(_.copy(intent = Some("search"))))
     // on the mall's pages, with no shop in the conversation, a service asked of is a search across the mall
-    else if ctx.scope == Scope.All && Set("price", "slots", "book")(intent) then search(ctx)
+    else if ctx.scope == Scope.All && Set("price", "slots", "book")(intent) then
+      search(ctx).map(_.map(_.copy(intent = Some("search"))))
     else intent match
       case "greet" => pure(ok(Built(ctx.h, Answer(Vector.empty, ctx.a(greeting(ctx.user))))))
       case "help" => pure(ok(Built(ctx.h, Answer(Vector.empty, ctx.a("help")))))
-      case "hours" => one(ctx, "hours", "hours.week", "hours.none", "h")
-      case "address" => one(ctx, "address", "address.one", "address.none", "a")
-      case "modes" => one(ctx, "modes", "modes.list", "address.none", "m")
+      case "hours" => one(ctx, "hours", "hours.week", "h", missing(ctx, "hours.none"))
+      case "address" => val sh = ctx.shop.get
+        one(ctx, "address", "address.one", "a", has[R](sh.ent, "modes").flatMap(m =>
+          if m then pure(ok(Built(ctx.h, Answer(Vector("m" -> s"modes(${sh.name})"), ctx.a("address.modes")))))
+          else missing(ctx, "address.none")))
+      case "modes" => one(ctx, "modes", "modes.list", "m", missing(ctx, "modes.none"))
       case "human" => val sh = ctx.shop.get
         has[R](sh.ent, "contact").map(e => ok(Built(ctx.h, if e then Answer(Vector("e" -> s"contact(${sh.name})"),
           ctx.a("human.contact")) else Answer(Vector("u" -> s"url(${sh.name})"), ctx.a("human.page")))))
@@ -205,16 +287,26 @@ object ShopRouter:
     else "greet.hello"
 
   /** a shop's one property, or its absence */
-  private def one[R[_]](ctx: Ctx, prop: String, yes: String, none: String, p: String)(using In[Facts, R]): Out ! R =
+  /** a shop's one property, or what it says when the shop has not given it */
+  private def one[R[_]](ctx: Ctx, prop: String, yes: String, p: String, otherwise: => Out ! R)(using In[Facts, R])
+    : Out ! R =
     val sh = ctx.shop.get
-    has[R](sh.ent, prop).map(x => ok(Built(ctx.h, if x then Answer(Vector(p -> s"$prop(${sh.name})"), ctx.a(yes))
-      else Answer(Vector.empty, ctx.a(none)))))
+    has[R](sh.ent, prop).flatMap(x => if x then pure(ok(Built(ctx.h, Answer(Vector(p -> s"$prop(${sh.name})"),
+      ctx.a(yes))))) else otherwise)
+
+  /** WHAT THE SHOP HAS NOT SAID, said honestly (`key`): that it has not, and where to ask — its contact, else its
+   * page (`key.page`) */
+  private def missing[R[_]](ctx: Ctx, key: String)(using In[Facts, R]): Out ! R =
+    val sh = ctx.shop.get
+    has[R](sh.ent, "contact").map(e => ok(Built(ctx.h, if e then Answer(Vector("e" -> s"contact(${sh.name})"),
+      ctx.a(key)) else Answer(Vector("u" -> s"url(${sh.name})"), ctx.a(s"$key.page")))))
 
   private def area[R[_]](ctx: Ctx)(using In[Facts, R]): Out ! R =
     val sh = ctx.shop.get
     has[R](sh.ent, "area").flatMap {
       case false => has[R](sh.ent, "modes").map(m => if m then ok(Built(ctx.h, Answer(Vector("m" ->
-          s"modes(${sh.name})"), ctx.a("area.none")))) else no("no area"))
+          s"modes(${sh.name})"), ctx.a("area.none")))) else no("no area")).flatMap(o =>
+          if o.isRight then pure(o) else missing(ctx, "area.unknown"))
       case true => named[R]("Place", Scope.Source(sh.ent.source), ctx.l).map { places =>
           places.find((_, ns) => ns.exists(Spell.names(ctx.user, _))) match
             case Some((f, _)) =>
@@ -306,6 +398,11 @@ object ShopRouter:
         case None => pure(out)
         case Some(sh) => masters[R](sh.ent.source, ctx.l).flatMap { ms =>
             ms.find((_, n) => n.nonEmpty && Spell.names(ctx.user, n)) match
+              // a person named who is not the shop's ("do Kati"): its people listed, not a service asked
+              case None if ms.nonEmpty && unknownPerson(ctx, cands) =>
+                val (h, names) = issueAll(ctx.h, ms.map(_._1))
+                pure(ok(Built(h, Answer(names.zipWithIndex.map((m, k) => s"m${k + 1}" -> s"name($m) as nom"),
+                  ctx.list("masters.unknown", names.map(_ => "item"))), slots = Map("master" -> "none"))))
               case None => pure(out)
               case Some((m, _)) => masterSlots(ctx, sh.ent.source, m)
           }
@@ -313,15 +410,17 @@ object ShopRouter:
         case Left(out) => byMaster(out)
         case Right(f) => masters[R](f.ent.source, ctx.l).flatMap { ms =>
             val asked = ms.filter((_, n) => n.nonEmpty && Spell.names(ctx.user, n))
-            val named = ctx.user.split("\\s+").toVector.drop(1).exists(w => w.headOption.exists(_.isUpper) &&
-              w.length >= 3 && !cands.exists(_._2.exists(n => Spell.names(w, n))))
-            if asked.isEmpty && named && ms.nonEmpty then
+            if asked.isEmpty && unknownPerson(ctx, cands) && ms.nonEmpty then
               val (h, names) = issueAll(ctx.h, ms.map(_._1))
               pure(ok(Built(h, Answer(names.zipWithIndex.map((m, k) => s"m${k + 1}" -> s"name($m) as nom"),
                 ctx.list("masters.unknown", names.map(_ => "item"))), slots = Map("master" -> "none"))))
             else slotsOf(ctx, f, asked.headOption.map(_._1), booking)
           }
     }
+
+  /** a person named past the first word, in capitals, who is no service's name */
+  private def unknownPerson(ctx: Ctx, cands: Vector[(Found, Vector[String])]): Boolean =
+    ctx.persons.exists(w => !cands.exists(_._2.exists(n => Spell.names(w, n))))
 
   /** a master's free times of every service they do (each time once, with its service) */
   private def masterSlots[R[_]](ctx: Ctx, source: String, m: Found)(using In[Facts, R]): Out ! R =
@@ -433,7 +532,7 @@ object ShopRouter:
               }
         }
       case None => named[R]("Service", Scope.All, ctx.l).flatMap { cands =>
-          val ranked = Nearest.rank(ctx.lane.table, ctx.user, cands.zipWithIndex.map((x, i) =>
+          val ranked = ctx.rank(cands.zipWithIndex.map((x, i) =>
             Nearest.Candidate(i.toString, x._2)))
           val best = ranked.headOption.map(_._2).getOrElse(0.0)
           val near = ranked.filter(r => r._2 >= ctx.lane.serviceAt && r._2 >= best - 0.15).take(5)
@@ -465,7 +564,7 @@ object ShopRouter:
         slots = slots0)))
       else named[R]("Service", Scope.All, ctx.l, 200).flatMap { all =>
         val cands = all.filter(x => inCity(x._1.ent.source))
-        val ranked = Nearest.rank(ctx.lane.table, ctx.user, cands.zipWithIndex.map((x, i) =>
+        val ranked = ctx.rank(cands.zipWithIndex.map((x, i) =>
           Nearest.Candidate(i.toString, x._2)))
         val best = ranked.headOption.map(_._2).getOrElse(0.0)
         val near = ranked.filter(r => r._2 >= ctx.lane.serviceAt && r._2 >= best - 0.12).map(r => cands(r._1.toInt)._1)
@@ -501,7 +600,7 @@ object ShopRouter:
             }
           else
             // no service near enough: the shops whose kind (or name) the message names
-            val byKind = Nearest.rank(ctx.lane.table, ctx.user, shops.filter(x => inCity(x._1.ent.source)).map((f,
+            val byKind = ctx.rank(shops.filter(x => inCity(x._1.ent.source)).map((f,
               names) => Nearest.Candidate(f.ent.source, names ++ f.visible.collect { case ("category", k) => k })))
             val bestKind = byKind.headOption.map(_._2).getOrElse(0.0)
             val found = byKind.filter(r => r._2 >= ctx.lane.serviceAt && r._2 >= bestKind - 0.12).take(5)

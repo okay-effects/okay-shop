@@ -766,21 +766,35 @@ expressions over them; okay-facts renders every value from the shop's data. Pack
   `intents.json` (16 intents — price, slots, book, manage, hours, address, area, modes, masters, reviews, compare,
   search, human, help, greet, and `other`: the model's — their rules and their phrasings in pl, uk, ru, en),
   `answers.json` (an ICU message per intent, variant and language; a list's item repeated with its parameters
-  numbered), `vocabulary.txt` (the domain's words for the table), `static.safetensors` (the table: okay-facts'
-  `tools/table.scala` over the examples, the vocabulary and MASSIVE's pl/ru/en words — 12 868 units × 256, F16),
-  `probe.json` (`tools/fit.scala`). The build turns the JSON into `AssistantData` (and the table's hash: a host reads
-  `router/static-<hash>.safetensors`, never another table with this probe); the JVM's jar carries the table
+  numbered), `vocabulary.txt` (the domain's words for the table), `lexicon.json` (words of one thing in services'
+  names and clients' words — "szafa", "meble", "wardrobe"; "syn", "dziecięce", "kids" — and a name's words that say
+  nothing of which it is: general words of small services, never one shop's), `static.safetensors` (the table:
+  okay-facts' `tools/table.scala` over the examples, the vocabulary and MASSIVE's pl/ru/en words — 15 500 units ×
+  256, int8), `probe.json` (`tools/fit.scala`). The build turns the JSON into `AssistantData` (and the table's hash: a
+  host reads `router/static-<hash>.safetensors`, never another table with this probe); the JVM's jar carries the table
   (`ShopRouter.resource`). Slots: the service — nearest among the shop's (its names in every language; words first,
   the table's meaning beside them; several close: asked, with the candidates as chips; none named: the
   conversation's on a follow-up, else the price list) —, the day and time (`When`), the price limit (`Amount`), the
   master by name in any form or script (`Spell`; a name not the shop's: the masters listed), the city (the mall's
   shops'), the place of the area. Answers bind handles found by `find` in code; a booking only gives the existing
   card; a comparison is an expression whose boolean chooses the words; a master's name asks its case (`as gen`) in its
-  own select, the nominative otherwise. Not confident, `other`, nothing it can resolve: declined, the host asks the
+  own select, the nominative otherwise. A short follow-up ("a jutro?", "a u Ewy?", "a pedicure?") no rule names takes
+  the intent of the conversation's last question (a day, a time or a person after a price: the free times); an unsure
+  probe gives way to the words' evidence — a service of the shop or one of its masters named, and a day or a time:
+  the free times (with an exact time and a booking's word: the booking); a person named after "u", "do", "z", "у",
+  "до", "with" who is not the shop's: its people listed; no word of any service's name said and the meaning not close:
+  none named, never "which one?". What a shop has not given is said so, with where to ask (its contact, else its
+  page): its hours, its address (with its ways of working when it has them), its ways of working, the places it comes
+  to — never another fact's absence (a ways-of-working question once said the address' absence). A route is
+  confident by a rule, or by the probe at p ≥ 0.7 and a margin ≥ 0.2 (okay-facts §16). Asking to break the rule,
+  others' data (a client's phone, a shop's earnings), payments, amenities and advice are `other` by rules, the
+  model's. Not confident, `other`, nothing it can resolve: declined, the host asks the
   model. A master's name forms (`forms`: `{"pl": {"gen": "Marka", "ins": "Markiem"}, …}`, optional) come first.
   The shop's facts add `area` and `Place` (the places it comes to), `modes` (how it works) and `contact`; its hours
   are its place's, else its visits', else its schedule's. Tests: `ShopRouterSuite` (every authored answer checked in
-  four languages; the intents on the crew's data, the model never asked).
+  four languages; the intents on the crew's data, the model never asked; every intent's answer when the shop has not
+  given its data; follow-ups, the words' evidence, the lexicon, Latin letters; the rule-breaking and others' data
+  declined).
 - **Privacy**: `Privacy.page(…, chat = days)` adds the assistant's section (purpose, what is kept, for how long,
   deletion in the chat, the processor) when the shop has the chat; none: the page as before.
 - Tests: `AssistantSuite` — the dialogue of okay-facts' design §12 end to end on `Memory` (the fake model replaying
