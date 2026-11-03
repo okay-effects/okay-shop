@@ -79,12 +79,16 @@ object ShopRouter:
     else Clock.now[R].flatMap { now =>
       Bind.focused[R](s, c, focus, l).flatMap { (h0, note) =>
         val ctx = Ctx(lane, c, h0, user, l, focus, Zone.date(now))
+        // the day, the time, the price limit said: among the slots whatever the answer
+        val said = Map[String, String]() ++ ctx.when.day.map("day" -> _) ++ ctx.when.at.map(a => "at" -> clock(a)) ++
+          ctx.when.from.map(a => "from" -> clock(a)) ++ ctx.when.until.map(a => "until" -> clock(a)) ++
+          ctx.amount.max.map(m => "max" -> (m / 100).toString)
         build[R](route.intent, ctx).flatMap {
-          case Left((why, slots)) => pure(Decision.Declined(route, why, slots))
+          case Left((why, slots)) => pure(Decision.Declined(route, why, said ++ slots))
           case Right(b) => Bind.authored[R](s, c, user, l, focus, b.handles, note, b.answer, b.cards, route.intent,
               route.p).map {
-              case Left(vs) => Decision.Declined(route, "invalid: " + vs.map(_.code).mkString(","), b.slots)
-              case Right((c2, reply)) => Decision.Answered(c2, reply, route, b.slots)
+              case Left(vs) => Decision.Declined(route, "invalid: " + vs.map(_.code).mkString(","), said ++ b.slots)
+              case Right((c2, reply)) => Decision.Answered(c2, reply, route, said ++ b.slots)
             }
         }
       }
@@ -153,13 +157,22 @@ object ShopRouter:
   private def service(ctx: Ctx, cands: Vector[(Found, Vector[String])]): Nearest.Pick =
     val ranked = Nearest.rank(ctx.lane.table, ctx.user, cands.zipWithIndex.map((x, i) =>
       Nearest.Candidate(i.toString, x._2)))
+    // the same words of two names ("strzyżenie": men's or children's?): asked, whatever the meaning says
+    def words(i: String) = cands(i.toInt)._2.map(Nearest.lexical(ctx.user, _)).maxOption.getOrElse(0.0)
+    val top = ranked.take(4).map((i, _) => i -> words(i))
+    val tied = top.headOption.filter((_, w) => w >= 0.5 && w < 0.999).toVector.flatMap((_, w) =>
+      top.filter(x => math.abs(x._2 - w) < 1e-9))
+    if tied.size >= 2 && !(ctx.followUp && ctx.context.isDefined) then Nearest.Pick.Several(tied.map(_._1))
     // a follow-up keeps the conversation's service unless it names another by its words
-    Nearest.pick(ranked, if ctx.followUp && ctx.context.isDefined then 0.75 else ctx.lane.serviceAt,
+    else Nearest.pick(ranked, if ctx.followUp && ctx.context.isDefined then 0.75 else ctx.lane.serviceAt,
       ctx.lane.serviceLead)
 
   private def build[R[_]](intent: String, ctx: Ctx)(using In[Facts, R], In[Clock, R]): Out ! R =
+    // a shop's own fact with no shop in sight: a search across the mall when it names something, else the model
     if ofShop(intent) && ctx.shop.isEmpty && intent != "slots" && intent != "book" then
-      pure(no("no shop in sight"))
+      search(ctx).map(_.left.map((_, slots) => ("no shop in sight", slots)))
+    // on the mall's pages, with no shop in the conversation, a service asked of is a search across the mall
+    else if ctx.scope == Scope.All && Set("price", "slots", "book")(intent) then search(ctx)
     else intent match
       case "greet" => pure(ok(Built(ctx.h, Answer(Vector.empty, ctx.a(greeting(ctx.user))))))
       case "help" => pure(ok(Built(ctx.h, Answer(Vector.empty, ctx.a("help")))))
@@ -288,8 +301,16 @@ object ShopRouter:
         case Nearest.Pick.Nothing => ctx.context.map(x => Found(x.ent, x.visible, x.version)).orElse(
             Option.when(cands.size == 1)(cands.head._1)).toRight(if cands.isEmpty then no("no services")
             else ask(ctx, cands.map(_._1)))
+      // no one service, but a master named: that master's free times, whatever the service
+      def byMaster(out: Out): Out ! R = ctx.shop.orElse(ctx.h.all.find(_.ent.cls == "Shop")) match
+        case None => pure(out)
+        case Some(sh) => masters[R](sh.ent.source, ctx.l).flatMap { ms =>
+            ms.find((_, n) => n.nonEmpty && Spell.names(ctx.user, n)) match
+              case None => pure(out)
+              case Some((m, _)) => masterSlots(ctx, sh.ent.source, m)
+          }
       picked match
-        case Left(out) => pure(out)
+        case Left(out) => byMaster(out)
         case Right(f) => masters[R](f.ent.source, ctx.l).flatMap { ms =>
             val asked = ms.filter((_, n) => n.nonEmpty && Spell.names(ctx.user, n))
             val named = ctx.user.split("\\s+").toVector.drop(1).exists(w => w.headOption.exists(_.isUpper) &&
@@ -300,6 +321,31 @@ object ShopRouter:
                 ctx.list("masters.unknown", names.map(_ => "item"))), slots = Map("master" -> "none"))))
             else slotsOf(ctx, f, asked.headOption.map(_._1), booking)
           }
+    }
+
+  /** a master's free times of every service they do (each time once, with its service) */
+  private def masterSlots[R[_]](ctx: Ctx, source: String, m: Found)(using In[Facts, R]): Out ! R =
+    val w = ctx.when
+    val filters = Vector(Filter("master", Op.Eq, Value.Entity(m.ent))) ++
+      w.day.map(d => Filter("date", Op.Eq, Value.Day(d))) ++
+      w.at.map(a => Filter("time", Op.Eq, Value.Clock(a))) ++ w.from.map(a => Filter("time", Op.Ge, Value.Clock(a))) ++
+      w.until.map(a => Filter("time", Op.Lt, Value.Clock(a)))
+    Facts.find[R](Query("Slot", filters = filters, scope = Scope.Source(source), limit = 40, lang = ctx.l)).flatMap {
+      found =>
+        // each start once (the first service of it)
+        val once = found
+        seq[R, Found, Option[Long]](once)(s => Facts.get[R](s.ent, "time").map(_.collect {
+          case okay.facts.Fact(Value.At(t), _, _, _, _) => t })).map { times =>
+          val kept = once.zip(times).groupBy(_._2).toVector.sortBy(_._1).flatMap(_._2.headOption).map(_._1).take(6)
+          val (h1, mm) = issue(ctx.h, m)
+          if kept.isEmpty then ok(Built(h1, Answer(Vector("m" -> s"name($mm) as nom"), ctx.a("slots.masterless")),
+            slots = Map("master" -> m.ent.key)))
+          else
+            val (h2, ts) = issueAll(h1, kept)
+            ok(Built(h2, Answer(("m" -> s"name($mm) as nom") +: ts.zipWithIndex.flatMap((t, k) => Vector(
+              s"t${k + 1}" -> s"time($t) as datetime", s"s${k + 1}" -> s"name(service($t))")),
+              ctx.list("slots.master", ts.map(_ => "item"))), slots = Map("master" -> m.ent.key)))
+        }
     }
 
   private def slotsOf[R[_]](ctx: Ctx, f: Found, master: Option[Found], booking: Boolean)(using In[Facts, R])
