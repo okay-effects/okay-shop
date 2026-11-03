@@ -242,7 +242,15 @@ object ShopFacts:
       .map((k, v) => k -> Fact(v, ent, k, 1L, b.placed))
     def chip(k: String, hint: String = ""): (String, Chip) =
       val f = pinned(k)
-      k -> Chip(k, Render(f.value, l, hint), Value.typeOf(f.value).show, None, Render(service, l), Vector(f),
+      // a link said in words (the page of the booking), its address the chip's link
+      val shown = f.value match
+        case Value.Url(_) => l match
+          case FLang.pl => "strona rezerwacji"
+          case FLang.uk => "сторінка запису"
+          case FLang.ru => "страница записи"
+          case FLang.en => "the booking's page"
+        case v => Render(v, l, hint)
+      k -> Chip(k, shown, Value.typeOf(f.value).show, None, Render(service, l), Vector(f),
         f.value match
           case Value.Url(u) => Some(u)
           case _ => None)

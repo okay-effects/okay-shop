@@ -60,7 +60,8 @@ class AssistantSuite extends munit.FunSuite:
       case Right((b, acted, rendered)) =>
         assertEquals(b.master, "piotr")
         assert(rendered.text.startsWith("Zarezerwowano: Strzyżenie, piątek, 30 października, 17:00 — Piotr Próbny, " +
-          s"60,00 zł. Numer rezerwacji: ${b.ref}. Zmiana lub odwołanie: https://"), rendered.text)
+          s"60,00 zł. Numer rezerwacji: ${b.ref}. Zmiana lub odwołanie: strona rezerwacji"), rendered.text)
+        assert(rendered.chips.exists(_.link.exists(_.contains("/pl/booking?ref="))))
         assertEquals(acted.pinned("price").value, okay.facts.Value.Money(6000, "PLN"))
         assertEquals(w.letters.size, 2)
         assert(w.notices.exists(_.isInstanceOf[Notice.Booked]))
