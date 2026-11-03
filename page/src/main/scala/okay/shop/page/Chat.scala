@@ -17,32 +17,35 @@ object Chat:
   private final case class Words(open: String, title: String, placeholder: String, send: String, forget: String,
                                  forgotten: String, raw: String, close: String, name: String, contact: String,
                                  consent: String, privacy: String, book: String, go: String, moment: String,
-                                 failed: String, hello: String, flagged: String, source: String)
+                                 failed: String, hello: String, flagged: String, source: String,
+                                 computed: String)
 
   private def words(l: String): Words = l match
     case "uk" => Words("Запитати помічника", "Помічник", "Ваше запитання…", "Надіслати", "Видалити розмову",
       "Розмову видалено.", "Що написала модель", "Закрити", "Ім’я", "Телефон або e-mail",
       "Погоджуюся з політикою конфіденційності", "політика", "Записатися", "Перейти", "Зачекайте…",
       "Не вдалося. Спробуйте ще раз.", "Вітаю! Запитайте про послуги, ціни чи вільний час.",
-      "Перевірте: відповідь позначено", "джерело")
+      "Перевірте: відповідь позначено", "джерело", "обчислено з даних")
     case "ru" => Words("Спросить помощника", "Помощник", "Ваш вопрос…", "Отправить", "Удалить разговор",
       "Разговор удалён.", "Что написала модель", "Закрыть", "Имя", "Телефон или e-mail",
       "Согласен с политикой конфиденциальности", "политика", "Записаться", "Перейти", "Подождите…",
       "Не удалось. Попробуйте ещё раз.", "Здравствуйте! Спросите об услугах, ценах или свободном времени.",
-      "Проверьте: ответ помечен", "источник")
+      "Проверьте: ответ помечен", "источник", "вычислено из данных")
     case "en" => Words("Ask the assistant", "Assistant", "Your question…", "Send", "Delete this conversation",
       "The conversation was deleted.", "What the model wrote", "Close", "Name", "Phone or e-mail",
       "I accept the privacy policy", "policy", "Book", "Go", "One moment…", "That did not work. Please try again.",
-      "Hello! Ask about the services, prices or free times.", "Please check: this answer is flagged", "source")
+      "Hello! Ask about the services, prices or free times.", "Please check: this answer is flagged", "source",
+      "computed from the data")
     case _ => Words("Zapytaj asystenta", "Asystent", "Twoje pytanie…", "Wyślij", "Usuń rozmowę",
       "Rozmowa usunięta.", "Co napisał model", "Zamknij", "Imię", "Telefon lub e-mail",
       "Akceptuję politykę prywatności", "polityka", "Zarezerwuj", "Przejdź", "Chwileczkę…",
       "Nie udało się. Spróbuj ponownie.", "Dzień dobry! Zapytaj o usługi, ceny lub wolne terminy.",
-      "Sprawdź: odpowiedź oznaczona", "źródło")
+      "Sprawdź: odpowiedź oznaczona", "źródło", "obliczone z danych")
 
   private val style = """
 #okc-btn{position:fixed;right:18px;bottom:18px;z-index:2147483000;border:0;border-radius:999px;padding:12px 18px;
-font:600 15px/1.2 system-ui,sans-serif;background:#1f2937;color:#fff;box-shadow:0 6px 24px rgba(0,0,0,.25);cursor:pointer}
+font:600 15px/1.2 system-ui,sans-serif;background:#1f2937;color:#fff;box-shadow:0 6px 24px rgba(0,0,0,.25);
+cursor:pointer}
 #okc-btn:focus-visible,#okc-panel button:focus-visible,#okc-panel a:focus-visible,#okc-panel input:focus-visible{
 outline:3px solid #f59e0b;outline-offset:2px}
 #okc-panel{position:fixed;right:18px;bottom:76px;z-index:2147483001;width:min(390px,calc(100vw - 24px));
@@ -151,7 +154,10 @@ background:#2563eb;color:#fff;font:inherit;font-weight:600;cursor:pointer;text-d
       val link = if js.isUndefined(c.selectDynamic("link")) then "" else c.link.asInstanceOf[String]
       val sources = c.sources.asInstanceOf[js.Array[js.Dynamic]].map(s =>
         s"${s.source}/${s.key}.${s.property} v${s.version}").mkString(", ")
-      val tip = s"${c.entity.asInstanceOf[String]} · ${w.source}: $sources"
+      val entity = c.entity.asInstanceOf[String]
+      // a value computed (a count, a comparison): what it is of, its sources when it read any
+      val tip = (if entity.isEmpty then w.computed else entity) +
+        (if sources.isEmpty then "" else s" · ${w.source}: $sources")
       val chip =
         if link.startsWith("book:") then
           val b = el("button", "okc-chip", text)
@@ -173,7 +179,8 @@ background:#2563eb;color:#fff;font:inherit;font-weight:600;cursor:pointer;text-d
       if !js.isUndefined(a.selectDynamic("answer")) && a.answer != null then
         val chips = a.answer.chips.asInstanceOf[js.Array[js.Dynamic]].map(c => c.param.asInstanceOf[String] -> c).toMap
         a.answer.segments.asInstanceOf[js.Array[js.Dynamic]].foreach { s =>
-          if js.isUndefined(s.selectDynamic("param")) then box.appendChild(doc.createTextNode(s.text.asInstanceOf[String]))
+          if js.isUndefined(s.selectDynamic("param")) then
+            box.appendChild(doc.createTextNode(s.text.asInstanceOf[String]))
           else
             val text = s.text.asInstanceOf[String]
             chips.get(s.param.asInstanceOf[String]) match

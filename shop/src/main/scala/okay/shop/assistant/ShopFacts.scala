@@ -93,7 +93,8 @@ object ShopFacts:
     val services = site.shown.map { o =>
       val masters = if site.masters.isEmpty then Vector.empty else site.masters.filter(m => m.services.isEmpty ||
         m.services.contains(o.key))
-      Row(Ent(source, "Service", o.key), Map[String, Value]("name" -> text(o.name), "description" -> text(o.description),
+      Row(Ent(source, "Service", o.key), Map[String, Value]("name" -> text(o.name),
+        "description" -> text(o.description),
         "bookable" -> Value.Bool(site.books(o)), "shop" -> Value.Entity(shop)) ++
         Option.when(o.priced && !o.quote)("price" -> Value.Money(o.price, "PLN")) ++
         Option.when(o.minutes > 0)("duration" -> Value.Minutes(o.minutes)) ++
@@ -148,7 +149,8 @@ object ShopFacts:
   private def slotQuery(c: Conf, source: String, q: Query, now: Long): (Vector[String], Set[String]) =
     val services = q.filters.collect {
       case Filter("service", Op.Eq, Value.Entity(e)) if e.source == source => Vector(e.key)
-      case Filter("service", Op.Eq, Value.Many(es)) => es.collect { case Value.Entity(e) if e.source == source => e.key }
+      case Filter("service", Op.Eq, Value.Many(es)) =>
+        es.collect { case Value.Entity(e) if e.source == source => e.key }
     }.flatten.distinct
     val dates = q.filters.collect { case Filter("date", Op.Eq, Value.Day(d)) => d }
     // a service asked of (none of this shop's: no slot here), else every bookable one
