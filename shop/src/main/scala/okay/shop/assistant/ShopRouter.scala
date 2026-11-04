@@ -3,7 +3,7 @@ package okay.shop.assistant
 import okay.effects.json.Json
 import okay.facts.{Answer, Audit, Bind, Card, Conversation, Ent, Facts, Filter, Found, Handles, Lang as FLang, Op,
   Query, Reply, Scope, Setup, Value, Words, Zone}
-import okay.facts.router.{Amount, Intents, Lexicon, Nearest, Probe, Route, Router, Spell, Table, When}
+import okay.facts.router.{Amount, Combiner, Intents, Lexicon, Nearest, Probe, Route, Router, Spell, Table, When}
 import okay.scala3.*
 import okay.scala3.std.Clock
 
@@ -43,17 +43,26 @@ object Answers:
  */
 object ShopRouter:
   lazy val intents = Intents.parse(AssistantData.intents)
+  lazy val guard: Vector[String] = Intents.guard(AssistantData.intents)
   lazy val answers: Answers = Answers.parse(AssistantData.answers)
-  lazy val probe: Probe = Probe.fromJson(Json.fromText(AssistantData.probe))
+  lazy val probe: Probe = Probe.fromBytes(java.util.Base64.getDecoder.decode(AssistantData.probe))
+  /** the combiner fitted and calibrated over this probe (okay-mall's `Fit`); none yet: the evidence's glance */
+  lazy val combiner: Option[Combiner] = Option.when(AssistantData.combiner.nonEmpty)(Combiner.fromBytes(
+    java.util.Base64.getDecoder.decode(AssistantData.combiner)))
   lazy val lexicon: Lexicon = Lexicon.parse(AssistantData.lexicon)
 
-  /** the lane: the router over the table, the answers, the thresholds (a route's probability and margin; a
-   * service's nearness and its lead over the next), the words of one thing a service's name is said by */
+  /** the lane: the router over the table, the answers, the threshold an answer needs (the combiner's, else round 2's
+   * probe thresholds), a service's nearness and its lead over the next, the words of one thing a service's name is
+   * said by */
   final class Lane(val table: Table, val router: Router, val answers: Answers, val minP: Double = 0.7,
                    val minMargin: Double = 0.2, val serviceAt: Double = 0.6, val serviceLead: Double = 0.06,
                    val lexicon: Lexicon = Lexicon.empty)
 
-  def lane(table: Table): Lane = new Lane(table, Router(intents, probe), answers, lexicon = lexicon)
+  def lane(table: Table): Lane = lane(table, combiner)
+
+  def lane(table: Table, c: Option[Combiner]): Lane =
+    new Lane(table, Router(intents, probe, guard, c), answers, minP = c.fold(0.7)(_.threshold),
+      minMargin = if c.isDefined then 0.0 else 0.2, lexicon = lexicon)
 
   /** the static table the probe was fitted over: in the JVM's jar at `resource`; a Worker's host keeps it in its
    * storage under `key` (its name the table's hash: no other table is ever read with this probe) */
@@ -72,20 +81,55 @@ object ShopRouter:
   /** the intents that answer a shop's own facts: no shop in sight, the model lane */
   private val ofShop = Set("hours", "address", "area", "modes", "masters", "reviews", "human", "slots", "book")
 
+  /** THE HOST'S EVIDENCE the combiner reads (okay-facts specs/design.md §17 "The turn decision"), by name */
+  val evidenceNames: Vector[String] = Vector("service", "serviceNear", "master", "person", "place", "day", "time",
+    "exact", "books", "amount", "alone", "mall", "shopNamed", "short", "opener", "context")
+
+  /** A TURN'S EVIDENCE: the previous question's intent when this one is a short follow-up, the host's evidence by
+   * name — from the shop's facts in scope (read in one call, `Facts.Prefetch`) and the words */
+  def evidence[R[_]](lane: Lane, s: Setup, c: Conversation, user: String, l: FLang, focus: String)(using
+    In[Facts, R], In[Clock, R]): (Option[String], Map[String, Double]) ! R =
+    Clock.now[R].flatMap { now =>
+      prefetch[R](focus, l).flatMap(_ => Bind.focused[R](s, c, focus, l)).flatMap { (h0, _) =>
+        features[R](Ctx(lane, c, h0, user, l, focus, Zone.date(now)))
+      }
+    }
+
+  /** everything a turn of a shop (or of the mall's home) may read, asked at once: the services in every language
+   * with their prices, durations, whether bookable, names; the masters with their names and their forms; the places;
+   * the shop's own properties. A host with no cache ignores it */
+  private def prefetch[R[_]](focus: String, l: FLang)(using In[Facts, R]): Unit ! R =
+    val langs = l +: FLang.values.toVector.filterNot(_ == l)
+    val serviceProps = Vector("name", "price", "duration", "bookable")
+    Some(focus).filter(_.startsWith("shop:")).map(_.stripPrefix("shop:")) match
+      case Some(id) =>
+        val src = Scope.Source(id)
+        val shop = Ent(id, "Shop", id)
+        Facts.prefetch[R](Vector(Query("Shop", scope = src, limit = 1, lang = l) -> Vector.empty[String]) ++
+          langs.map(x => Query("Service", scope = src, limit = 80, lang = x) -> (if x == l then serviceProps
+            else Vector.empty)) ++
+          Vector(Query("Master", scope = src, limit = 30, lang = l) -> (Vector("name") ++ Vector("gen", "dat", "acc",
+            "ins", "loc").map("name." + _))) ++
+          langs.map(x => Query("Place", scope = src, limit = 80, lang = x) -> Vector.empty[String]),
+          Vector("hours", "address", "area", "modes", "contact", "rating", "reviews", "url", "name").map(shop -> _))
+      case None =>
+        Facts.prefetch[R](langs.map(x => Query("Shop", scope = Scope.All, limit = 100, lang = x) ->
+          Vector.empty[String]) ++ langs.map(x => Query("Service", scope = Scope.All, limit = 200, lang = x) ->
+          (if x == l then serviceProps else Vector.empty)))
+
   def turn[R[_]](lane: Lane, s: Setup, c: Conversation, user: String, l: FLang, focus: String)(using In[Facts, R],
     In[Clock, R], In[Audit, R]): Decision ! R =
-    val first = lane.router.route(lane.table, user)
     Clock.now[R].flatMap { now =>
-      Bind.focused[R](s, c, focus, l).flatMap { (h0, note) =>
+      prefetch[R](focus, l).flatMap(_ => Bind.focused[R](s, c, focus, l)).flatMap { (h0, note) =>
         val ctx = Ctx(lane, c, h0, user, l, focus, Zone.date(now))
-        // a short follow-up takes the conversation's last question's intent; the words' evidence beside the probe
-        val followed = following(ctx, first)
-        evidence[R](ctx, followed.getOrElse(first)).flatMap { route =>
+        features[R](ctx).flatMap { (prev, extras) =>
+          val route = lane.router.decide(lane.table, user, prev, extras)
           // the day, the time, the price limit said: among the slots whatever the answer
           val said = Map[String, String]() ++ ctx.when.day.map("day" -> _) ++ ctx.when.at.map(a => "at" ->
             clock(a)) ++ ctx.when.from.map(a => "from" -> clock(a)) ++ ctx.when.until.map(a => "until" -> clock(a)) ++
             ctx.amount.max.map(m => "max" -> (m / 100).toString)
-          if route.by == "unknown" then pure(Decision.Declined(route, "no word known"))
+          if route.by == "guard" then pure(Decision.Declined(route, "guard"))
+          else if route.by == "unknown" then pure(Decision.Declined(route, "no word known"))
           else if !route.confident(lane.minP, lane.minMargin) then pure(Decision.Declined(route, "not confident"))
           else if route.intent == "other" then pure(Decision.Declined(route, "other"))
           else build[R](route.intent, ctx).flatMap {
@@ -109,61 +153,54 @@ object ShopRouter:
     case j if j.field("role").contains(Json.Str("user")) => j.field("content").collect { case Json.Str(t) => t }
   }.flatten
 
-  /** intents a short follow-up continues ("a jutro?", "a u Ewy?", "a pedicure?", "and on Saturday?") */
-  private val continued = Set("price", "slots", "book", "masters", "compare", "search", "hours", "area", "address")
+  /** the follow-up's openers ("a jutro?", "and on Saturday?", "а в суботу?") */
+  private val openers = Set("a", "а", "and", "i", "і", "и", "й", "та", "ta", "what", "how", "also", "też", "tez",
+    "тоже", "також")
+  /** "alone": the plain service, not a combination with it ("samo strzyżenie", "the haircut alone") */
+  private val aloneWords = Set("samo", "sama", "sam", "tylko", "alone", "only", "just", "тільки", "лише", "сама",
+    "само", "только", "одна", "одно", "tilky", "tolko", "bez")
 
-  /** A FOLLOW-UP: a short message no rule names — opened by "a", "and", "а", "і", or that the probe is not sure of —
-   * after a question the router understood takes that question's intent; a day, a time or a master after a price or
-   * the masters asks for the free times */
-  private def following(ctx: Ctx, route: Route): Option[Route] =
+  /** THE EVIDENCE of a turn (the combiner's): its follow-up's previous intent, the host's named evidence */
+  private def features[R[_]](ctx: Ctx)(using In[Facts, R]): (Option[String], Map[String, Double]) ! R =
     val ws = Words.split(ctx.user)
     val short = ws.count(_.length >= 3) <= 2 && ws.size <= 5
-    val opened = ws.headOption.exists(Set("a", "а", "and", "i", "і", "и", "й", "та", "ta", "what", "how", "also",
-      "też", "tez", "тоже", "також"))
-    if route.by == "rule" || !short || !(opened || !route.confident(ctx.lane.minP, ctx.lane.minMargin)) then None
-    else lastAsked(ctx.c).map(ctx.lane.router.route(ctx.lane.table, _)).filter(r =>
-      r.confident(ctx.lane.minP, ctx.lane.minMargin) && continued(r.intent)).map { prev =>
-      val timed = !ctx.when.isEmpty || ctx.namesPerson
-      val intent = if timed && Set("price", "masters", "compare")(prev.intent) then "slots" else prev.intent
-      Route(intent, "rule", prev.p, prev.margin, s"follow-up of ${prev.intent}")
-    }
-
-  /** THE WORDS' EVIDENCE beside an unsure probe: a service of the shop named by its words, or one of its masters, and
-   * a day or a time ("Macie jutro wolne na brodę po 16?", "Can I come for a beard trim tomorrow evening?") — its
-   * free times; with an exact time and a booking's word — its booking */
-  private def evidence[R[_]](ctx: Ctx, route: Route)(using In[Facts, R]): Route ! R =
-    val unsure = route.by == "unknown" || (route.by == "probe" && (!route.confident(ctx.lane.minP,
-      ctx.lane.minMargin) || Set("other", "help", "greet")(route.intent)))
-    val timed = ctx.when.day.isDefined || ctx.when.at.isDefined || ctx.when.from.isDefined || ctx.when.until.isDefined
-    // "Czy Ewa pracuje w czwartek?": one of its masters by name, and a day — her free times, not the list of masters
-    val ofMaster = route.by == "probe" && route.intent == "masters"
-    ctx.shopId match
-      case Some(id) if (unsure || ofMaster) && timed =>
-        named[R]("Service", Scope.Source(id), ctx.l).flatMap { cands =>
-          val service = !ofMaster && cands.exists(_._2.exists(n =>
-            Nearest.lexical(ctx.user, n, ctx.lane.lexicon) >= 0.999))
-          (if service then pure(true) else masters[R](id, ctx.l).map(_.exists((_, n) => n.nonEmpty &&
-            Spell.names(ctx.user, n)))).map { named =>
-            if !named then route
-            else Route(if ctx.when.at.isDefined && ctx.books then "book" else "slots", "rule", 1.0, 1.0,
-              "a service or a master, and a time")
-          }
-        }
-      case _ => pure(route)
+    val opened = ws.headOption.exists(openers)
+    val prev = if short then lastAsked(ctx.c).map(ctx.lane.router.glance(ctx.lane.table, _)).filter(_.by != "unknown")
+      .map(_.intent) else None
+    def b(x: Boolean): Double = if x then 1.0 else 0.0
+    val scope = ctx.shopId.map(Scope.Source(_)).getOrElse(Scope.All)
+    for
+      services <- named[R]("Service", scope, ctx.l, if ctx.shopId.isDefined then 80 else 200)
+      ms <- ctx.shopId.fold(pure[Vector[(Found, String)], R](Vector.empty))(masters[R](_, ctx.l))
+      places <- ctx.shopId.fold(pure[Vector[(Found, Vector[String])], R](Vector.empty))(id =>
+        named[R]("Place", Scope.Source(id), ctx.l))
+      shops <- if ctx.shopId.isDefined then pure(Vector.empty[(Found, Vector[String])])
+        else named[R]("Shop", Scope.All, ctx.l, 100)
+    yield
+      val near = services.flatMap(_._2.map(Nearest.lexical(ctx.user, _, ctx.lane.lexicon))).maxOption.getOrElse(0.0)
+      val master = ms.exists((_, n) => n.nonEmpty && Spell.names(ctx.user, n))
+      val place = places.exists((_, ns) => ns.exists(Spell.names(ctx.user, _))) || ctx.namesPlace
+      val shopNamed = namedShop(ctx, shops).isDefined
+      prev -> Map("service" -> b(near >= 0.999), "serviceNear" -> near, "master" -> b(master),
+        "person" -> b(!master && unknownPerson(ctx, services)), "place" -> b(place), "day" -> b(ctx.when.day.isDefined),
+        "time" -> b(ctx.when.at.isDefined || ctx.when.from.isDefined || ctx.when.until.isDefined),
+        "exact" -> b(ctx.when.at.isDefined), "books" -> b(ctx.books), "amount" -> b(!ctx.amount.isEmpty),
+        "alone" -> b(ctx.alone), "mall" -> b(ctx.shopId.isEmpty), "shopNamed" -> b(shopNamed), "short" -> b(short),
+        "opener" -> b(opened), "context" -> b(lastAsked(ctx.c).isDefined))
 
   /** a turn's ground: the lane, the conversation, its handles as they stand, the words, where the user is */
   private final case class Ctx(lane: Lane, c: Conversation, h: Handles, user: String, l: FLang, focus: String,
-                               today: String):
+                               today: String, named: Option[okay.facts.Handle] = None):
     def a(key: String): String = lane.answers(key, l)
     def list(key: String, variants: Vector[String]): String = lane.answers.list(key, l, variants)
     def shopId: Option[String] = Some(focus).filter(_.startsWith("shop:")).map(_.stripPrefix("shop:"))
     /** the shop in sight: the focus' own, else the one the conversation talked of last */
-    def shop: Option[okay.facts.Handle] = shopId.flatMap(id => h.all.find(x => x.ent.cls == "Shop" &&
+    def shop: Option[okay.facts.Handle] = named.orElse(shopId.flatMap(id => h.all.find(x => x.ent.cls == "Shop" &&
       x.ent.source == id)).orElse(if shopId.isEmpty then h.all.reverse.find(x => x.ent.cls == "Service" ||
       x.ent.cls == "Slot").flatMap(x => h.all.find(y => y.ent.cls == "Shop" && y.ent.source == x.ent.source))
-      else None)
-    def scope: Scope = shopId.map(Scope.Source(_)).orElse(context.map(x => Scope.Source(x.ent.source)))
-      .getOrElse(Scope.All)
+      else None))
+    def scope: Scope = named.map(x => Scope.Source(x.ent.source)).orElse(shopId.map(Scope.Source(_)))
+      .orElse(context.map(x => Scope.Source(x.ent.source))).getOrElse(Scope.All)
     /** the service the conversation spoke of last: one its last answer named (or a free time's service of it), else
      * the last one found — a handle found again keeps its first place, so the last found is not always the last said */
     def context: Option[okay.facts.Handle] =
@@ -191,7 +228,18 @@ object ShopRouter:
     def namesPerson: Boolean = persons.nonEmpty
     /** a booking's word ("zapisz", "book", "запишіть", "забронируйте") */
     lazy val books: Boolean = Words.split(user).exists(w => Seq("zapis", "zarezerw", "umow", "book", "reserv",
-      "запис", "запиш", "заброн", "zapish", "zabron").exists(w.startsWith))
+      "запис", "запиш", "заброн", "zapish", "zabron", "zamow", "zamaw", "order", "замов", "закаж", "zakaz")
+      .exists(w.startsWith))
+    /** "alone": the plain service asked, not a combination with it ("samo strzyżenie", "the haircut alone") */
+    lazy val alone: Boolean = Words.split(user).exists(aloneWords)
+    /** a place named that may be the area's: a capitalised word past the first, or one after a preposition */
+    lazy val namesPlace: Boolean =
+      val ws = user.split("\\s+").toVector.map(_.filter(_.isLetter)).filter(_.nonEmpty)
+      ws.drop(1).exists(w => w.head.isUpper && !persons.contains(w)) || ws.sliding(2).exists {
+        case Vector(a, b) => Set("do", "na", "w", "we", "to", "in", "в", "у", "до", "на", "z", "ze", "from", "з", "из")
+            .contains(a.toLowerCase) && b.length >= 4 && b.head.isUpper
+        case _ => false
+      }
     lazy val amount: Amount = Amount.of(user)
 
   private object Ctx:
@@ -234,6 +282,11 @@ object ShopRouter:
 
   private def has[R[_]](e: Ent, prop: String)(using In[Facts, R]): Boolean ! R = Facts.get[R](e, prop).map(_.isDefined)
 
+  /** a combination's name ("Strzyżenie + broda", "haircut and beard") */
+  private def combined(name: String): Boolean =
+    name.contains("+") || name.contains("&") || Words.split(name).drop(1).exists(Set("z", "ze", "i", "and", "with",
+      "і", "и", "з", "с", "та", "plus"))
+
   /** the service a message names among the candidates: one, several too close (asked), none */
   private def service(ctx: Ctx, cands: Vector[(Found, Vector[String])]): Nearest.Pick =
     val ranked = ctx.rank(cands.zipWithIndex.map((x, i) =>
@@ -244,21 +297,52 @@ object ShopRouter:
     val top = ranked.take(4).map((i, _) => i -> words(i))
     val tied = top.headOption.filter((_, w) => w >= 0.5 && w < 0.999).toVector.flatMap((_, w) =>
       top.filter(x => math.abs(x._2 - w) < 1e-9))
-    if tied.size >= 2 && !(ctx.followUp && ctx.context.isDefined) then Nearest.Pick.Several(tied.map(_._1))
+    // "samo strzyżenie", "the haircut alone": the plain one of those the word names — no combination, the shop's first
+    val plain = if ctx.alone then top.filter(_._2 >= 0.5).map(_._1).filterNot(i => cands(i.toInt)._2.exists(combined))
+      else Vector.empty
+    if plain.nonEmpty && top.count(_._2 >= 0.5) >= 2 then Nearest.Pick.One(plain.minBy(_.toInt), 1.0)
+    else if tied.size >= 2 && !(ctx.followUp && ctx.context.isDefined) then Nearest.Pick.Several(tied.map(_._1))
     // no word of any name said, and the meaning not close: none named ("koloryzacja" at a barber's), never asked
     else if top.forall(_._2 == 0.0) && ranked.headOption.forall(_._2 < 0.75) then Nearest.Pick.Nothing
     // a follow-up keeps the conversation's service unless it names another by its words
     else Nearest.pick(ranked, if ctx.followUp && ctx.context.isDefined then 0.75 else ctx.lane.serviceAt,
       ctx.lane.serviceLead)
 
+  /** the shop a message names by its name, on the mall's home ("godziny otwarcia Barber Demo", "where is Studio
+   * Paznokci Lila?"): its name's words by their rarity among the shops' names (every shop's "demo" weighs little), at
+   * least 0.8 of them, and no other as near */
+  private def namedShop(ctx: Ctx, shops: Vector[(Found, Vector[String])]): Option[Found] =
+    val names = shops.map(_._2.flatMap(Words.split).distinct)
+    def weight(w: String): Double = 1.0 / math.max(1, names.count(_.contains(w)))
+    val scored = shops.map((f, ns) => f -> ns.map(Nearest.lexical(ctx.user, _, ctx.lane.lexicon, weight)).maxOption
+      .getOrElse(0.0)).sortBy(-_._2)
+    scored match
+      case (f, s) +: rest if s >= 0.8 && rest.headOption.forall(_._2 < s - 0.2) => Some(f)
+      case _ => None
+
   private def build[R[_]](intent: String, ctx: Ctx)(using In[Facts, R], In[Clock, R]): Out ! R =
+    // on the mall's home a shop named by its name: its own facts, as on its pages
+    if ctx.shopId.isEmpty && ctx.named.isEmpty && (ofShop(intent) || Set("price", "reviews", "compare")(intent)) then
+      named[R]("Shop", Scope.All, ctx.l, 100).flatMap(shops => namedShop(ctx, shops) match
+        case Some(f) =>
+          val (h, x) = ctx.h.issue(ShopFacts.schema.prefix(f.ent.cls), f.ent, f.version, f.visible)
+          build0[R](intent, ctx.copy(h = h, named = Some(x)))
+        case None => build0[R](intent, ctx))
+    else build0[R](intent, ctx)
+
+  private def build0[R[_]](intent: String, ctx: Ctx)(using In[Facts, R], In[Clock, R]): Out ! R =
     // the shops compared by their reviews: a judgement across the mall, the model's
     if intent == "reviews" && ctx.shop.isEmpty then pure(no("reviews with no shop in sight"))
     // a shop's own fact with no shop in sight: a search across the mall when it names something, else the model
     else if ofShop(intent) && ctx.shop.isEmpty && intent != "slots" && intent != "book" then
       search(ctx).map(_.left.map((_, slots) => ("no shop in sight", slots)).map(_.copy(intent = Some("search"))))
     // on the mall's pages, with no shop in the conversation, a service asked of is a search across the mall
-    else if ctx.scope == Scope.All && Set("price", "slots", "book")(intent) then
+    // a price asked there of one service only one shop has: its price (else a search: each shop's)
+    else if ctx.scope == Scope.All && intent == "price" then
+      named[R]("Service", Scope.All, ctx.l, 200).flatMap(cands => service(ctx, cands) match
+        case Nearest.Pick.One(i, _) => priced(ctx, cands(i.toInt)._1)
+        case _ => search(ctx).map(_.map(_.copy(intent = Some("search")))))
+    else if ctx.scope == Scope.All && Set("slots", "book")(intent) then
       search(ctx).map(_.map(_.copy(intent = Some("search"))))
     else intent match
       case "greet" => pure(ok(Built(ctx.h, Answer(Vector.empty, ctx.a(greeting(ctx.user))))))

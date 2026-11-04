@@ -203,6 +203,7 @@ object ShopFacts:
       case Facts.Get(ent, prop) if ent.cls == "Slot" => Clock.now[Rest].flatMap(now => slotRow(ent.key, now)
           .flatMap(r => k(r.flatMap(x => x.values.get(prop).map(v => Fact(v, ent, prop, x.version, x.updatedAt))))))
       case Facts.Get(ent, prop) => k(Table.get(rows(c, source, about), ent, prop))
+      case Facts.Prefetch(_, _) => k(())
       case Facts.Act("open", args, l) => k(args.get("shop") match
           case Some(Value.Entity(e)) if e.source == source =>
             Right(Acted(Some(e), card = Some(Card.Open(s"${c.origin}/${shopLang(l).code}/", c.site.name))))

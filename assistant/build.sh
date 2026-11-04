@@ -11,4 +11,6 @@ cache=${1:-${TMPDIR:-/tmp}/okay-shop-router-cache.tsv}
 scala-cli run "$tools/table.scala" -- --model "$models/paraphrase-multilingual-MiniLM-L12-v2" \
   --intents intents.json --words vocabulary.txt --massive "$models/massive/1.1/data" --dim 256 --int8 \
   --cache "$cache" --out static.safetensors
-scala-cli run "$tools/fit.scala" -- intents.json static.safetensors probe.json
+scala-cli run "$tools/fit.scala" -- intents.json static.safetensors probe.bin
+# then the combiner over the evidence, fitted and calibrated on okay-mall's train/dev turns (okay-mall:
+#   sbt "mallJVM/Test/runMain okay.mall.Fit ../okay-shop/assistant/combiner.bin" — okay-facts §17)

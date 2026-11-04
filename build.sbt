@@ -42,17 +42,21 @@ lazy val fixtures = Def.task {
 }
 
 /** THE ASSISTANT'S ROUTER LANE AS DATA (specs/shop.md "The assistant"): assistant/intents.json, answers.json,
- * lexicon.json and probe.json (tools/fit.scala's) as strings — intents, phrasings and answers are data, never
- * code —, and the name of the static table they were fitted over (its SHA-256's first 12 hex digits: a host fetches
- * that table and no other) */
+ * lexicon.json as strings, probe.bin (tools/fit.scala's) and combiner.bin (okay-mall's `Fit`) as Base64 — intents,
+ * phrasings and answers are data, never code —, and the name of the static table they were fitted over (its
+ * SHA-256's first 12 hex digits: a host fetches that table and no other) */
 lazy val assistantData = Def.task {
   val base = (ThisBuild / baseDirectory).value / "assistant"
   def chunks(f: String): String = IO.read(base / f).grouped(20000).map(c => "\"\"\"" + c + "\"\"\"").mkString(",\n    ")
   val file = (Compile / sourceManaged).value / "okay" / "shop" / "assistant" / "AssistantData.scala"
   IO.write(file, "package okay.shop.assistant\n\n/** written by the build from assistant/ */\nobject AssistantData:\n" +
-    Seq("intents" -> "intents.json", "answers" -> "answers.json", "probe" -> "probe.json",
-      "lexicon" -> "lexicon.json").map { case (n, f) =>
+    Seq("intents" -> "intents.json", "answers" -> "answers.json", "lexicon" -> "lexicon.json").map { case (n, f) =>
       s"  val $n: String = Vector(\n    ${chunks(f)}).mkString\n" }.mkString +
+    // the probe and the combiner as bytes (okay-facts' `Weights`), in Base64: read in well under a millisecond
+    Seq("probe" -> "probe.bin", "combiner" -> "combiner.bin").map { case (n, f) =>
+      val b64 = if ((base / f).exists) java.util.Base64.getEncoder.encodeToString(IO.readBytes(base / f)) else ""
+      s"  val $n: String = Vector(\n    ${b64.grouped(20000).map(c => "\"" + c + "\"").mkString(",\n    ")}).mkString\n"
+    }.mkString +
     "  val table: String = \"" + java.security.MessageDigest.getInstance("SHA-256").digest(IO.readBytes(base /
       "static.safetensors")).take(6).map(b => f"${b & 0xff}%02x").mkString + "\"\n")
   Seq(file)

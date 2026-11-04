@@ -138,6 +138,18 @@ background:#2563eb;color:#fff;font:inherit;font-weight:600;cursor:pointer;text-d
     doc.body.appendChild(panel)
 
     var loaded = false
+    /** THE CONVERSATION'S OBJECT WARMED before the first message (specs/shop.md "The assistant"): once the page is idle
+     * and visible, at most once a minute in a session — the host answers with an id kept here only (no cookie: none
+     * until the visitor chats) and its object warm; the first open or message brings it back */
+    var warm: Option[String] = None
+    def warmUp(): Unit =
+      val now = js.Date.now()
+      val last = try Option(dom.window.sessionStorage.getItem("okc-warm")).flatMap(_.toDoubleOption).getOrElse(0.0)
+        catch case _: Throwable => 0.0
+      if !loaded && doc.visibilityState.toString == "visible" && now - last > 60000 then
+        try dom.window.sessionStorage.setItem("okc-warm", now.toString) catch case _: Throwable => ()
+        call("/warm", js.Dynamic.literal()).foreach(r =>
+          if !js.isUndefined(r.selectDynamic("warm")) then warm = Some(r.warm.toString))
     def scroll(): Unit = log.scrollTop = log.scrollHeight.toDouble
     def note(text: String): Unit = { log.appendChild(el("div", "okc-msg okc-note", text)); scroll() }
     def mine(text: String): Unit = { log.appendChild(el("div", "okc-msg okc-me", text)); scroll() }
@@ -263,7 +275,8 @@ background:#2563eb;color:#fff;font:inherit;font-weight:600;cursor:pointer;text-d
 
     def history(): Unit =
       loaded = true
-      call(s"/history?lang=$lang", null).foreach { r =>
+      call(s"/history?lang=$lang${warm.fold("")("&warm=" + _)}", null).foreach { r =>
+        warm = None
         val turns = if js.isUndefined(r.selectDynamic("turns")) then js.Array[js.Dynamic]()
           else r.turns.asInstanceOf[js.Array[js.Dynamic]]
         if turns.isEmpty then note(w.hello)
@@ -303,7 +316,10 @@ background:#2563eb;color:#fff;font:inherit;font-weight:600;cursor:pointer;text-d
         val waiting = el("div", "okc-msg okc-note", w.moment)
         log.appendChild(waiting)
         scroll()
-        call("", js.Dynamic.literal(text = text, focus = focus, lang = lang)).recover { case _ =>
+        val body = js.Dynamic.literal(text = text, focus = focus, lang = lang)
+        warm.foreach(x => body.updateDynamic("warm")(x))
+        warm = None
+        call("", body).recover { case _ =>
           js.Dynamic.literal(notice = w.failed) }.foreach { r =>
           waiting.remove()
           send.removeAttribute("disabled")
@@ -311,3 +327,7 @@ background:#2563eb;color:#fff;font:inherit;font-weight:600;cursor:pointer;text-d
           input.focus()
         }
     })
+    // the warming when the page is idle (a browser without `requestIdleCallback`: 1.5 s after the start)
+    if js.typeOf(js.Dynamic.global.selectDynamic("requestIdleCallback")) == "function" then
+      js.Dynamic.global.requestIdleCallback((_: js.Any) => warmUp(), js.Dynamic.literal(timeout = 3000))
+    else js.timers.setTimeout(1500)(warmUp())
