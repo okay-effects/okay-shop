@@ -301,7 +301,7 @@ object ShopRouter:
     Set("price", "compare"), Set("slots", "compare"), Set("slots", "book"), Set("address", "human"),
     Set("hours", "price"))
   val clarifyAt = 0.8
-  val clarifyMargin = 0.25
+  val clarifyMargin = 0.3
 
   /** the two intents to ask back between, when the decision is that close */
   private def close(r: Route, ctx: Ctx): Option[(String, String)] =
@@ -395,7 +395,9 @@ object ShopRouter:
     def namesPerson: Boolean = persons.nonEmpty
     /** a booking's word ("zapisz", "book", "запишіть", "забронируйте") */
     lazy val books: Boolean = Words.split(user).exists(w => Seq("zapis", "zarezerw", "umow", "book", "reserv",
-      "запис", "запиш", "заброн", "zapish", "zabron", "zamow", "zamaw", "order", "замов", "закаж", "zakaz")
+      "запис", "запиш", "заброн", "zapish", "zabron", "zamow", "zamaw", "order", "замов", "закаж", "zakaz",
+      // round 4: "rezerwuję", "wpisz mnie", "zapyshit" (Ukrainian in Latin letters)
+      "rezerw", "wpis", "zapysh", "rezerv")
       .exists(w.startsWith))
     /** "alone": the plain service asked, not a combination with it ("samo strzyżenie", "the haircut alone") */
     lazy val alone: Boolean = Words.split(user).exists(aloneWords)
@@ -508,13 +510,24 @@ object ShopRouter:
         case Some(f) =>
           val (h, x) = ctx.h.issue(ShopFacts.schema.prefix(f.ent.cls), f.ent, f.version, f.visible)
           val asked = if Set("search", "price")(intent) then
-            ownFacts.find(ctx.lane.router.hits(ctx.user)).orElse(ctx.ranked.collectFirst {
-              case (i, q) if ownFacts.contains(i) && q >= 0.05 => i }).getOrElse(intent) else intent
+            ownFacts.find(ctx.lane.router.hits(ctx.user)).orElse(ShopRouter.ownFact(ctx.user)).orElse(
+              ctx.ranked.collectFirst { case (i, q) if ownFacts.contains(i) && q >= 0.05 => i }).getOrElse(intent)
+          else intent
           build0[R](asked, ctx.copy(h = h, named = Some(x))).map(_.map(b => b.copy(intent = b.intent.orElse(
             Option.when(asked != intent)(asked)))))
         case None if intent == "human" && ctx.shop.isEmpty => mallContact[R](ctx)
         case None => build0[R](intent, ctx))
     else build0[R](intent, ctx)
+
+  /** a shop's own fact a message asks of, by its words (a shop named on the mall's home: "when is X open?",
+   * "коли працює X?", "X — jaki telefon?"): the hours, the contact, the address */
+  private val hoursWords = okay.facts.router.Rules.compile("\\b(?:open\\w*|otwar\\w*|otwier\\w*|czynn\\w*|" +
+    "pracuj\\w*|godzin\\w*|hours|працю\\w*|відкри\\w*|годин\\w*|работа\\w*|открыт\\w*|час\\w* работы)")
+  private val addressWords = okay.facts.router.Rules.compile("\\b(?:adres\\w*|gdzie|where|location|де|где|" +
+    "адрес\\w*|address)\\b")
+  def ownFact(user: String): Option[String] =
+    if contactWords.test(user) then Some("human") else if hoursWords.test(user) then Some("hours")
+    else if addressWords.test(user) then Some("address") else None
 
   /** the mall's own contact on its home, when the host gives it (round 4); else as before */
   private def mallContact[R[_]](ctx: Ctx)(using In[Facts, R], In[Clock, R]): Out ! R =
