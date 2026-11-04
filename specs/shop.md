@@ -850,6 +850,30 @@ expressions over them; okay-facts renders every value from the shop's data. Pack
     0.25 → "Chodzi o … czy o …?" (authored `clarify`, `choice.<intent>`), the two as choices (`Decision.Answered`'s
     `choices`: a label, an intent); the widget shows them as buttons, a click asks the same words with `intent` — the
     router answers that intent (`turn(…, asked)`; only a domain's intent, never `other`).
+- **Told it is an AI** (operator, 2026-11-05; EU AI Act art. 50(1) — research below): the widget says so before the
+  first message and on every view, in the page's language (`ChatWords.disclosure(lang)`, the shop module, so tests
+  read the words): the launcher and the panel's title "Asystent AI" / "AI-асистент" / "ИИ-ассистент" / "AI
+  assistant" (the dialog's `aria-label` the same); under the title, above the conversation, a notice that stays when
+  the conversation is deleted (`role="note"`, the dialog's `aria-describedby`): it is an AI assistant, the prices,
+  times and the shop's data come straight from the shop's system, the answers' wording is written by an automaton and
+  may be wrong, a booking is confirmed by the client — and a link to the privacy policy's assistant section: the
+  marker's `data-privacy` when the host gives one (the mall's landing: its own policy), else `/<lang>/privacy/#chat`
+  (the shop's policy, its assistant section carrying `id="chat"` — only when the shop has the chat). The answers'
+  content is unchanged. No marker: no widget, every page byte for byte as before (`OldPagesSuite`).
+- **AI Act art. 50 — TO VERIFY with a lawyer** (research of 2026-11-05): Regulation (EU) 2024/1689, art. 50(1):
+  providers ensure AI systems meant to interact directly with natural persons are designed so that those persons are
+  informed they interact with an AI system, unless obvious to a reasonably well-informed, observant and circumspect
+  person in the circumstances; art. 50(5): clearly and distinguishably, at the latest at the first interaction, meeting
+  accessibility requirements. It applies from 2 August 2026 (art. 113); the Digital Omnibus on AI (2026) moved the
+  high-risk dates and gave existing generative systems until 2 December 2026 for art. 50(2)'s marking only — art.
+  50(1) was not deferred (secondary sources; the Official Journal's text to be checked). The chat interacts directly,
+  so the label is kept on rather than relied on as "obvious". Polish angle (to verify): no consumer-law rule of its
+  own for chatbots found; the general ones apply — misleading actions or omissions (ustawa o przeciwdziałaniu
+  nieuczciwym praktykom rynkowym, art. 5–6) if a client could take the automaton for a person or its words for the
+  shop's binding offer, and the information duties of the ustawa o prawach konsumenta for a booking (the price and
+  terms shown by the shop's own data, the booking confirmed by the client). Poland's act on AI systems (the market
+  surveillance authority for the AI Act) — its status to be checked. Sources: artificialintelligenceact.eu/article/50,
+  eur-lex.europa.eu/eli/reg/2024/1689/oj.
 - **Privacy**: `Privacy.page(…, chat = days)` adds the assistant's section (purpose, what is kept, for how long,
   deletion in the chat, the processor) when the shop has the chat; none: the page as before.
 - Tests: `AssistantSuite` — the dialogue of okay-facts' design §12 end to end on `Memory` (the fake model replaying

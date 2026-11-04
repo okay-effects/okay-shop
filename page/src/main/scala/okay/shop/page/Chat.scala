@@ -14,29 +14,29 @@ import scala.scalajs.js.JSON
  * model wrote" hidden by default. In the page's language (pl, uk, ru, en); keyboard, Escape, announced
  */
 object Chat:
-  private final case class Words(open: String, title: String, placeholder: String, send: String, forget: String,
+  private final case class Words(placeholder: String, send: String, forget: String,
                                  forgotten: String, raw: String, close: String, name: String, contact: String,
                                  consent: String, privacy: String, book: String, go: String, moment: String,
                                  failed: String, hello: String, flagged: String, source: String,
                                  computed: String)
 
   private def words(l: String): Words = l match
-    case "uk" => Words("Запитати помічника", "Помічник", "Ваше запитання…", "Надіслати", "Видалити розмову",
+    case "uk" => Words("Ваше запитання…", "Надіслати", "Видалити розмову",
       "Розмову видалено.", "Що написала модель", "Закрити", "Ім’я", "Телефон або e-mail",
       "Погоджуюся з політикою конфіденційності", "політика", "Записатися", "Перейти", "Зачекайте…",
       "Не вдалося. Спробуйте ще раз.", "Вітаю! Запитайте про послуги, ціни чи вільний час.",
       "Перевірте: відповідь позначено", "джерело", "обчислено з даних")
-    case "ru" => Words("Спросить помощника", "Помощник", "Ваш вопрос…", "Отправить", "Удалить разговор",
+    case "ru" => Words("Ваш вопрос…", "Отправить", "Удалить разговор",
       "Разговор удалён.", "Что написала модель", "Закрыть", "Имя", "Телефон или e-mail",
       "Согласен с политикой конфиденциальности", "политика", "Записаться", "Перейти", "Подождите…",
       "Не удалось. Попробуйте ещё раз.", "Здравствуйте! Спросите об услугах, ценах или свободном времени.",
       "Проверьте: ответ помечен", "источник", "вычислено из данных")
-    case "en" => Words("Ask the assistant", "Assistant", "Your question…", "Send", "Delete this conversation",
+    case "en" => Words("Your question…", "Send", "Delete this conversation",
       "The conversation was deleted.", "What the model wrote", "Close", "Name", "Phone or e-mail",
       "I accept the privacy policy", "policy", "Book", "Go", "One moment…", "That did not work. Please try again.",
       "Hello! Ask about the services, prices or free times.", "Please check: this answer is flagged", "source",
       "computed from the data")
-    case _ => Words("Zapytaj asystenta", "Asystent", "Twoje pytanie…", "Wyślij", "Usuń rozmowę",
+    case _ => Words("Twoje pytanie…", "Wyślij", "Usuń rozmowę",
       "Rozmowa usunięta.", "Co napisał model", "Zamknij", "Imię", "Telefon lub e-mail",
       "Akceptuję politykę prywatności", "polityka", "Zarezerwuj", "Przejdź", "Chwileczkę…",
       "Nie udało się. Spróbuj ponownie.", "Dzień dobry! Zapytaj o usługi, ceny lub wolne terminy.",
@@ -56,6 +56,9 @@ border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.3);font:15px/1.45 system-u
 .okc-head h2{flex:1;margin:0;font-size:16px}
 .okc-head button{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:8px;
 padding:4px 8px;font-size:13px;cursor:pointer}
+.okc-ai{margin:0;padding:8px 12px;font-size:12.5px;line-height:1.4;color:#374151;background:#fef3c7;
+border-bottom:1px solid #fde68a}
+.okc-ai a{color:#1d4ed8}
 .okc-log{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
 .okc-msg{max-width:88%;padding:8px 11px;border-radius:12px;white-space:pre-wrap;word-wrap:break-word}
 .okc-me{align-self:flex-end;background:#e0e7ff}
@@ -89,6 +92,9 @@ background:#2563eb;color:#fff;font:inherit;font-weight:600;cursor:pointer;text-d
     val focus = marker.getAttribute("data-focus")
     val lang = Option(doc.documentElement.getAttribute("lang")).getOrElse("pl").take(2)
     val w = words(lang)
+    // it says it is an AI (specs/shop.md "Told it is an AI"): the launcher, the title, the notice before the talk
+    val ai = okay.shop.html.ChatWords.disclosure(okay.shop.model.Lang.parse(lang).getOrElse(okay.shop.model.Lang.pl))
+    val privacyAt = Option(marker.getAttribute("data-privacy")).filter(_.nonEmpty).getOrElse(s"/$lang/privacy/#chat")
     val css = doc.createElement("style")
     css.textContent = style
     doc.head.appendChild(css)
@@ -99,22 +105,32 @@ background:#2563eb;color:#fff;font:inherit;font-weight:600;cursor:pointer;text-d
       if text.nonEmpty then e.textContent = text
       e
 
-    val button = el("button", "", w.open)
+    val button = el("button", "", ai.label)
     button.id = "okc-btn"
     button.setAttribute("aria-haspopup", "dialog")
     button.setAttribute("aria-expanded", "false")
     val panel = el("div")
     panel.id = "okc-panel"
     panel.setAttribute("role", "dialog")
-    panel.setAttribute("aria-label", w.title)
+    panel.setAttribute("aria-label", ai.label)
+    panel.setAttribute("aria-describedby", "okc-ai")
     panel.setAttribute("hidden", "")
     val head = el("div", "okc-head")
-    head.appendChild(el("h2", "", w.title))
+    head.appendChild(el("h2", "", ai.label))
     val forget = el("button", "", w.forget)
     val close = el("button", "", "×")
     close.setAttribute("aria-label", w.close)
     head.appendChild(forget)
     head.appendChild(close)
+    // above the conversation, so deleting it keeps the notice
+    val notice = el("p", "okc-ai", ai.notice + " ")
+    notice.id = "okc-ai"
+    notice.setAttribute("role", "note")
+    val more = el("a", "", ai.privacy).asInstanceOf[dom.HTMLAnchorElement]
+    more.href = privacyAt
+    more.target = "_blank"
+    more.rel = "noopener"
+    notice.appendChild(more)
     val log = el("div", "okc-log")
     log.setAttribute("role", "log")
     log.setAttribute("aria-live", "polite")
@@ -136,7 +152,7 @@ background:#2563eb;color:#fff;font:inherit;font-weight:600;cursor:pointer;text-d
     val rawToggle = el("button", "", w.raw)
     rawToggle.setAttribute("aria-pressed", "false")
     foot.appendChild(rawToggle)
-    Seq(head, log, form, foot).foreach(panel.appendChild)
+    Seq(head, notice, log, form, foot).foreach(panel.appendChild)
     doc.body.appendChild(button)
     doc.body.appendChild(panel)
 

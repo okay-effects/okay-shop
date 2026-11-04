@@ -33,7 +33,10 @@ object Privacy:
     // a map of its place (specs/shop.md "Places on the map"): what the map's third parties receive; none: as before
     val mapped = site.work.exists(_.locations.exists(x => Geo.current(x).isDefined))
     val visits = if !mapped then visits1 else visits1.take(2) ++ (maps(l) +: visits1.drop(2))
-    val sections = visits.zipWithIndex.map { case ((h, body), i) => s"<h2>${i + 1}. $h</h2>\n$body" }
+    // the assistant's section is the chat's link target (specs/shop.md "Told it is an AI"): `id="chat"`
+    val chatHead = Option.when(chat > 0)(assistant(l, chat)._1)
+    val sections = visits.zipWithIndex.map { case ((h, body), i) =>
+      s"<h2${if chatHead.contains(h) then " id=\"chat\"" else ""}>${i + 1}. $h</h2>\n$body" }
     s"""<!doctype html><html lang="${l.code}"><head><meta charset="utf-8">""" +
       """<meta name="viewport" content="width=device-width,initial-scale=1">""" + "\n" +
       s"<title>${t.title} · $name</title>\n" +
@@ -80,24 +83,32 @@ object Privacy:
 
   /** the assistant's section: its purpose, what it keeps, for `days` days of quiet, deletion in the chat, the AI */
   private def assistant(l: Lang, days: Int): (String, String) = l match
-    case Lang.pl => "Asystent (czat)" -> p("Czat na stronie odpowiada na pytania o nasze usługi, ceny, wolne " +
+    case Lang.pl => "Asystent (czat)" -> p("Asystent jest systemem sztucznej inteligencji (AI) — nie " +
+        "rozmawiasz z człowiekiem; mówi o tym też sam czat. " +
+        "Czat na stronie odpowiada na pytania o nasze usługi, ceny, wolne " +
         "terminy i pomaga zarezerwować wizytę. Przechowujemy rozmowę (Twoje wiadomości i odpowiedzi) oraz dane, " +
         "które podasz przy rezerwacji (imię, kontakt), by prowadzić rozmowę i zrealizować rezerwację; podstawą " +
         "jest Twoje żądanie (art. 6 ust. 1 lit. b RODO). Odpowiedzi tworzy model językowy Cloudflare Workers AI, " +
         "który nie otrzymuje naszych cen ani terminów — te wstawiamy sami. Rozmowa jest usuwana po " +
         s"$days dniach bez aktywności, a w każdej chwili możesz ją usunąć przyciskiem w czacie.")
-    case Lang.en => "The assistant (chat)" -> p("The chat on the site answers questions about our services, " +
+    case Lang.en => "The assistant (chat)" -> p("The assistant is an artificial intelligence (AI) system — " +
+        "you are not talking to a person; the chat itself says so too. " +
+        "The chat on the site answers questions about our services, " +
         "prices and free times, and helps to book. We keep the conversation (your messages and the answers) and " +
         "what you give for a booking (name, contact) to hold the conversation and make the booking, at your request " +
         "(art. 6(1)(b) GDPR). The answers are written by a language model of Cloudflare Workers AI, which never " +
         "receives our prices or times — we put them in ourselves. The conversation is deleted after " +
         s"$days days without activity, and you can delete it at any time with the button in the chat.")
-    case Lang.uk => "Асистент (чат)" -> p("Чат на сайті відповідає на запитання про наші послуги, ціни, вільний " +
+    case Lang.uk => "Асистент (чат)" -> p("Асистент — це система штучного інтелекту (AI): " +
+        "ви розмовляєте не з людиною; про це каже й сам чат. " +
+        "Чат на сайті відповідає на запитання про наші послуги, ціни, вільний " +
         "час і допомагає записатися. Ми зберігаємо розмову (ваші повідомлення та відповіді) і дані, які ви надаєте " +
         "для запису (ім’я, контакт), щоб вести розмову та виконати запис, на ваш запит (ст. 6 п. 1 б) GDPR). " +
         "Відповіді пише мовна модель Cloudflare Workers AI, яка не отримує наших цін і часу — їх вставляємо ми. " +
         s"Розмова видаляється через $days днів без активності, а видалити її можна будь-коли кнопкою в чаті.")
-    case Lang.ru => "Ассистент (чат)" -> p("Чат на сайте отвечает на вопросы о наших услугах, ценах, свободном " +
+    case Lang.ru => "Ассистент (чат)" -> p("Ассистент — это система искусственного интеллекта (ИИ): " +
+        "вы разговариваете не с человеком; об этом говорит и сам чат. " +
+        "Чат на сайте отвечает на вопросы о наших услугах, ценах, свободном " +
         "времени и помогает записаться. Мы храним разговор (ваши сообщения и ответы) и данные, которые вы даёте " +
         "для записи (имя, контакт), чтобы вести разговор и выполнить запись, по вашему запросу (ст. 6 п. 1 б) " +
         "GDPR). Ответы пишет языковая модель Cloudflare Workers AI, которая не получает наших цен и времени — их " +

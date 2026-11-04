@@ -117,3 +117,28 @@ class AssistantSuite extends munit.FunSuite:
       okay.shop.html.Privacy.page(site, okay.shop.model.Lang.pl))
     assert(okay.shop.html.Privacy.page(site, okay.shop.model.Lang.pl, chat = 30).contains("po 30 dniach bez " +
       "aktywności"))
+
+  test("the chat tells it is an AI, in four languages (EU AI Act art. 50(1))"):
+    import okay.shop.html.ChatWords
+    import okay.shop.model.Lang
+    val expected = Map(Lang.pl -> ("Asystent AI", "Rozmawiasz z asystentem AI"),
+      Lang.uk -> ("AI-асистент", "Ви розмовляєте з AI-асистентом"),
+      Lang.ru -> ("ИИ-ассистент", "Вы разговариваете с ИИ-ассистентом"),
+      Lang.en -> ("AI assistant", "You are talking to an AI assistant"))
+    for l <- Lang.values do
+      val d = ChatWords.disclosure(l)
+      val (label, opening) = expected(l)
+      assertEquals(d.label, label)
+      assert(d.notice.startsWith(opening), d.notice)
+      assert(d.privacy.nonEmpty)
+    assertEquals(Lang.values.map(ChatWords.disclosure).distinct.size, 4)
+
+  test("the privacy policy's assistant section is the widget's link target and says it is an AI"):
+    import okay.shop.model.Lang
+    val site = Fixtures.site("crew")
+    for (l, ai) <- Seq(Lang.pl -> "sztucznej inteligencji (AI)", Lang.uk -> "штучного інтелекту (AI)",
+      Lang.ru -> "искусственного интеллекта (ИИ)", Lang.en -> "artificial intelligence (AI)") do
+      val page = okay.shop.html.Privacy.page(site, l, chat = 30)
+      assert(page.contains("<h2 id=\"chat\">"), l)
+      assert(page.contains(ai), l)
+      assert(!okay.shop.html.Privacy.page(site, l).contains("id=\"chat\""), l)

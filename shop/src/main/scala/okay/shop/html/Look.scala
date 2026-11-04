@@ -38,3 +38,22 @@ trait Look:
   /** the assistant's chat on the storefront's and the offers' pages: none (the default) — no widget, the pages as
    * before */
   def chat: Option[Chat] = None
+
+/** THE CHAT TELLS IT IS AN AI (specs/shop.md "The assistant", "Told it is an AI"; EU AI Act art. 50(1)): the widget's
+ * launcher and title, the notice above the conversation, the privacy link's words — in the page's language */
+object ChatWords:
+  final case class Disclosure(label: String, notice: String, privacy: String)
+
+  def disclosure(l: Lang): Disclosure = l match
+    case Lang.pl => Disclosure("Asystent AI", "Rozmawiasz z asystentem AI. Ceny, terminy i dane sklepu pochodzą " +
+        "bezpośrednio z systemu sklepu; odpowiedzi tekstowe tworzy automat i mogą zawierać błędy. Rezerwację " +
+        "potwierdzasz Ty.", "Prywatność czatu")
+    case Lang.uk => Disclosure("AI-асистент", "Ви розмовляєте з AI-асистентом. Ціни, час і дані магазину " +
+        "надходять безпосередньо із системи магазину; текст відповідей створює автомат, і в ньому можуть бути " +
+        "помилки. Запис підтверджуєте ви.", "Конфіденційність чату")
+    case Lang.ru => Disclosure("ИИ-ассистент", "Вы разговариваете с ИИ-ассистентом. Цены, время и данные магазина " +
+        "берутся напрямую из системы магазина; текст ответов создаёт автомат, и в нём возможны ошибки. Запись " +
+        "подтверждаете вы.", "Конфиденциальность чата")
+    case Lang.en => Disclosure("AI assistant", "You are talking to an AI assistant. Prices, times and the shop's " +
+        "details come straight from the shop's system; the answers' wording is written by an automaton and may " +
+        "contain mistakes. You confirm any booking yourself.", "Chat privacy")
