@@ -20,8 +20,11 @@ class OldPagesSuite extends munit.FunSuite:
   private val before = Vector("сделано в okay-effects" -> "сделано в busi", "zrobione w okay-effects" ->
     "zrobione w busi", "made with okay-effects" -> "made with busi", "зроблено в okay-effects" -> "зроблено в busi")
   private def asBefore(page: String) = before.foldLeft(page)((p, w) => p.replace(w._1, w._2))
+  /** every page but the privacy policy (changed on purpose 2026-11-05: its processors and cookies from the config,
+   * the retention said precisely — specs/shop.md "The privacy policy from the config") */
   def digest(id: String): String =
-    sha(StaticPages.of(Fixtures.site(id), Plain, "SITEKEY").sortBy(_._1).map((k, v) => k + "\n" + asBefore(v))
+    sha(StaticPages.of(Fixtures.site(id), Plain, "SITEKEY")
+      .filterNot(_._1.endsWith("/privacy/index.html")).sortBy(_._1).map((k, v) => k + "\n" + asBefore(v))
       .mkString("\n"))
   def letters: String =
     val w = World("salon")
@@ -32,9 +35,9 @@ class OldPagesSuite extends munit.FunSuite:
       BookingPage.page(w.conf, Lang.pl, b) + okay.shop.booking.Calendar.ics(w.site, Vector(b), 1793282400000L))
 
   test("the three sites' pages byte for byte as before the modes") {
-    assertEquals(digest("atelier"), "207ef226246f361bdc88424b966041f7625c3c2e67284a49a036011251587531")
-    assertEquals(digest("studio"), "b546f5b82880472cb901808e7a93cad29082fce803684e914348e4f4225f7e11")
-    assertEquals(digest("salon"), "a80431ae4ac98556d4667fb9b2b3d11a4e84877b9c20d7a1052c42d6d8fb5495")
+    assertEquals(digest("atelier"), "7e612d3b1629bb37fbde58eebce6c709735081b520c3f0cc5dbe6cac710cc201")
+    assertEquals(digest("studio"), "b0be1cf166e252ad382d17d13bbf93dc6eeec4fa5fb2e7316d7e1fd263e6b378")
+    assertEquals(digest("salon"), "8f278cd20674a7445d84f04dd8301be72ffa465cd0edb4131346b65e07cb200e")
   }
 
   test("a salon's booking letters, its page and its calendar as before the modes") {

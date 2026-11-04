@@ -9,7 +9,7 @@ class PagesSuite extends munit.FunSuite:
     def theme = Theme("--void: #fff;", ".bg { }")
     def seo(site: Site)(using l: Lang) = Seo(s"${site.name} ${l.code}", "description")
     override def sections(at: At)(using Lang) = "<section class=\"own\">its own</section>"
-    override def privacy(site: Site, l: Lang) = s"privacy ${l.code}"
+    override def privacy(site: Site, l: Lang, mail: Privacy.Mail) = s"privacy ${l.code}"
     override def policy = "2026-10-28"
     override def pages(at: Lang => (String => At)) =
       Lang.values.toVector.map(l => s"${l.code}/extra/index.html" -> s"extra ${at(l)("extra/").url(l)}")
@@ -61,6 +61,33 @@ class PagesSuite extends munit.FunSuite:
       hosted)
     assertEquals(hosted.replace("""<li>Platforma <a href="https://host.example/">Host</a></li>""" + "\n", ""),
       Privacy.page(atelier, Lang.pl))
+  }
+
+  test("the policy from the config: the mail's way named, Brevo only when used; DPF; AI, geocoding, cookies") {
+    import Privacy.Mail
+    val studio = Fixtures.site("studio")
+    assertEquals(Mail.of("cloudflare", "smtp-relay.brevo.com"), Mail.Cloudflare)
+    assertEquals(Mail.of("smtp", "smtp-relay.brevo.com"), Mail.Brevo)
+    assertEquals(Mail.of("", "mail.example.com"), Mail.Smtp("mail.example.com"))
+    assertEquals(Mail.of("", ""), Mail.Off)
+    assertEquals(Mail.of("resend", ""), Mail.Resend)
+    for l <- Lang.values do
+      val plain = Privacy.page(studio, l)
+      assert(!plain.contains("Brevo") && plain.contains("Cloudflare Email Service"), plain)
+      assert(plain.contains("EU-US Data Privacy Framework"), plain)
+      assert(Privacy.page(studio, l, mail = Mail.Brevo).contains("Sendinblue SAS (Brevo"))
+      assert(!Privacy.page(studio, l, mail = Mail.Off).contains("Cloudflare Email Service"))
+      assert(!plain.contains("Workers AI") && Privacy.page(studio, l, chat = 30).contains("Cloudflare Workers AI ("))
+      assert(plain.contains("<code>lang</code>") && plain.contains("<code>__Host-ws</code>"))
+      assert(!plain.contains("okc-warm") && Privacy.page(studio, l, chat = 30).contains("okc-warm"))
+      assert(Privacy.page(studio, l, cookies = Vector("<code>z-test</code> — a host's")).contains(
+        "<li><code>z-test</code> — a host's</li>"))
+      // the geocoding only for a travel radius, on a host that geocodes
+      assert(!Privacy.page(studio, l, geocoding = true).contains("Nominatim"))
+    // the last processor ends the list with a full stop (no InPost for the studio)
+    assert(Privacy.page(studio, Lang.en).contains("sending e-mails to clients.</li>\n</ul>"))
+    assert(Privacy.page(studio, Lang.en, mail = Mail.Smtp("mail.example.com")).contains(
+      "the mail server mail.example.com — sending e-mails to clients.</li>"))
   }
 
   test("the workshop: one muted word at the end of every public foot, not followed; not for search engines") {

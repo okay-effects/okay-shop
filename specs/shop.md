@@ -234,8 +234,8 @@ RODO): the policy must name it among the recipients and point to its own policy.
 
 - `Privacy.page(site, l, email, host)`: `host` the host's items for the recipients' list, in the page's language —
   each an HTML fragment the host writes (its name, what it does, the link to its own policy) — said FIRST, before the
-  engine's processors (Cloudflare, Turnstile, Brevo, InPost for an atelier). None (the default, every site on its own
-  Worker): the page exactly as before, byte for byte.
+  engine's processors (Cloudflare, Turnstile, the clients' mail as configured, InPost for an atelier). None (the
+  default, every site on its own Worker): the page exactly as before, byte for byte.
 - Tests: `PagesSuite` (the host's item first in the list, in its language; without one the same bytes).
 
 ## Notices (operator, 2026-10-30)
@@ -908,6 +908,59 @@ expressions over them; okay-facts renders every value from the shop's data. Pack
   the resolver; "near me" with no point: the visitor's city offered (`search.near.ask`), never guessed.
 - Tests: `GeoSuite` — a point's JSON, staleness, rounding, the radius inside/outside/unchecked with a fake geocoder,
   GUGiK's and Nominatim's answers read (fixed JSON), the map box only with a point.
+
+## Retention (operator, 2026-11-05: the policies' periods made true by code)
+
+What the privacy policy promises is what the store does — automatically, idempotently, its runs logged as counts only.
+
+- **Rate limits** (`Store.Allow`): the key (`order:<ip>`, `link:<hash>`…) is never kept as it is — its HMAC-SHA256
+  under the Worker's secret `RATE_KEY` (`StoreDurable.run(p, rateKey)`; without one its plain SHA-256), 32 hex
+  digits: `site/hit/<hash>/<window ms>/<window number>`. A request deletes its key's earlier windows; the ended ones of
+  every key go at the next retention run, and every key of the old raw form (`site/hit/<key>/<n>`, before
+  2026-11-05) too.
+- **`Store.Expire(now, force)`**, one step, at most once in 20 hours unless forced (`site/expired` the last run):
+  the rate limits' ended windows; the sign-in links, sessions and review links past their `until`; and FIVE YEARS
+  (`Expired.keep`, 1827 days — never less than five calendar years) after a client's last activity in a matter: an
+  order with its journal (its last event, else its placing), a booking (its end, else its placing), a quote (its
+  placing or the time it proposes), an inquiry with its journal, a review with its ask (its writing or the reply).
+  Accounting records are NEVER deleted by it: payments (`site/pay/`), receipts' numbers, buyers' data
+  (`site/buyer/`), invoices, their UPOs — kept as long as tax law requires (the owner's and the accountant's call). It
+  answers `Expired` (counts; `photos`: the deleted quotes' private file names, for the host to delete).
+- **Who runs it**: a site on its own — its object after each dynamic request's answer (`Sockets.later`; the 20 hours
+  make it daily at most); a host (the mall) — its own daily schedule, forced. The log line says counts only
+  (`ShopWorker.expired`: `RETENTION: hits 3, sign-ins 0, orders 0…`).
+- The policy says it: "5 lat od ostatniej czynności w sprawie (np. realizacji zamówienia lub wizyty), a następnie
+  usuwamy je automatycznie; dokumenty rozliczeniowe — tak długo, jak wymagają przepisy podatkowe". OPEN for a
+  lawyer/accountant: whether five years from the activity is right for non-accounting data, and whether accounting
+  records need longer (tax law counts five years from the end of the year of the tax's due date).
+- Tests: `RetentionSuite` (memory, the clock a number): the HMAC key never the IP and keyed, the limit still
+  counting, an old raw key and an ended window gone, the live one kept; an order kept a day short of five years and
+  gone a day after, its journal with it, payments, buyers and invoices kept; the last event counts; once in 20 hours.
+
+## The privacy policy from the config (operator, 2026-11-05)
+
+The policy names only the processors the site's config actually uses, and every cookie the code sets.
+
+- `Privacy.page(site, l, email, host, chat, mail, geocoding, cookies)`: `mail` the clients' letters' way —
+  `Privacy.Mail.of(MAIL_CLIENT, SMTP_HOST)` as `Settings` reads them: `cloudflare` → Cloudflare Email Service,
+  `brevo` (or `smtp` through Brevo's relay) → Brevo, `resend` → Resend, `smtp` elsewhere → that server's provider,
+  none → no mail processor. A site's build passes it (`StaticPages.of(site, look, sitekey, mail)` →
+  `Look.privacy(site, l, mail)`), read from its wrangler.toml as the Turnstile key is; the mall from its env.
+- Cloudflare's item states the transfer basis as the mall's docs/legal (podmioty-przetwarzajace.md) do: the EU-US
+  Data Privacy Framework (the Commission's adequacy decision of 10 July 2023; Cloudflare, Inc. certified), the
+  standard contractual clauses the fallback. Sources: https://www.cloudflare.com/trust-hub/gdpr/,
+  https://www.dataprivacyframework.gov/list, https://www.cloudflare.com/cloudflare-customer-dpa/.
+- `chat > 0` adds Cloudflare Workers AI (the assistant's model) and the `okc-warm` session storage; `geocoding` (a
+  host that geocodes) with a travel radius adds GUGiK and the OpenStreetMap Foundation (Nominatim) — the visit's
+  address only.
+- The cookies' section: `lang` (1 year, set by the visitor's click), `__Host-ws` (the workshop's session, 30 days or
+  sign-out, staff only), `okc-warm` with the chat, then the host's items (`cookies`, HTML in the page's language: the
+  mall's `z-chat`); no advertising, analytics or tracking — none needs consent (strictly necessary or asked for by
+  the visitor; TO VERIFY with a lawyer).
+- The retention section as "Retention" above. `Privacy.version` 2026-11-05.
+- Tests: `PagesSuite` (the mail's way from the config, Brevo only when used, DPF, AI and its storage only with the
+  chat, the host's cookies, the geocoding only with a radius, the list's last full stop); `OldPagesSuite` pins every
+  page but the privacy policy (byte for byte as before this change).
 
 ## Open core (operator, 2026-10-29)
 

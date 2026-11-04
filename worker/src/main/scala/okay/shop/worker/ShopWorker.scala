@@ -12,7 +12,8 @@ import okay.shop.model.Site
 
 /** A SITE'S SETTINGS, from its Worker's vars and secrets (its wrangler.toml, `wrangler secret put`) */
 final case class Settings(sitekey: String, turnstileSecret: String, mailing: Mailing, staff: Set[String],
-                          blik: String, paczkomat: String, calendarKey: String, origin: String)
+                          blik: String, paczkomat: String, calendarKey: String, origin: String,
+                          rateKey: String = "")
 
 object Settings:
   def read[R[_]](site: Site)(using In[Env, R]): Settings ! R =
@@ -23,6 +24,7 @@ object Settings:
       from <- v("MAIL_FROM"); name <- v("MAIL_NAME"); owner <- v("OWNER_EMAIL"); client <- v("MAIL_CLIENT")
       brevo <- s("BREVO_API_KEY"); staff <- v("STAFF_EMAILS"); blik <- v("BLIK_PHONE"); paczkomat <- v("PACZKOMAT")
       calendar <- s("CALENDAR_KEY"); origin <- v("ORIGIN"); resend <- s("RESEND_API_KEY")
+      rate <- s("RATE_KEY")
       smtpHost <- v("SMTP_HOST"); smtpPort <- v("SMTP_PORT"); smtpUser <- s("SMTP_USER"); smtpPass <- s("SMTP_PASS")
     yield Settings(sitekey, secret.getOrElse(""),
       Mailing(if from.isEmpty then s"kontakt@${site.domain}" else from, if name.isEmpty then site.name else name,
@@ -33,7 +35,9 @@ object Settings:
           site.domain.split('.').takeRight(2).mkString("."))), resend),
       staff.split(',').map(_.trim.toLowerCase).filter(_.nonEmpty).toSet, blik, paczkomat, calendar.getOrElse(""),
       // where the letters' links point when no request says it (the reminders, the object's alarm)
-      if origin.isEmpty then s"https://${site.domain}" else origin)
+      if origin.isEmpty then s"https://${site.domain}" else origin,
+      // a rate limit's key kept as its HMAC under this secret (specs/shop.md "Retention")
+      rate.getOrElse(""))
 
 /**
  * A SITE'S WORKER, on okay-serverless (specs/shop.md): the app is the front — the old URLs and `/` redirected, the
@@ -55,10 +59,14 @@ final class ShopWorker(site: Site, look: Look):
       Conf(site, origin, s.blik, s.paczkomat, s.sitekey, s.staff, s.mailing.from, look.policy, s.calendarKey)
     private def live[A](s: Settings)(p: A ! Live): A ! InActor =
       MailCloud.run(s.mailing)(Turnstile.run(s.turnstileSecret)(Ids.from(Platform.randomInt)(StoreDurable.run(
-        Notify.ignore(Media.none(Geocoder.none(p)))))))
+        Notify.ignore(Media.none(Geocoder.none(p))), s.rateKey))))
 
     def fetch(name: String, r: Request): Response ! InActor = Settings.read[InActor](site).flatMap(s =>
-      live(s)(Api.answer[Live](conf(s, Web.origin(r)), r)))
+      live(s)(Api.answer[Live](conf(s, Web.origin(r)), r)).flatMap(answer =>
+        // retention (specs/shop.md "Retention"), after the answer: at most once in 20 hours, counts logged only
+        okay.serverless.cloud.Sockets.later[InActor](okay.scala3.std.Clock.now[InActor].flatMap(now =>
+          live(s)(Store.expire[Live](now))).flatMap(e => if !e.ran then unit[InActor]
+          else okay.scala3.std.Log.info[InActor](ShopWorker.expired(e)))).as(answer)))
 
     /** the object's alarm: the bookings due reminded (specs/shop.md "Booking"); the store sets the next one */
     override def alarm(name: String): Unit ! InActor = Settings.read[InActor](site).flatMap(s =>
@@ -68,3 +76,8 @@ final class ShopWorker(site: Site, look: Look):
 
 object ShopWorker:
   def apply(site: Site, look: Look): Worker = new ShopWorker(site, look).worker
+
+  /** a retention run as the log says it: counts, never what (specs/shop.md "Retention") */
+  def expired(e: Expired): String =
+    s"RETENTION: hits ${e.hits}, sign-ins ${e.signins}, orders ${e.orders}, bookings ${e.bookings}, " +
+      s"quotes ${e.quotes}, inquiries ${e.inquiries}, reviews ${e.reviews}"

@@ -42,3 +42,8 @@ object Sha256:
     h.flatMap(v => Array((v >>> 24).toByte, (v >>> 16).toByte, (v >>> 8).toByte, v.toByte))
 
   def hex(message: Array[Byte]): String = hash(message).map(b => f"${b & 0xff}%02x").mkString
+
+  /** HMAC-SHA256 (RFC 2104): a rate limit's key kept as this of the Worker's secret (specs/shop.md "Retention") */
+  def hmac(key: Array[Byte], message: Array[Byte]): Array[Byte] =
+    val k = (if key.length > 64 then hash(key) else key).padTo(64, 0.toByte)
+    hash(k.map(b => (b ^ 0x5c).toByte) ++ hash(k.map(b => (b ^ 0x36).toByte) ++ message))

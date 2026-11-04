@@ -50,9 +50,11 @@ object StoreDurable:
   private def payKey(of: Of, ref: String) = s"$scope/pay/${of.key}/$ref"
   private val day = 86400000L
 
-  def run[R[_], Rest[_], A](p: A ! R)(using Split[Store, R, Rest], In[Storage, Rest]): A ! Rest =
+  /** `rateKey`: the secret a rate limit's key is kept under (HMAC-SHA256; specs/shop.md "Retention") — the Worker's
+   * `RATE_KEY`; empty: its plain SHA-256 */
+  def run[R[_], Rest[_], A](p: A ! R, rateKey: String = "")(using Split[Store, R, Rest], In[Storage, Rest]): A ! Rest =
     handle(p, Handler.general[Store, Rest, A, A](pure)([X] => (op: Store[X], k: X => A ! Rest) =>
-      answer[Rest, X](op).flatMap(k)))
+      answer[Rest, X](op, rateKey).flatMap(k)))
 
   // ---- what is committed, read
 
@@ -106,7 +108,7 @@ object StoreDurable:
       case _ => unit[D]
     })
 
-  private def answer[R[_], X](op: Store[X])(using In[Storage, R]): X ! R =
+  private def answer[R[_], X](op: Store[X], rateKey: String)(using In[Storage, R]): X ! R =
     type D[Y] = (R + Durable)[Y]
     def step[A](p: A ! D): A ! R = Durable.step[D, R, A](scope)(p)
     op match
@@ -131,15 +133,20 @@ object StoreDurable:
           .sortBy(i => -i.at).take(limit).toVector)
       case Store.Allow(key, max, window, now) =>
         val w = now / window
-        // this window's count, one more; the windows before the last forgotten
-        step[Boolean](Durable.keys[D](hits(key)).flatMap { ks =>
-          val old = ks.filter(_.stripPrefix(hits(key)).toLongOption.exists(_ < w - 1))
+        // the key (an IP's, an address's) never kept as it is: its HMAC under the rate key, then the window's size
+        val at = s"${hits(hashed(key, rateKey))}$window/"
+        // this window's count, one more; the windows before it forgotten
+        step[Boolean](Durable.keys[D](at).flatMap { ks =>
+          val old = ks.filter(_.stripPrefix(at).toLongOption.exists(_ < w))
           old.foldLeft(unit[D])((p, k) => p.andThen(Durable.delete[D](k))).andThen(
-            Durable.get[Long, D](s"${hits(key)}$w").flatMap { n =>
+            Durable.get[Long, D](s"$at$w").flatMap { n =>
               val next = n.getOrElse(0L) + 1
-              Durable.put[Long, D](s"${hits(key)}$w", next).as(next <= max)
+              Durable.put[Long, D](s"$at$w", next).as(next <= max)
             })
         })
+      case Store.Expire(now, force) => step[Expired](Durable.get[Long, D](expiredAt).flatMap(last =>
+          if !force && last.exists(now - _ < Expired.every) then pure(Expired())
+          else expire[D](now).flatMap(e => Durable.put[Long, D](expiredAt, now).as(e))))
       case Store.KeepLink(hash, si) => step[Unit](Durable.put[Json, D](link(hash), signinJson(si)))
       case Store.UseLink(hash, now) => step[Option[Signin]](Durable.get[Json, D](link(hash)).flatMap {
           case Some(j: Json.Obj) => Durable.delete[D](link(hash)).as(Some(signin(j)).filter(_.until >= now))
@@ -355,6 +362,77 @@ object StoreDurable:
           marked.foldLeft(unit[D])((p, b) => p.andThen(Durable.put[Json, D](bookingKey(b.ref), Codec.booking(b))))
             .andThen(nextReminder[D](all.filterNot(b => due.exists(_.ref == b.ref)) ++ marked, now)).as(marked)
         })
+
+  // ---- RETENTION (specs/shop.md "Retention")
+
+  /** when retention last ran */
+  private val expiredAt = s"$scope/expired"
+
+  /** a rate limit's key as it is kept: 32 hex digits of its HMAC-SHA256 under `rateKey` (its SHA-256 without one) */
+  def hashed(key: String, rateKey: String): String =
+    val bytes = key.getBytes("UTF-8")
+    val mac = if rateKey.isEmpty then Sha256.hash(bytes) else Sha256.hmac(rateKey.getBytes("UTF-8"), bytes)
+    mac.take(16).map(b => f"${b & 0xff}%02x").mkString
+
+  private def num(j: Json.Obj, k: String): Long = j.get(k).collect { case Json.Num(n) => n.toLong }.getOrElse(0L)
+
+  /** the deletions of one run, in the caller's step */
+  private def expire[D[_]: Has[Durable]](now: Long): Expired ! D =
+    val cutoff = now - Expired.keep
+    def gone(keys: List[String]): Unit ! D = keys.foldLeft(unit[D])((p, k) => p.andThen(Durable.delete[D](k)))
+    def objs(prefix: String): List[(String, Json.Obj)] ! D = Durable.keys[D](prefix).flatMap(ks =>
+      ks.foldLeft(pure[List[(String, Json.Obj)], D](Nil))((acc, k) => acc.flatMap(xs => Durable.get[Json, D](k).map {
+        case Some(o: Json.Obj) => xs :+ (k -> o)
+        case _ => xs
+      })))
+    // the windows ended (`hit/<hash>/<size>/<n>`: ended when (n + 1) × size ≤ now), and every raw-key one
+    // (`hit/<key>/<n>`, before 2026-11-05)
+    val hitsDone = Durable.keys[D](s"$scope/hit/").flatMap { ks =>
+      val old = ks.filter(k => k.stripPrefix(s"$scope/hit/").split('/') match
+        case Array(_, size, n) => (size.toLongOption, n.toLongOption) match
+          case (Some(s), Some(w)) => (w + 1) * s <= now
+          case _ => true
+        case _ => true)
+      gone(old).as(old.size)
+    }
+    // the sign-in links, sessions and review links past
+    val signinsDone = List(s"$scope/link/", s"$scope/session/", s"$scope/reviewlink/").foldLeft(pure[Int, D](0))(
+      (acc, prefix) => acc.flatMap(n => objs(prefix).flatMap { xs =>
+        val past = xs.filter((_, o) => num(o, "until") < now).map(_._1)
+        gone(past).as(n + past.size)
+      }))
+    // an order: its last activity the latest of its placing and its journal's events
+    val ordersDone = objs(s"$scope/order/").flatMap(xs => xs.foldLeft(pure[Int, D](0))((acc, kv) => acc.flatMap { n =>
+      val o = Codec.order(kv._2)
+      if o.placed >= cutoff then pure(n)
+      else objs(events(o.ref)).flatMap { es =>
+        if (o.placed +: es.map((_, e) => num(e, "at"))).max >= cutoff then pure(n)
+        else gone(kv._1 :: es.map(_._1)).as(n + 1)
+      }
+    }))
+    val inquiriesDone = objs(s"$scope/inquiry/").flatMap(xs => xs.foldLeft(pure[Int, D](0))((acc, kv) => acc.flatMap {
+      n =>
+        val i = Codec.inquiry(kv._2)
+        if i.at >= cutoff then pure(n)
+        else Durable.keys[D](events(i.ref)).flatMap(es => gone(kv._1 :: es)).as(n + 1)
+    }))
+    val bookingsDone = objs(s"$scope/booking/").flatMap { xs =>
+      val old = xs.filter((_, j) => { val b = Codec.booking(j); math.max(b.end, b.placed) < cutoff })
+      gone(old.map(_._1)).as(old.size)
+    }
+    val quotesDone = objs(s"$scope/quote/").flatMap { xs =>
+      val old = xs.map((k, j) => k -> Codec.quote(j)).filter((_, q) => math.max(q.placed, q.start) < cutoff)
+      gone(old.map(_._1)).as(old.size -> old.flatMap((_, q) => q.photos.map(a => s"quote/${q.ref}/${a.file}")))
+    }
+    val reviewsDone = objs(s"$scope/review/").flatMap { xs =>
+      val old = xs.map((k, j) => k -> Codec.review(j)).filter((_, r) => math.max(r.at, r.replied) < cutoff)
+      gone(old.flatMap((k, r) => List(k, s"$scope/reviewask/${r.of.key}/${r.ref}"))).as(old.size)
+    }
+    for
+      h <- hitsDone; s <- signinsDone; o <- ordersDone; i <- inquiriesDone; b <- bookingsDone; q <- quotesDone
+      r <- reviewsDone
+    yield Expired(ran = true, hits = h, signins = s, orders = o, bookings = b, quotes = q._1, inquiries = i,
+      reviews = r, photos = q._2.toVector)
 
   /** a review link's order or booking, while it is not past */
   private def invitation(j: Json.Obj, now: Long): Option[(Of, String)] =

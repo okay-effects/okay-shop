@@ -6,7 +6,7 @@ import okay.shop.model.*
   * The look is the old template's: back link, title, last-updated date, numbered sections, footer line. */
 object Privacy:
   /** the policy's version: a date, stored with every consent */
-  val version: String = "2026-10-28"
+  val version: String = "2026-11-05"
 
   /** where the controller is reached, by default `kontakt@` the site's own domain (its last two labels) */
   def email(site: Site): String = "kontakt@" + site.domain.split('.').takeRight(2).mkString(".")
@@ -18,12 +18,15 @@ object Privacy:
   /** the page for this site in this language: a whole HTML document. `host`: the items its host (a platform the
    * site runs on: its processor) adds to the recipients, in `l`, said first — HTML of the host's (specs/shop.md
    * "The site's host in its privacy policy"); none: the page as it always was */
-  def page(site: Site, l: Lang, email: String = "", host: Vector[String] = Vector.empty, chat: Int = 0): String =
+  def page(site: Site, l: Lang, email: String = "", host: Vector[String] = Vector.empty, chat: Int = 0,
+           mail: Mail = Mail.Cloudflare, geocoding: Boolean = false, cookies: Vector[String] = Vector.empty): String =
     val address = Html.escape(if email.nonEmpty then email else this.email(site))
     val contact = s"""<a href="mailto:$address">$address</a>"""
     val name = Html.escape(site.name)
     val accent = site.color
-    val t = texts(l, site.clothing, name, contact, host)
+    // the processors and cookies the site's config uses (specs/shop.md "The privacy policy from the config")
+    val u = Uses(mail, chat > 0, geocoding && site.work.flatMap(_.area).exists(_.radius > 0), cookies)
+    val t = texts(l, site.clothing, name, contact, host, u)
     val note = t.note.fold("")(n => s"\n<p><em>$n</em></p>")
     // a shop that comes to its clients keeps their addresses: said after what is collected
     val visits0 = site.work.filter(_.has(Mode.AtClient)).fold(t.sections)(_ =>
@@ -56,12 +59,13 @@ object Privacy:
       s"""<p style="margin-top:32px;font-size:13px;color:#999">$name · $version${Pages.staff(using l)}</p>""" + "\n" +
       "</div></body></html>\n"
 
-  private def texts(l: Lang, clothing: Boolean, name: String, contact: String, host: Vector[String]): Texts =
+  private def texts(l: Lang, clothing: Boolean, name: String, contact: String, host: Vector[String],
+                    u: Uses): Texts =
     l match
-      case Lang.pl => pl(clothing, name, contact, host)
-      case Lang.en => en(clothing, name, contact, host)
-      case Lang.uk => uk(clothing, name, contact, host)
-      case Lang.ru => ru(clothing, name, contact, host)
+      case Lang.pl => pl(clothing, name, contact, host, u)
+      case Lang.en => en(clothing, name, contact, host, u)
+      case Lang.uk => uk(clothing, name, contact, host, u)
+      case Lang.ru => ru(clothing, name, contact, host, u)
 
   private def p(s: String): String = s"<p>$s</p>"
 
@@ -131,15 +135,159 @@ object Privacy:
         "наши сотрудники и вы по ссылке из подтверждения; он никогда не публикуется. Мы храним его вместе с " +
         "записью.")
 
-  /** the recipients: Cloudflare (hosting, Turnstile), Brevo, and InPost for the atelier */
+  /** the recipients: the host's items, the engine's (each ending ";"), InPost for the atelier; the last ends "." */
   private def recipients(intro: String, items: Vector[String], inpost: Option[String], outro: String,
                          host: Vector[String]): String =
-    val all = host ++ items ++ inpost.toVector
+    val engine = if inpost.isDefined then items
+      else items.dropRight(1) ++ items.lastOption.map(_.stripSuffix(";") + ".")
+    val all = host ++ engine ++ inpost.toVector
+    p(intro) + "\n<ul>\n" + all.map(i => s"<li>$i</li>").mkString("\n") + "\n</ul>\n" + p(outro)
+
+  /** HOW THE SITE'S CLIENTS' LETTERS GO, as its Worker's config says — the way `MailCloud` takes */
+  enum Mail:
+    case Cloudflare, Brevo, Resend
+    /** an SMTP relay of its own (not one named here) */
+    case Smtp(host: String)
+    /** none set up: no letters to clients */
+    case Off
+
+  object Mail:
+    /** from `MAIL_CLIENT` and `SMTP_HOST` as `Settings` reads them: `smtp` (or empty) by the relay's host */
+    def of(client: String, smtpHost: String): Mail = client.trim.toLowerCase match
+      case "cloudflare" => Cloudflare
+      case "brevo" => Brevo
+      case "resend" => Resend
+      case _ =>
+        val h = smtpHost.trim.toLowerCase
+        if h.isEmpty then Off else if h.endsWith("brevo.com") || h.endsWith("sendinblue.com") then Brevo else Smtp(h)
+
+  /** what the site uses that its policy names: the clients' mail, the assistant's model, the geocoding of a visit's
+   * address (a travel radius, on a host that geocodes), the host's cookies (HTML items in the page's language) */
+  final case class Uses(mail: Mail = Mail.Cloudflare, ai: Boolean = false, geo: Boolean = false,
+                        cookies: Vector[String] = Vector.empty)
+
+  /** THE ENGINE'S PROCESSORS for this config, in `l` (docs of the mall: podmioty-przetwarzajace.md) — Cloudflare's
+   * transfer basis the EU-US Data Privacy Framework, the standard contractual clauses its fallback */
+  private def items(l: Lang, u: Uses): Vector[String] =
+    val (cf, turnstile, mailCf, brevo, resend, ai, geo) = l match
+      case Lang.pl => ("Cloudflare, Inc. (USA) — hosting strony i przechowywanie danych; dane mogą być " +
+          "przetwarzane w UE i w USA — przekazanie do USA na podstawie EU-US Data Privacy Framework (decyzja Komisji " +
+          "Europejskiej stwierdzająca odpowiedni stopień ochrony; Cloudflare, Inc. ma certyfikację), a gdyby ta " +
+          "podstawa przestała obowiązywać — standardowych klauzul umownych zatwierdzonych przez Komisję Europejską;",
+        "Cloudflare Turnstile (Cloudflare, Inc.) — ochrona formularza przed botami: przetwarza dane techniczne " +
+          "przeglądarki (np. adres IP), aby odróżnić człowieka od bota;",
+        "Cloudflare Email Service (Cloudflare, Inc.) — wysyłka wiadomości e-mail do klientów;",
+        "Sendinblue SAS (Brevo, Francja) — wysyłka wiadomości e-mail do klientów;",
+        "Resend (USA) — wysyłka wiadomości e-mail do klientów, na podstawie standardowych klauzul umownych;",
+        "Cloudflare Workers AI (Cloudflare, Inc.) — model językowy asystenta: otrzymuje treść wiadomości do " +
+          "asystenta, nie używa jej do trenowania modeli;",
+        "Główny Urząd Geodezji i Kartografii (Polska) oraz OpenStreetMap Foundation (Wielka Brytania — decyzja " +
+          "Komisji Europejskiej o odpowiednim stopniu ochrony; Nominatim, gdy GUGiK nie znajdzie adresu) — zamiana " +
+          "adresu wizyty na współrzędne, by sprawdzić odległość dojazdu: otrzymują tylko adres, bez imienia i " +
+          "kontaktu;")
+      case Lang.en => ("Cloudflare, Inc. (USA) — website hosting and data storage; data may be processed in the " +
+          "EU and the US — the transfer to the US under the EU-US Data Privacy Framework (the European Commission's " +
+          "adequacy decision; Cloudflare, Inc. is certified), and should that basis cease to apply, under the " +
+          "standard contractual clauses approved by the European Commission;",
+        "Cloudflare Turnstile (Cloudflare, Inc.) — protection of the form against bots: it processes technical " +
+          "data of your browser (such as your IP address) to tell people from bots;",
+        "Cloudflare Email Service (Cloudflare, Inc.) — sending e-mails to clients;",
+        "Sendinblue SAS (Brevo, France) — sending e-mails to clients;",
+        "Resend (USA) — sending e-mails to clients, under the standard contractual clauses;",
+        "Cloudflare Workers AI (Cloudflare, Inc.) — the assistant's language model: it receives the messages to " +
+          "the assistant and does not use them to train models;",
+        "Główny Urząd Geodezji i Kartografii (Poland's surveying office) and the OpenStreetMap Foundation (the " +
+          "United Kingdom — the European Commission's adequacy decision; Nominatim, when GUGiK does not find the " +
+          "address) — turning a visit's address into coordinates to check the travel distance: they receive the " +
+          "address only, never a name or a contact;")
+      case Lang.uk => ("Cloudflare, Inc. (США) — хостинг сайту та зберігання даних; дані можуть оброблятися в ЄС " +
+          "і США — передання до США на підставі EU-US Data Privacy Framework (рішення Європейської комісії про " +
+          "належний рівень захисту; Cloudflare, Inc. має сертифікацію), а якщо ця підстава перестане діяти — " +
+          "стандартних договірних положень, затверджених Європейською комісією;",
+        "Cloudflare Turnstile (Cloudflare, Inc.) — захист форми від ботів: обробляє технічні дані браузера " +
+          "(наприклад, IP-адресу), щоб відрізнити людину від бота;",
+        "Cloudflare Email Service (Cloudflare, Inc.) — надсилання електронних листів клієнтам;",
+        "Sendinblue SAS (Brevo, Франція) — надсилання електронних листів клієнтам;",
+        "Resend (США) — надсилання електронних листів клієнтам, на підставі стандартних договірних положень;",
+        "Cloudflare Workers AI (Cloudflare, Inc.) — мовна модель асистента: отримує текст повідомлень асистенту, " +
+          "не використовує його для навчання моделей;",
+        "Główny Urząd Geodezji i Kartografii (геодезична служба Польщі) та OpenStreetMap Foundation (Велика " +
+          "Британія — рішення Європейської комісії про належний рівень захисту; Nominatim, коли GUGiK не знаходить " +
+          "адресу) — перетворення адреси візиту на координати, щоб перевірити відстань виїзду: отримують лише " +
+          "адресу, без імені та контакту;")
+      case Lang.ru => ("Cloudflare, Inc. (США) — хостинг сайта и хранение данных; данные могут обрабатываться в ЕС " +
+          "и США — передача в США на основании EU-US Data Privacy Framework (решение Европейской комиссии о " +
+          "надлежащем уровне защиты; Cloudflare, Inc. сертифицирована), а если это основание перестанет действовать, " +
+          "— стандартных договорных положений, утверждённых Европейской комиссией;",
+        "Cloudflare Turnstile (Cloudflare, Inc.) — защита формы от ботов: обрабатывает технические данные " +
+          "браузера (например, IP-адрес), чтобы отличить человека от бота;",
+        "Cloudflare Email Service (Cloudflare, Inc.) — отправка электронных писем клиентам;",
+        "Sendinblue SAS (Brevo, Франция) — отправка электронных писем клиентам;",
+        "Resend (США) — отправка электронных писем клиентам, на основании стандартных договорных положений;",
+        "Cloudflare Workers AI (Cloudflare, Inc.) — языковая модель ассистента: получает текст сообщений " +
+          "ассистенту, не использует его для обучения моделей;",
+        "Główny Urząd Geodezji i Kartografii (геодезическая служба Польши) и OpenStreetMap Foundation " +
+          "(Великобритания — решение Европейской комиссии о надлежащем уровне защиты; Nominatim, когда GUGiK не " +
+          "находит адрес) — преобразование адреса визита в координаты, чтобы проверить расстояние выезда: " +
+          "получают только адрес, без имени и контакта;")
+    val relay = (h: String) => l match
+      case Lang.pl => s"dostawca serwera poczty ${Html.escape(h)} — wysyłka wiadomości e-mail do klientów;"
+      case Lang.en => s"the provider of the mail server ${Html.escape(h)} — sending e-mails to clients;"
+      case Lang.uk => s"постачальник поштового сервера ${Html.escape(h)} — надсилання електронних листів клієнтам;"
+      case Lang.ru => s"поставщик почтового сервера ${Html.escape(h)} — отправка электронных писем клиентам;"
+    val mailing = u.mail match
+      case Mail.Cloudflare => Vector(mailCf)
+      case Mail.Brevo => Vector(brevo)
+      case Mail.Resend => Vector(resend)
+      case Mail.Smtp(h) => Vector(relay(h))
+      case Mail.Off => Vector.empty
+    Vector(cf, turnstile) ++ mailing ++ Option.when(u.ai)(ai) ++ Option.when(u.geo)(geo)
+
+  /** THE COOKIES the engine sets, with their purpose, lifetime and kind, then the host's; whether consent is needed */
+  private def cookies(l: Lang, u: Uses): String =
+    val (intro, lang, session, warm, outro) = l match
+      case Lang.pl => ("Strona używa wyłącznie plików cookie i pamięci przeglądarki, które są niezbędne do jej " +
+          "działania albo uruchamiasz je swoim działaniem:",
+        "<code>lang</code> — zapamiętuje język wybrany kliknięciem; 1 rok; funkcjonalny, ustawiany na Twoje żądanie;",
+        "<code>__Host-ws</code> — sesja panelu dla zalogowanych pracowników; 30 dni lub do wylogowania; niezbędny " +
+          "(HttpOnly, Secure);",
+        "<code>okc-warm</code> (pamięć sesji przeglądarki, nie cookie) — czas ostatniego przygotowania asystenta, " +
+          "by nie robić tego częściej niż raz na minutę; do zamknięcia karty; techniczny;",
+        "Nie używamy plików cookie reklamowych, analitycznych ani śledzących. Ponieważ używane pliki są niezbędne " +
+          "do świadczenia usługi, o którą prosisz, nie prosimy o zgodę na nie.")
+      case Lang.en => ("The website uses only cookies and browser storage that it needs to work or that you start " +
+          "by your own action:",
+        "<code>lang</code> — remembers the language you chose by a click; 1 year; functional, set at your request;",
+        "<code>__Host-ws</code> — the back office's session for signed-in staff; 30 days or until sign-out; " +
+          "strictly necessary (HttpOnly, Secure);",
+        "<code>okc-warm</code> (the browser's session storage, not a cookie) — when the assistant was last " +
+          "prepared, so it is not done more than once a minute; until the tab is closed; technical;",
+        "We do not use advertising, analytics or tracking cookies. As those used are needed for the service you " +
+          "ask for, we do not ask for consent to them.")
+      case Lang.uk => ("Сайт використовує лише файли cookie та сховище браузера, необхідні для його роботи або " +
+          "увімкнені вашою дією:",
+        "<code>lang</code> — запам’ятовує мову, обрану кліком; 1 рік; функціональний, встановлюється на ваш запит;",
+        "<code>__Host-ws</code> — сесія панелі для працівників, що увійшли; 30 днів або до виходу; необхідний " +
+          "(HttpOnly, Secure);",
+        "<code>okc-warm</code> (сесійне сховище браузера, не cookie) — час останньої підготовки асистента, щоб " +
+          "не робити її частіше ніж раз на хвилину; до закриття вкладки; технічний;",
+        "Ми не використовуємо рекламних, аналітичних чи відстежувальних cookie. Оскільки використовувані файли " +
+          "необхідні для послуги, якої ви просите, ми не просимо згоди на них.")
+      case Lang.ru => ("Сайт использует только файлы cookie и хранилище браузера, необходимые для его работы или " +
+          "включаемые вашим действием:",
+        "<code>lang</code> — запоминает язык, выбранный щелчком; 1 год; функциональный, ставится по вашему запросу;",
+        "<code>__Host-ws</code> — сессия панели для вошедших сотрудников; 30 дней или до выхода; необходимый " +
+          "(HttpOnly, Secure);",
+        "<code>okc-warm</code> (сессионное хранилище браузера, не cookie) — время последней подготовки " +
+          "ассистента, чтобы не делать её чаще раза в минуту; до закрытия вкладки; технический;",
+        "Мы не используем рекламные, аналитические и отслеживающие cookie. Поскольку используемые файлы необходимы " +
+          "для услуги, которую вы запрашиваете, мы не просим согласия на них.")
+    val all = Vector(lang, session) ++ Option.when(u.ai)(warm) ++ u.cookies
     p(intro) + "\n<ul>\n" + all.map(i => s"<li>$i</li>").mkString("\n") + "\n</ul>\n" + p(outro)
 
   // ---- Polish: the binding text ----
 
-  private def pl(clothing: Boolean, name: String, contact: String, host: Vector[String]): Texts =
+  private def pl(clothing: Boolean, name: String, contact: String, host: Vector[String], u: Uses): Texts =
     val order = if clothing then "zamówienia" else "zlecenia"
     val collected =
       if clothing then "opis zlecenia (rodzaj i stan odzieży), dane dostawy (jeśli korzystasz z kuriera InPost)."
@@ -165,8 +313,9 @@ object Privacy:
           "polityki, aby móc wykazać jej udzielenie (art. 7 ust. 1 RODO). Zgodę możesz w każdej chwili wycofać; " +
           "nie wpływa to na zgodność z prawem przetwarzania dokonanego przed jej wycofaniem."),
       "Czas przechowywania" -> p(
-        s"Dane przechowujemy przez 5 lat od daty realizacji $order (wymóg przepisów podatkowych), " +
-          "a następnie usuwamy."),
+        s"Dane $order, rezerwacji, zapytania i opinii przechowujemy przez 5 lat od ostatniej czynności w sprawie " +
+          s"(np. realizacji $order lub wizyty), a następnie usuwamy je automatycznie. Dokumenty rozliczeniowe " +
+          "(faktury, rachunki, płatności) przechowujemy tak długo, jak wymagają tego przepisy podatkowe."),
       "Twoje prawa" -> p(
         "Masz prawo do: dostępu do danych, sprostowania, usunięcia («prawo do bycia zapomnianym»), " +
           "ograniczenia przetwarzania, przenoszenia danych, wniesienia sprzeciwu. " +
@@ -174,26 +323,18 @@ object Privacy:
       "Odbiorcy danych" -> recipients(
         "Twoje dane powierzamy wyłącznie podmiotom przetwarzającym, które pomagają nam prowadzić stronę " +
           s"i realizować $order, i tylko w niezbędnym zakresie:",
-        Vector(
-          "Cloudflare, Inc. — hosting strony i przechowywanie danych; dane mogą być przetwarzane w UE i w USA " +
-            "na podstawie standardowych klauzul umownych zatwierdzonych przez Komisję Europejską;",
-          "Cloudflare Turnstile (Cloudflare, Inc.) — ochrona formularza przed botami: przetwarza dane techniczne " +
-            "przeglądarki (np. adres IP), aby odróżnić człowieka od bota;",
-          "Sendinblue SAS (Brevo, Francja) — wysyłka wiadomości e-mail do klientów" + (if clothing then ";" else ".")),
+        items(Lang.pl, u),
         Option.when(clothing)("InPost S.A. — operator paczek, wyłącznie w zakresie niezbędnym do dostarczenia " +
           "przesyłki."),
         "Nie sprzedajemy danych osobom trzecim.", host),
-      "Pliki cookie" -> p(
-        "Strona używa wyłącznie technicznych plików cookie: <code>lang</code> zapamiętuje wybrany język, " +
-          "a pracownicy obsługujący zgłoszenia po zalogowaniu otrzymują cookie sesji panelu administracyjnego. " +
-          "Nie korzystamy z cookies reklamowych ani śledzących."),
+      "Pliki cookie" -> cookies(Lang.pl, u),
       "Skargi" -> p(
         "Jeśli uważasz, że przetwarzamy Twoje dane niezgodnie z prawem, możesz wnieść skargę " +
           "do Prezesa Urzędu Ochrony Danych Osobowych (uodo.gov.pl).")))
 
   // ---- English ----
 
-  private def en(clothing: Boolean, name: String, contact: String, host: Vector[String]): Texts =
+  private def en(clothing: Boolean, name: String, contact: String, host: Vector[String], u: Uses): Texts =
     val collected =
       if clothing then "a description of the order (type and condition of the garments), and delivery details " +
         "(if you use the InPost courier)."
@@ -219,8 +360,9 @@ object Privacy:
           "(Article 7(1) GDPR). You may withdraw your consent at any time; this does not affect the lawfulness " +
           "of processing carried out before its withdrawal."),
       "Retention period" -> p(
-        "We keep your data for 5 years from the date the order was completed (as required by tax law), " +
-          "after which it is deleted."),
+        "We keep the data of an order, a booking, an inquiry and a review for 5 years from the last action in the " +
+          "matter (such as the order's completion or the visit), after which it is deleted automatically. Accounting " +
+          "records (invoices, receipts, payments) are kept for as long as tax law requires."),
       "Your rights" -> p(
         "You have the right to access your data, to have it rectified or erased (the “right to be forgotten”), " +
           "to restrict its processing, to data portability, and to object to processing. " +
@@ -228,19 +370,11 @@ object Privacy:
       "Recipients of data" -> recipients(
         "We entrust your data only to processors that help us run the website and fulfil orders, " +
           "and only to the extent necessary:",
-        Vector(
-          "Cloudflare, Inc. — website hosting and data storage; data may be processed in the EU and the US " +
-            "under the standard contractual clauses approved by the European Commission;",
-          "Cloudflare Turnstile (Cloudflare, Inc.) — protection of the form against bots: it processes technical " +
-            "data of your browser (such as your IP address) to tell people from bots;",
-          "Sendinblue SAS (Brevo, France) — sending e-mails to clients" + (if clothing then ";" else ".")),
+        items(Lang.en, u),
         Option.when(clothing)("InPost S.A. — parcel operator, only to the extent necessary to deliver " +
           "the parcel."),
         "We do not sell your data to third parties.", host),
-      "Cookies" -> p(
-        "The website uses technical cookies only: <code>lang</code> remembers the language you chose, " +
-          "and staff who handle requests receive a sign-in session cookie for the back office. " +
-          "We do not use advertising or tracking cookies."),
+      "Cookies" -> cookies(Lang.en, u),
       "Complaints" -> p(
         "If you believe that we process your data unlawfully, you may lodge a complaint with the President " +
           "of the Personal Data Protection Office of Poland (Prezes Urzędu Ochrony Danych Osobowych, " +
@@ -248,7 +382,7 @@ object Privacy:
 
   // ---- Ukrainian ----
 
-  private def uk(clothing: Boolean, name: String, contact: String, host: Vector[String]): Texts =
+  private def uk(clothing: Boolean, name: String, contact: String, host: Vector[String], u: Uses): Texts =
     val collected =
       if clothing then "опис замовлення (вид і стан одягу), дані для доставки (якщо ви користуєтеся " +
         "кур’єром InPost)."
@@ -274,8 +408,9 @@ object Privacy:
           "та версією цієї політики, щоб мати змогу її підтвердити (ст. 7(1) GDPR). Ви можете будь-коли " +
           "відкликати згоду; це не впливає на законність обробки, здійсненої до її відкликання."),
       "Строк зберігання" -> p(
-        "Ми зберігаємо дані протягом 5 років від дати виконання замовлення (вимога податкового " +
-          "законодавства), після чого видаляємо їх."),
+        "Дані замовлення, запису, запиту та відгуку ми зберігаємо протягом 5 років від останньої дії у справі " +
+          "(наприклад, виконання замовлення або візиту), після чого автоматично видаляємо їх. Облікові документи " +
+          "(рахунки, чеки, платежі) зберігаємо стільки, скільки вимагає податкове законодавство."),
       "Ваші права" -> p(
         "Ви маєте право на доступ до своїх даних, їх виправлення, видалення («право бути забутим»), " +
           "обмеження обробки, перенесення даних, а також право заперечити проти обробки. " +
@@ -283,20 +418,11 @@ object Privacy:
       "Одержувачі даних" -> recipients(
         "Ми доручаємо обробку ваших даних лише постачальникам послуг, які допомагають нам підтримувати " +
           "роботу сайту й виконувати замовлення, і лише в необхідному обсязі:",
-        Vector(
-          "Cloudflare, Inc. — хостинг сайту та зберігання даних; дані можуть оброблятися в ЄС і США " +
-            "на підставі стандартних договірних положень, затверджених Європейською комісією;",
-          "Cloudflare Turnstile (Cloudflare, Inc.) — захист форми від ботів: обробляє технічні дані браузера " +
-            "(наприклад, IP-адресу), щоб відрізнити людину від бота;",
-          "Sendinblue SAS (Brevo, Франція) — надсилання електронних листів клієнтам" +
-            (if clothing then ";" else ".")),
+        items(Lang.uk, u),
         Option.when(clothing)("InPost S.A. — оператор доставки посилок, лише в обсязі, необхідному " +
           "для доставки відправлення."),
         "Ми не продаємо ваші дані третім особам.", host),
-      "Файли cookie" -> p(
-        "Сайт використовує лише технічні файли cookie: <code>lang</code> запам’ятовує обрану мову, " +
-          "а працівники, які опрацьовують заявки, після входу отримують сесійний cookie панелі адміністрування. " +
-          "Ми не використовуємо рекламних чи відстежувальних cookie."),
+      "Файли cookie" -> cookies(Lang.uk, u),
       "Скарги" -> p(
         "Якщо ви вважаєте, що ми обробляємо ваші дані з порушенням закону, ви можете подати скаргу " +
           "Голові Управління з питань захисту персональних даних Польщі (Prezes Urzędu Ochrony Danych " +
@@ -304,7 +430,7 @@ object Privacy:
 
   // ---- Russian ----
 
-  private def ru(clothing: Boolean, name: String, contact: String, host: Vector[String]): Texts =
+  private def ru(clothing: Boolean, name: String, contact: String, host: Vector[String], u: Uses): Texts =
     val collected =
       if clothing then "описание заказа (вид и состояние одежды), данные для доставки (если вы пользуетесь " +
         "курьером InPost)."
@@ -332,8 +458,9 @@ object Privacy:
           "(ст. 7(1) GDPR). Вы можете в любой момент отозвать согласие; это не влияет на законность " +
           "обработки, осуществлённой до его отзыва."),
       "Срок хранения" -> p(
-        "Мы храним данные в течение 5 лет с даты выполнения заказа (требование налогового законодательства), " +
-          "после чего удаляем их."),
+        "Данные заказа, записи, запроса и отзыва мы храним в течение 5 лет с последнего действия по делу " +
+          "(например, выполнения заказа или визита), после чего автоматически удаляем их. Учётные документы " +
+          "(счета, чеки, платежи) храним столько, сколько требует налоговое законодательство."),
       "Ваши права" -> p(
         "Вы имеете право на доступ к своим данным, их исправление, удаление («право на забвение»), " +
           "ограничение обработки, переносимость данных, а также право возразить против обработки. " +
@@ -341,20 +468,11 @@ object Privacy:
       "Получатели данных" -> recipients(
         "Мы поручаем обработку ваших данных только поставщикам услуг, которые помогают нам обеспечивать " +
           "работу сайта и выполнять заказы, и только в необходимом объёме:",
-        Vector(
-          "Cloudflare, Inc. — хостинг сайта и хранение данных; данные могут обрабатываться в ЕС и США " +
-            "на основании стандартных договорных положений, утверждённых Европейской комиссией;",
-          "Cloudflare Turnstile (Cloudflare, Inc.) — защита формы от ботов: обрабатывает технические данные " +
-            "браузера (например, IP-адрес), чтобы отличить человека от бота;",
-          "Sendinblue SAS (Brevo, Франция) — отправка электронных писем клиентам" +
-            (if clothing then ";" else ".")),
+        items(Lang.ru, u),
         Option.when(clothing)("InPost S.A. — оператор доставки посылок, только в объёме, необходимом " +
           "для доставки отправления."),
         "Мы не продаём ваши данные третьим лицам.", host),
-      "Файлы cookie" -> p(
-        "Сайт использует только технические файлы cookie: <code>lang</code> запоминает выбранный язык, " +
-          "а сотрудники, обрабатывающие заявки, после входа получают сессионный cookie панели администрирования. " +
-          "Мы не используем рекламные и отслеживающие cookie."),
+      "Файлы cookie" -> cookies(Lang.ru, u),
       "Жалобы" -> p(
         "Если вы считаете, что мы обрабатываем ваши данные с нарушением закона, вы можете подать жалобу " +
           "Председателю Управления по защите персональных данных Польши (Prezes Urzędu Ochrony Danych " +

@@ -100,6 +100,12 @@ enum Store[X]:
   /** a review changed by the shop as `Reviews.moderate` says, in one step */
   case Moderate(id: String, action: String, value: String, who: String, owner: Boolean, now: Long)
     extends Store[Either[String, Review]]
+  // ---- RETENTION (specs/shop.md "Retention")
+  /** what is past its time deleted at `now`, in one step: the rate limits' ended windows (and the old raw-key ones),
+   * the links and sessions past, the clients' records five years after their last activity — orders with their
+   * journal, bookings, quotes, inquiries, reviews; never an accounting record (payments, buyers, invoices, receipts).
+   * At most once in 20 hours unless `force`: `Expired.ran` false when skipped */
+  case Expire(now: Long, force: Boolean) extends Store[Expired]
 
 object Store:
   def place[R[_]](o: Order)(using In[Store, R]): Unit ! R = perform[Store](Place(o))
@@ -169,3 +175,20 @@ object Store:
   def reviews[R[_]](using In[Store, R]): Vector[Review] ! R = perform[Store](AllReviews())
   def moderate[R[_]](id: String, action: String, value: String, who: String, owner: Boolean, now: Long)(
     using In[Store, R]): Either[String, Review] ! R = perform[Store](Moderate(id, action, value, who, owner, now))
+  def expire[R[_]](now: Long, force: Boolean = false)(using In[Store, R]): Expired ! R =
+    perform[Store](Expire(now, force))
+
+/** WHAT A RETENTION RUN DELETED (counts only — never what): `ran` false when it was skipped (run within 20 hours);
+ * `photos` the private names of the deleted quotes' photos, for the host to delete from its files */
+final case class Expired(ran: Boolean = false, hits: Int = 0, signins: Int = 0, orders: Int = 0, bookings: Int = 0,
+                         quotes: Int = 0, inquiries: Int = 0, reviews: Int = 0,
+                         photos: Vector[String] = Vector.empty):
+  /** the clients' records deleted */
+  def records: Int = orders + bookings + quotes + inquiries + reviews
+
+object Expired:
+  /** the clients' records are kept this long after their last activity: five years, never less (1827 days: five
+   * years of 365 days and two leap days) */
+  val keep: Long = 1827L * 86400000L
+  /** a run at most once in this */
+  val every: Long = 20L * 3600000L

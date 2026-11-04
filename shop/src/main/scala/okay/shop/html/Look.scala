@@ -29,8 +29,9 @@ trait Look:
   def footLinks(using Lang): String = ""
   /** the workshop's link at the end of every public page's foot (`Pages.staff`): one muted word, not followed */
   def staffLink: Boolean = true
-  /** the privacy policy: by default the engine's (`Privacy`: a sole trader's RODO policy, its kind's processors) */
-  def privacy(site: Site, l: Lang): String = Privacy.page(site, l)
+  /** the privacy policy: by default the engine's (`Privacy`: a sole trader's RODO policy, its kind's processors) —
+   * `mail` the clients' letters' way as the site's config says it (`Privacy.Mail.of(MAIL_CLIENT, SMTP_HOST)`) */
+  def privacy(site: Site, l: Lang, mail: Privacy.Mail): String = Privacy.page(site, l, mail = mail)
   /** the privacy policy's version: a date, stored with every consent */
   def policy: String = Privacy.version
   /** pages of its own, by their path under the language (`products/`): each language's */
