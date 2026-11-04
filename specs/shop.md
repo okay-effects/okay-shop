@@ -781,9 +781,24 @@ expressions over them; okay-facts renders every value from the shop's data. Pack
   listed), the city (the mall's shops'), the place of the area. Answers bind handles found by `find` in code; a booking
   only gives the existing card; a comparison is an expression whose boolean chooses the words; a master's name asks its
   case (`as gen`) in its own select, the nominative otherwise. THE DECISION (round 3, okay-facts §17 "The turn
-  decision": rules are evidence, not verdicts): the guard (`intents.json`'s `guard`: injections and questions about the
-  assistant, a price set by the user, discounts and bargaining, others' data — clients, who booked, a master's private
-  phone, earnings —, payments and amenities, advice and health, out of domain) → declined, the model's; the safe rules
+  decision": rules are evidence, not verdicts): the guard (`intents.json`'s `guard`, categories in order —
+  `injection`: injections and questions about the assistant; `others`: others' data — clients, who booked, a master's
+  private phone, earnings, someone else's things; `bargain`: a price set by the user, discounts and bargaining;
+  `health`; `payments` (and invoices); `amenities` (parking, Wi-Fi, a child or a pet); `advice`; `domain`: out of
+  domain) → **answered by the category's fixed authored answer, NEVER the model** (operator, 2026-11-04;
+  `ShopRouter.guarded`, the route `guard.<category>`): pieces of `answers.json` (`guard.<category>`, pl/uk/ru/en, the
+  turn's language), validated and rendered like any authored answer, the values only the resolver's — never the
+  user's words. On a shop's pages: `injection` and `domain` the shop's name, a few of its services (chips) and its
+  contact; `others` a refusal and the client's own booking's link when the conversation made one, else the
+  confirmation e-mail's link; `bargain` the price list's value of the service named or in context (else its services
+  with prices) and the shop's contact for promotions; `payments` the ways its data says (`payments`: BLIK for a
+  clothing shop with a BLIK phone), else that the shop has not said, and its contact; `amenities` that it has not
+  said, its address when it has one; `health` no medical advice — the person doing the service or a doctor;
+  `advice` the person doing the service, the service named (its price) or a few services, the contact. The contact
+  is the shop's e-mail, else its page. On the mall's home (`guard.<category>.mall`) the same without a shop's values.
+  `guard.cooldown`: the host's fixed answer while a conversation cools down (`ShopRouter.fixed`). The patterns are
+  narrow: a false refusal has no model behind it — their false positives counted on okay-mall's every set and the
+  intents' phrasings; the safe rules
   (`safe`: whole-message greetings, thanks, "help") answered at once; everything else by the combiner (`combiner.bin`)
   over the probe's probabilities, every intent's rule hits, a short follow-up's previous intent ("a jutro?", "a u Ewy?",
   "a pedicure?") and the host's evidence (`ShopRouter.evidenceNames`: a service of the shop named by all its words and

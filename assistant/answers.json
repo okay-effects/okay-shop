@@ -502,6 +502,176 @@
    "uk": "Де шукати? Напишіть місто, район, вулицю або поштовий індекс — або натисніть «Поруч» на головній сторінці.",
    "ru": "Где искать? Напишите город, район, улицу или почтовый индекс — или нажмите «Рядом» на главной странице.",
    "en": "Where should I look? Write a city, a district, a street or a postcode — or tap “Near me” on the home page."
+  },
+  "guard.injection": {
+   "pl": "Pomagam tylko w sprawach tego sklepu ({n}): usługi, ceny, wolne terminy, rezerwacje i informacje o nim.",
+   "uk": "Я допомагаю лише щодо цього закладу ({n}): послуги, ціни, вільний час, записи та інформація про нього.",
+   "ru": "Я помогаю только по этому заведению ({n}): услуги, цены, свободное время, записи и информация о нём.",
+   "en": "I only help with this shop ({n}): its services, prices, free times, bookings and information about it."
+  },
+  "guard.injection.mall": {
+   "pl": "Pomagam tylko w sprawach sklepów tej galerii: usługi, ceny, wolne terminy, rezerwacje i informacje o nich. Zapytaj na przykład: „Gdzie zrobię manicure jutro?”.",
+   "uk": "Я допомагаю лише щодо закладів цієї галереї: послуги, ціни, вільний час, записи та інформація про них. Запитайте, наприклад: «Де зробити манікюр завтра?».",
+   "ru": "Я помогаю только по заведениям этой галереи: услуги, цены, свободное время, записи и информация о них. Спросите, например: «Где сделать маникюр завтра?».",
+   "en": "I only help with the shops of this mall: their services, prices, free times, bookings and information about them. Ask, for example: “Where can I get a manicure tomorrow?”."
+  },
+  "guard.domain": {
+   "pl": "Mogę pomóc tylko w sprawach tego sklepu ({n}) — usługi, ceny, wolne terminy, rezerwacja, adres i godziny.",
+   "uk": "Я можу допомогти лише щодо цього закладу ({n}) — послуги, ціни, вільний час, запис, адреса й години роботи.",
+   "ru": "Я могу помочь только по этому заведению ({n}) — услуги, цены, свободное время, запись, адрес и часы работы.",
+   "en": "I can only help with this shop ({n}) — services, prices, free times, booking, the address and opening hours."
+  },
+  "guard.domain.mall": {
+   "pl": "Mogę pomóc tylko w sprawach sklepów tej galerii — usługi, ceny, wolne terminy, rezerwacja, adresy i godziny.",
+   "uk": "Я можу допомогти лише щодо закладів цієї галереї — послуги, ціни, вільний час, запис, адреси й години роботи.",
+   "ru": "Я могу помочь только по заведениям этой галереи — услуги, цены, свободное время, запись, адреса и часы работы.",
+   "en": "I can only help with the shops of this mall — services, prices, free times, booking, addresses and opening hours."
+  },
+  "guard.others": {
+   "pl": "Nie mogę udostępniać danych innych osób — ani klientów, ani ich rezerwacji, ani prywatnych danych właściciela czy pracowników.",
+   "uk": "Я не можу передавати дані інших людей — ні клієнтів, ні їхніх записів, ні приватних даних власника чи працівників.",
+   "ru": "Я не могу передавать данные других людей — ни клиентов, ни их записей, ни личных данных владельца или сотрудников.",
+   "en": "I can't share other people's data — not other clients, their bookings, nor the owner's or the staff's private details."
+  },
+  "guard.others.mall": {
+   "pl": "Nie mogę udostępniać danych innych osób — ani klientów, ani ich rezerwacji, ani prywatnych danych właścicieli sklepów. Swoją rezerwację zmienisz lub odwołasz przez link z e-maila z jej potwierdzeniem.",
+   "uk": "Я не можу передавати дані інших людей — ні клієнтів, ні їхніх записів, ні приватних даних власників закладів. Свій запис можна змінити або скасувати за посиланням із листа-підтвердження.",
+   "ru": "Я не могу передавать данные других людей — ни клиентов, ни их записей, ни личных данных владельцев заведений. Свою запись можно изменить или отменить по ссылке из письма с подтверждением.",
+   "en": "I can't share other people's data — not other clients, their bookings, nor the shop owners' private details. You can change or cancel your own booking through the link in its confirmation e-mail."
+  },
+  "guard.others.letter": {
+   "pl": "Swoją rezerwację zmienisz lub odwołasz przez link z e-maila z jej potwierdzeniem.",
+   "uk": "Свій запис можна змінити або скасувати за посиланням із листа-підтвердження.",
+   "ru": "Свою запись можно изменить или отменить по ссылке из письма с подтверждением.",
+   "en": "You can change or cancel your own booking through the link in its confirmation e-mail."
+  },
+  "guard.others.booking": {
+   "pl": "Swoją rezerwację ({r}) zmienisz lub odwołasz tutaj: {u}.",
+   "uk": "Свій запис ({r}) можна змінити або скасувати тут: {u}.",
+   "ru": "Свою запись ({r}) можно изменить или отменить здесь: {u}.",
+   "en": "You can change or cancel your booking ({r}) here: {u}."
+  },
+  "guard.bargain": {
+   "pl": "Ceny są takie jak w cenniku — w czacie ich nie zmieniam ani nie negocjuję.",
+   "uk": "Ціни такі, як у прайсі, — у чаті я їх не змінюю й не обговорюю.",
+   "ru": "Цены такие, как в прайсе, — в чате я их не меняю и не обсуждаю.",
+   "en": "Prices are as listed — I don't change or negotiate them in the chat."
+  },
+  "guard.bargain.mall": {
+   "pl": "Ceny ustalają sklepy i są takie jak w ich cennikach — w czacie ich nie zmieniam ani nie negocjuję. O promocje zapytaj wybrany sklep.",
+   "uk": "Ціни встановлюють заклади, і вони такі, як у їхніх прайсах, — у чаті я їх не змінюю й не обговорюю. Про акції запитайте обраний заклад.",
+   "ru": "Цены устанавливают заведения, и они такие, как в их прайсах, — в чате я их не меняю и не обсуждаю. Об акциях спросите выбранное заведение.",
+   "en": "Prices are set by the shops and are as in their price lists — I don't change or negotiate them in the chat. Ask the shop you choose about promotions."
+  },
+  "guard.promo": {
+   "pl": "O promocje zapytaj sklep: {c}.",
+   "uk": "Про акції запитайте заклад: {c}.",
+   "ru": "Об акциях спросите заведение: {c}.",
+   "en": "Ask the shop about promotions: {c}."
+  },
+  "guard.payments": {
+   "pl": "Ten sklep nie podał w czacie, jakie formy płatności przyjmuje.",
+   "uk": "Цей заклад не вказав у чаті, які способи оплати приймає.",
+   "ru": "Это заведение не указало в чате, какие способы оплаты принимает.",
+   "en": "This shop hasn't said in the chat which ways of paying it accepts."
+  },
+  "guard.payments.mall": {
+   "pl": "Formy płatności zależą od sklepu — zapytaj wybrany sklep albo otwórz jego stronę.",
+   "uk": "Способи оплати залежать від закладу — запитайте обраний заклад або відкрийте його сторінку.",
+   "ru": "Способы оплаты зависят от заведения — спросите выбранное заведение или откройте его страницу.",
+   "en": "Ways of paying depend on the shop — ask the shop you choose or open its page."
+  },
+  "guard.amenities": {
+   "pl": "Ten sklep nie podał w czacie, jakie ma udogodnienia (parking, Wi-Fi, wizyta z dzieckiem lub zwierzęciem i podobne).",
+   "uk": "Цей заклад не вказав у чаті, які має зручності (паркування, Wi-Fi, візит з дитиною чи твариною тощо).",
+   "ru": "Это заведение не указало в чате, какие у него удобства (парковка, Wi-Fi, визит с ребёнком или животным и подобное).",
+   "en": "This shop hasn't said in the chat what amenities it has (parking, Wi-Fi, coming with a child or a pet and the like)."
+  },
+  "guard.amenities.mall": {
+   "pl": "Udogodnienia zależą od sklepu — zapytaj wybrany sklep albo otwórz jego stronę.",
+   "uk": "Зручності залежать від закладу — запитайте обраний заклад або відкрийте його сторінку.",
+   "ru": "Удобства зависят от заведения — спросите выбранное заведение или откройте его страницу.",
+   "en": "Amenities depend on the shop — ask the shop you choose or open its page."
+  },
+  "guard.address": {
+   "pl": "Adres: {a}.",
+   "uk": "Адреса: {a}.",
+   "ru": "Адрес: {a}.",
+   "en": "The address: {a}."
+  },
+  "guard.health": {
+   "pl": "Nie udzielam porad medycznych ani zdrowotnych. Zapytaj o to osobę, która wykona usługę, na miejscu — a w sprawach zdrowia lekarza.",
+   "uk": "Я не даю медичних порад. Запитайте про це на місці людину, яка виконуватиме послугу, а щодо здоров’я — лікаря.",
+   "ru": "Я не даю медицинских советов. Спросите об этом на месте человека, который будет выполнять услугу, а по вопросам здоровья — врача.",
+   "en": "I don't give medical or health advice. Ask the person doing the service when you're there — and a doctor about your health."
+  },
+  "guard.health.mall": {
+   "pl": "Nie udzielam porad medycznych ani zdrowotnych. Zapytaj o to w wybranym sklepie na miejscu — a w sprawach zdrowia lekarza.",
+   "uk": "Я не даю медичних порад. Запитайте про це на місці в обраному закладі, а щодо здоров’я — лікаря.",
+   "ru": "Я не даю медицинских советов. Спросите об этом на месте в выбранном заведении, а по вопросам здоровья — врача.",
+   "en": "I don't give medical or health advice. Ask at the shop you choose when you're there — and a doctor about your health."
+  },
+  "guard.advice": {
+   "pl": "Nie doradzam w czacie — doradzi Ci na miejscu osoba, która wykona usługę.",
+   "uk": "Я не раджу в чаті — на місці порадить людина, яка виконуватиме послугу.",
+   "ru": "Я не советую в чате — на месте посоветует человек, который будет выполнять услугу.",
+   "en": "I don't give advice in the chat — the person doing the service will advise you when you're there."
+  },
+  "guard.advice.mall": {
+   "pl": "Nie doradzam w czacie — doradzą w wybranym sklepie. Mogę za to znaleźć usługę, jej cenę i wolny termin.",
+   "uk": "Я не раджу в чаті — порадять в обраному закладі. Натомість можу знайти послугу, її ціну й вільний час.",
+   "ru": "Я не советую в чате — посоветуют в выбранном заведении. Зато могу найти услугу, её цену и свободное время.",
+   "en": "I don't give advice in the chat — the shop you choose will. I can find a service, its price and a free time instead."
+  },
+  "guard.offer": {
+   "pl": "Zapytaj na przykład o: {items} — o cenę albo wolne terminy.",
+   "uk": "Запитайте, наприклад, про: {items} — про ціну або вільний час.",
+   "ru": "Спросите, например, о: {items} — о цене или свободном времени.",
+   "en": "Ask, for example, about: {items} — a price or free times.",
+   "item": {
+    "pl": "{s}",
+    "uk": "{s}",
+    "ru": "{s}",
+    "en": "{s}"
+   },
+   "sep": ", "
+  },
+  "guard.services": {
+   "pl": "Cennik: {items}.",
+   "uk": "Прайс: {items}.",
+   "ru": "Прайс: {items}.",
+   "en": "As listed: {items}.",
+   "item": {
+    "pl": "{s} — {p}",
+    "uk": "{s} — {p}",
+    "ru": "{s} — {p}",
+    "en": "{s} — {p}"
+   },
+   "item.noprice": {
+    "pl": "{s}",
+    "uk": "{s}",
+    "ru": "{s}",
+    "en": "{s}"
+   },
+   "sep": "; "
+  },
+  "guard.contact": {
+   "pl": "Kontakt ze sklepem: {c}.",
+   "uk": "Зв’язок із закладом: {c}.",
+   "ru": "Связь с заведением: {c}.",
+   "en": "The shop's contact: {c}."
+  },
+  "guard.cooldown": {
+   "pl": "Zrób proszę krótką przerwę — za kilka minut chętnie pomogę w sprawach usług, cen, wolnych terminów i rezerwacji.",
+   "uk": "Будь ласка, зробіть коротку перерву — за кілька хвилин охоче допоможу з послугами, цінами, вільним часом і записом.",
+   "ru": "Пожалуйста, сделайте короткий перерыв — через несколько минут охотно помогу с услугами, ценами, свободным временем и записью.",
+   "en": "Please take a short break — in a few minutes I'll gladly help with services, prices, free times and bookings."
+  },
+  "guard.payments.known": {
+   "pl": "Według danych sklepu można zapłacić: {m}. O inne formy płatności zapytaj sklep.",
+   "uk": "За даними закладу можна оплатити: {m}. Про інші способи оплати запитайте заклад.",
+   "ru": "По данным заведения можно оплатить: {m}. О других способах оплаты спросите заведение.",
+   "en": "By the shop's data you can pay by: {m}. Ask the shop about other ways of paying."
   }
  }
 }

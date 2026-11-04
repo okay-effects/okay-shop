@@ -31,6 +31,7 @@ object ShopFacts:
       Prop("area", Type.Text, about = "the places it comes to (at the client's)"),
       Prop("modes", Type.Text, about = "how it works: at its place, at the client's, by parcel, online"),
       Prop("contact", Type.Text, about = "its e-mail"),
+      Prop("payments", Type.Text, about = "the ways of paying it accepts (only those its data says)"),
       Prop("point", Type.Point, about = "where its place is (for distance)")),
       key = Vector("id"), iri = "https://schema.org/LocalBusiness", about = "a shop"),
     // a place the client asked to be near (specs/shop.md "Places on the map"): issued by the host, its point pinned
@@ -106,6 +107,8 @@ object ShopFacts:
       site.work.map(_.modes).filter(_.nonEmpty).map(ms => "modes" -> Value.Text(FLang.values.map(l => l ->
         ms.map(_.label(shopLang(l))).mkString(", ")).toMap)) ++
       Option.when(c.contact.nonEmpty)("contact" -> Value.text(c.contact)) ++
+      // the ways of paying its data says: BLIK for a clothing shop with a BLIK phone (its letters say so); nothing else
+      Option.when(site.clothing && c.blik.nonEmpty)("payments" -> Value.text("BLIK")) ++
       site.work.toVector.flatMap(_.locations).flatMap(Geo.current).headOption.map(g => "point" -> g.point), v)
     val services = site.shown.map { o =>
       val masters = if site.masters.isEmpty then Vector.empty else site.masters.filter(m => m.services.isEmpty ||

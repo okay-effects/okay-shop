@@ -44,7 +44,11 @@ object Answers:
  */
 object ShopRouter:
   lazy val intents = Intents.parse(AssistantData.intents)
-  lazy val guard: Vector[String] = Intents.guard(AssistantData.intents)
+  /** the guard's patterns by category, in order (okay-facts §17 "The turn decision") */
+  lazy val guard: Vector[(String, String)] = Intents.guard(AssistantData.intents)
+  /** the categories the guard answers; another (a bare pattern's `guard`) is answered as out of domain */
+  val guardCategories: Vector[String] = Vector("injection", "others", "bargain", "health", "payments", "amenities",
+    "advice", "domain")
   lazy val answers: Answers = Answers.parse(AssistantData.answers)
   lazy val probe: Probe = Probe.fromBytes(java.util.Base64.getDecoder.decode(AssistantData.probe))
   /** the combiner fitted and calibrated over this probe (okay-mall's `Fit`); none yet: the evidence's glance */
@@ -112,7 +116,8 @@ object ShopRouter:
           Vector(Query("Master", scope = src, limit = 30, lang = l) -> (Vector("name") ++ Vector("gen", "dat", "acc",
             "ins", "loc").map("name." + _))) ++
           langs.map(x => Query("Place", scope = src, limit = 80, lang = x) -> Vector.empty[String]),
-          Vector("hours", "address", "area", "modes", "contact", "rating", "reviews", "url", "name").map(shop -> _))
+          Vector("hours", "address", "area", "modes", "contact", "rating", "reviews", "url", "name", "payments")
+            .map(shop -> _))
       case None =>
         Facts.prefetch[R](langs.map(x => Query("Shop", scope = Scope.All, limit = 100, lang = x) ->
           Vector.empty[String]) ++ langs.map(x => Query("Service", scope = Scope.All, limit = 200, lang = x) ->
@@ -134,7 +139,16 @@ object ShopRouter:
           val said = Map[String, String]() ++ ctx.when.day.map("day" -> _) ++ ctx.when.at.map(a => "at" ->
             clock(a)) ++ ctx.when.from.map(a => "from" -> clock(a)) ++ ctx.when.until.map(a => "until" -> clock(a)) ++
             ctx.amount.max.map(m => "max" -> (m / 100).toString)
-          if route.by == "guard" then pure(Decision.Declined(route, "guard"))
+          // the guard: the category's fixed authored answer, never the model (operator, 2026-11-04)
+          if route.by == "guard" then
+            val g = route.copy(intent = "guard." + (if guardCategories.contains(route.guard) then route.guard
+              else "domain"))
+            guarded[R](g.intent.stripPrefix("guard."), ctx).flatMap { b =>
+              Bind.authored[R](s, c, user, l, focus, b.handles, note, b.answer, b.cards, g.intent, 1.0).map {
+                case Left(vs) => Decision.Declined(g, "invalid: " + vs.map(_.code).mkString(","), b.slots)
+                case Right((c2, reply)) => Decision.Answered(c2, reply, g, b.slots)
+              }
+            }
           else if route.by == "unknown" then pure(Decision.Declined(route, "no word known"))
           else if !route.confident(lane.minP, lane.minMargin) then pure(Decision.Declined(route, "not confident"))
           else if route.intent == "other" then pure(Decision.Declined(route, "other"))
@@ -153,6 +167,78 @@ object ShopRouter:
         }
       }
     }
+
+  /** A FIXED ANSWER by its key (`guard.cooldown`: a conversation cooling down — okay-mall), no fact in it: no table,
+   * no model; validated and kept in the conversation as any authored answer */
+  def fixed[R[_]](s: Setup, c: Conversation, user: String, l: FLang, focus: String, key: String)(using In[Facts, R],
+    In[Clock, R], In[Audit, R]): Either[String, (Conversation, Reply)] ! R =
+    Bind.focused[R](s, c, focus, l).flatMap { (h0, note) =>
+      Bind.authored[R](s, c, user, l, focus, h0, note, Answer(Vector.empty, answers(key, l)), Vector.empty, key,
+        1.0)
+        .map(_.left.map(vs => "invalid: " + vs.map(_.code).mkString(",")))
+    }
+
+  /** THE GUARD'S ANSWER for a category (specs/shop.md "The assistant"): authored pieces of `guard.*`, the shop's
+   * values by expressions over its handles — its name, a few services, a price in context, its address, its contact
+   * (its e-mail, else its page), the client's own booking —; on the mall's home `guard.<category>.mall`, no value */
+  private def guarded[R[_]](cat: String, ctx: Ctx)(using In[Facts, R]): Built ! R =
+    ctx.shopId.flatMap(_ => ctx.shop) match
+      case None => pure(Built(ctx.h, Answer(Vector.empty, ctx.a(s"guard.$cat.mall")), slots = Map("guard" -> cat)))
+      case Some(sh) =>
+        for
+          contact <- has[R](sh.ent, "contact")
+          address <- has[R](sh.ent, "address")
+          pays <- has[R](sh.ent, "payments")
+          cands <- named[R]("Service", Scope.Source(sh.ent.source), ctx.l)
+          prices <- seq[R, Found, Boolean](cands.map(_._1).take(5))(f => has[R](f.ent, "price"))
+          // the service named, else (bargaining) the conversation's
+          picked = service(ctx, cands) match
+            case Nearest.Pick.One(i, _) => Some(cands(i.toInt)._1)
+            case _ if cat == "bargain" => ctx.context.filter(_.ent.source == sh.ent.source).map(x =>
+                Found(x.ent, x.visible, x.version))
+            case _ => None
+          pickedPrice <- picked.fold(pure[Boolean, R](false))(f => has[R](f.ent, "price"))
+        yield
+          val c = "c" -> (if contact then s"contact(${sh.name})" else s"url(${sh.name})")
+          val n = "n" -> s"name(${sh.name})"
+          def services(h: okay.facts.Handles, fs: Vector[Found], priced: Vector[Boolean]) =
+            val (h2, vs) = issueAll(h, fs)
+            (h2, vs.zip(priced).zipWithIndex.flatMap { case ((v, p), k) => Vector(s"s${k + 1}" -> s"name($v)") ++
+              Option.when(p)(s"p${k + 1}" -> s"price($v)") }, ctx.list("guard.services", priced.map(p =>
+              if p then "item" else "item.noprice")))
+          def offer(h: okay.facts.Handles) =
+            val (h2, vs) = issueAll(h, cands.map(_._1).take(3))
+            if vs.isEmpty then (h2, Vector.empty, "")
+            else (h2, vs.zipWithIndex.map((v, k) => s"s${k + 1}" -> s"name($v)"), ctx.list("guard.offer",
+              vs.map(_ => "item")))
+          val booking = ctx.h.all.reverse.find(b => b.ent.cls == "Booking" && b.ent.source == sh.ent.source)
+          val (h, ps, parts): (okay.facts.Handles, Vector[(String, String)], Vector[String]) = cat match
+            case "injection" | "domain" =>
+              val (h2, os, o) = offer(ctx.h)
+              (h2, Vector(n) ++ os :+ c, Vector(ctx.a(s"guard.$cat"), o, ctx.a("guard.contact")))
+            case "others" => booking match
+                case Some(b) => (ctx.h, Vector("r" -> s"ref(${b.name})", "u" -> s"manage(${b.name})"),
+                    Vector(ctx.a("guard.others"), ctx.a("guard.others.booking")))
+                case None => (ctx.h, Vector(c), Vector(ctx.a("guard.others"), ctx.a("guard.others.letter"),
+                    ctx.a("guard.contact")))
+            case "bargain" =>
+              val (h2, ss, list) = picked match
+                case Some(f) => services(ctx.h, Vector(f), Vector(pickedPrice))
+                case None => services(ctx.h, cands.map(_._1).take(5), prices)
+              (h2, ss :+ c, Vector(ctx.a("guard.bargain"), list, ctx.a("guard.promo")))
+            case "amenities" => (ctx.h, Option.when(address)("a" -> s"address(${sh.name})").toVector :+ c,
+                Vector(ctx.a("guard.amenities")) ++ Option.when(address)(ctx.a("guard.address")) :+
+                  ctx.a("guard.contact"))
+            case "advice" =>
+              val (h2, ss, list) = picked match
+                case Some(f) => services(ctx.h, Vector(f), Vector(pickedPrice))
+                case None => offer(ctx.h)
+              (h2, ss :+ c, Vector(ctx.a("guard.advice"), list, ctx.a("guard.contact")))
+            case "payments" if pays => (ctx.h, Vector("m" -> s"payments(${sh.name})", c),
+                Vector(ctx.a("guard.payments.known"), ctx.a("guard.contact")))
+            case other => (ctx.h, Vector(c), Vector(ctx.a(s"guard.$other"), ctx.a("guard.contact")))
+          Built(h, Answer(ps, parts.filter(_.nonEmpty).mkString(" ")), slots = Map("guard" -> cat) ++
+            picked.map(f => "service" -> f.ent.key))
 
   /** the conversation's last question in the user's words */
   private def lastAsked(c: Conversation): Option[String] = c.history.reverseIterator.collectFirst {
