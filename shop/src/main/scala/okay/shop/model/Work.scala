@@ -28,15 +28,18 @@ final case class Address(name: String, street: String, postcode: String, city: S
     else "https://www.google.com/maps/search/?api=1&query=" +
       okay.http.Query.encode(Vector(street, s"$postcode $city".trim).filter(_.nonEmpty).mkString(", "))
 
-/** a place the client comes to: its key, its address, its hours (none: the shop's) */
-final case class Location(key: String, address: Address, hours: Map[Int, Vector[Span]] = Map.empty)
+/** a place the client comes to: its key, its address, its hours (none: the shop's), its point (specs/shop.md
+ * "Places on the map") */
+final case class Location(key: String, address: Address, hours: Map[Int, Vector[Span]] = Map.empty,
+                          geo: Option[Geo] = None)
 
 /**
  * WHERE THE MASTER GOES: cities or districts by name and postcode prefixes (either matching is inside), the travel
- * fee (grosze), the buffer reserved before and after a visit (minutes), the visits' hours (none: the shop's)
+ * fee (grosze), the buffer reserved before and after a visit (minutes), the visits' hours (none: the shop's); also a
+ * radius in km from one of the shop's places (`from` its key, else the first with a point: "Places on the map")
  */
 final case class Area(places: Vector[String], postcodes: Vector[String], fee: Long = 0, before: Int = 0,
-                      after: Int = 0, hours: Map[Int, Vector[Span]] = Map.empty):
+                      after: Int = 0, hours: Map[Int, Vector[Span]] = Map.empty, radius: Int = 0, from: String = ""):
   /** whether a client's city and postcode are inside: the city one of the places (or starting with one and a space
    * or hyphen: `Warszawa-Mokotów`), diacritics and case aside; or the postcode starting with a prefix */
   def inside(city: String, postcode: String): Boolean =
@@ -74,6 +77,8 @@ object Work:
 
   // ---- the JSON (the content's ```json work``` block, a host's settings)
 
+  extension (a: Json.Obj) private def plus(b: Json.Obj): Json.Obj = Json.Obj(a.fields ++ b.fields)
+
   private def zl(g: Long): String = if g % 100 == 0 then (g / 100).toString else f"${g / 100}.${g % 100}%02d"
   private def hoursJson(h: Map[Int, Vector[Span]]): Json = Json.Arr(h.toVector.sortBy(_._1).flatMap((d, ss) =>
     ss.map(s => Json.obj("day" -> Json.str(days(d - 1)), "from" -> Json.str(Span.label(s.from)),
@@ -83,10 +88,14 @@ object Work:
     "locations" -> Json.Arr(w.locations.map(l => Json.obj("key" -> Json.str(l.key),
       "name" -> Json.str(l.address.name), "street" -> Json.str(l.address.street),
       "postcode" -> Json.str(l.address.postcode), "city" -> Json.str(l.address.city),
-      "map" -> Json.str(l.address.map), "notes" -> Json.str(l.address.notes), "hours" -> hoursJson(l.hours)))),
+      "map" -> Json.str(l.address.map), "notes" -> Json.str(l.address.notes), "hours" -> hoursJson(l.hours)).plus(
+      l.geo.fold(Json.obj())(g => Json.obj("geo" -> Json.obj("lat" -> Json.Num(Geo.degrees(g.lat)),
+        "lon" -> Json.Num(Geo.degrees(g.lon)), "source" -> Json.str(g.source), "precision" -> Json.str(g.precision),
+        "of" -> Json.str(g.of))))))),
     "area" -> w.area.fold(Json.Null)(a => Json.obj("places" -> Json.Arr(a.places.map(Json.str)),
       "postcodes" -> Json.Arr(a.postcodes.map(Json.str)), "fee" -> Json.str(zl(a.fee)),
-      "before" -> Json.num(a.before), "after" -> Json.num(a.after), "hours" -> hoursJson(a.hours))),
+      "before" -> Json.num(a.before), "after" -> Json.num(a.after), "hours" -> hoursJson(a.hours)).plus(
+      if a.radius > 0 then Json.obj("radius" -> Json.num(a.radius), "from" -> Json.str(a.from)) else Json.obj())),
     "online" -> w.online.fold(Json.Null)(o => Json.obj("how" -> Json.str(o.how), "details" -> Json.str(o.details))),
     "services" -> Json.Obj(w.services.toVector.sortBy(_._1).map((k, s) => k -> Json.obj(
       "modes" -> Json.Arr(s.modes.map(m => Json.str(m.key))),
@@ -142,18 +151,32 @@ object Work:
       else if a.map.nonEmpty && (!a.map.startsWith("https://") || !within(a.map, 500) || a.map.exists(c =>
         c.isWhitespace || c == '"' || c == '<' || c == '>')) then Left("location.map")
       else if !within(a.notes, 200) then Left("location.notes")
-      else hours(o).map(h => Location(key, a, h))
+      else geo(o).flatMap(g => hours(o).map(h => Location(key, a, h, g)))
     }
+    // a place's point: degrees on the Earth, who found it, how exactly, for which address
+    def geo(o: Json.Obj): Either[String, Option[Geo]] = o.get("geo").flatMap(obj) match
+      case None => Right(None)
+      case Some(g) =>
+        def d(k: String) = g.get(k).collect { case Json.Num(n) => n.toDouble; case Json.Str(s) => s.toDoubleOption
+          .getOrElse(Double.NaN) }.getOrElse(Double.NaN)
+        val (lat, lon) = (d("lat"), d("lon"))
+        if !Geo.valid(lat, lon) then Left("location.geo")
+        else if !Set("gugik", "nominatim", "owner")(str(g, "source")) then Left("location.geo")
+        else if !Set("address", "street", "postcode", "city", "place", "point")(str(g, "precision")) then
+          Left("location.geo")
+        else if !within(str(g, "of"), 300) then Left("location.geo")
+        else Right(Some(Geo(lat, lon, str(g, "source"), str(g, "precision"), str(g, "of"))))
     def area(o: Json.Obj): Either[String, Area] =
       val places = strs(o, "places")
       val prefixes = strs(o, "postcodes")
       if places.size > 50 || places.exists(!within(_, 60)) then Left("area.places")
       else if prefixes.size > 50 || prefixes.exists(!_.matches("[0-9]{1,2}(-[0-9]{0,3})?")) then Left("area.postcodes")
-      else if places.isEmpty && prefixes.isEmpty then Left("area")
+      else if int(o, "radius").forall(r => r < 0 || r > 200) then Left("area.radius")
+      else if places.isEmpty && prefixes.isEmpty && int(o, "radius").contains(0) then Left("area")
       else (money(o, "fee"), int(o, "before"), int(o, "after")) match
         case (None, _, _) => Left("area.fee")
         case (_, Some(b), Some(a)) if b >= 0 && b <= 240 && a >= 0 && a <= 240 =>
-          hours(o).map(h => Area(places, prefixes, money(o, "fee").get, b, a, h))
+          hours(o).map(h => Area(places, prefixes, money(o, "fee").get, b, a, h, int(o, "radius").get, str(o, "from")))
         case _ => Left("area.buffer")
     def service(k: String, x: Json, shop: Vector[Mode]): Either[String, ServiceWork] =
       obj(x).toRight("service").flatMap { o =>
@@ -181,6 +204,8 @@ object Work:
         locs <- first(arr(o, "locations").zipWithIndex.map(location))
         _ <- Either.cond(locs.size <= 10 && locs.map(_.key).distinct.size == locs.size, (), "locations")
         _ <- Either.cond(!ms.contains(Mode.AtShop) || locs.nonEmpty, (), "locations")
+        _ <- Either.cond(o.get("area").flatMap(obj).forall(a => str(a, "from").isEmpty || locs.exists(_.key ==
+          str(a, "from"))), (), "area.from")
         ar <- o.get("area").flatMap(obj) match
           case Some(a) if ms.contains(Mode.AtClient) => area(a).map(Some(_))
           case None if ms.contains(Mode.AtClient) => Left("area")
@@ -218,3 +243,9 @@ object Work:
       case Some((a, b, u)) if u == t && b == d - 1 => acc.init :+ (a, d, t)
       case _ => acc :+ (d, d, t)
     }.map((a, b, t) => (if a == b then names(a - 1) else s"${names(a - 1)}–${names(b - 1)}") + " " + t).mkString(", ")
+
+extension (a: Area)
+  /** the point a radius is measured from: the place `from`, else the first place with a current point */
+  def center(w: Work): Option[Geo] =
+    val ls = if a.from.nonEmpty then w.locations.filter(_.key == a.from) else w.locations
+    ls.flatMap(Geo.current).headOption

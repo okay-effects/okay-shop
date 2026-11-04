@@ -57,11 +57,20 @@ object Submit:
       else Descent.parse(r.text).toOption.flatMap(j => scala.util.Try(days(j)).toOption).getOrElse(Vector.empty)
     }
 
-  /** whether an address is inside the shop's area; none when the shop does not answer */
-  def area[R[_]](base: String, city: String, postcode: String)(using In[Fetch, R]): Option[Boolean] ! R =
-    Fetch[R](base, Request.get("/api/area?city=" + Query.encode(city) + "&postcode=" + Query.encode(postcode)))
+  /** whether an address is inside the shop's area, and whether it could be checked (a radius: its distance); none when
+   * the shop does not answer */
+  def area[R[_]](base: String, city: String, postcode: String, street: String = "")(using In[Fetch, R])
+    : Option[(Boolean, Boolean)] ! R =
+    Fetch[R](base, Request.get("/api/area?city=" + Query.encode(city) + "&postcode=" + Query.encode(postcode) +
+      (if street.isEmpty then "" else "&street=" + Query.encode(street))))
       .map(r => if r.status != 200 then None else Descent.parse(r.text).toOption.flatMap(j =>
-        scala.util.Try(j("inside").boolean).toOption))
+        scala.util.Try((j("inside").boolean, j.field("checked").forall(_ == Json.Bool(true)))).toOption))
+
+  def unchecked(l: Lang): String = T(
+    "Этот адрес вне списка мест выезда, а расстояние проверить не удалось — напишите нам.",
+    "Tego adresu nie ma na liście miejsc dojazdu, a odległości nie udało się sprawdzić — napisz do nas.",
+    "That address is not on the list of places we come to, and its distance could not be checked — write to us.",
+    "Цієї адреси немає в списку місць виїзду, а відстань перевірити не вдалося — напишіть нам.")(l)
 
   def outside(l: Lang): String = T("Этот адрес вне зоны выезда — выберите другой способ или напишите нам.",
     "Ten adres jest poza obszarem dojazdu — wybierz inny sposób albo napisz do nas.",
@@ -125,6 +134,7 @@ object Submit:
     case "taken" => T("Это время уже заняли — выберите другое.", "Ten termin jest już zajęty — wybierz inny.",
         "That time was just taken — please choose another.", "Цей час уже зайняли — оберіть інший.")(l)
     case "area" => outside(l)
+    case "area-unchecked" => unchecked(l)
     case "full" => T("Мест на это время уже нет — выберите другое.", "Brak wolnych miejsc na ten termin — wybierz " +
         "inny.", "No seats left at that time — please choose another.",
         "Місць на цей час уже немає — оберіть інший.")(l)

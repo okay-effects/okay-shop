@@ -290,12 +290,23 @@ background:transparent;color:inherit;border:1px solid rgba(127,127,127,.4)}
       if hours.isEmpty then "" else s"<br><small>${e(hours)}</small>"} · <a href="${e(a.mapLink)}" target="_blank"
       rel="noopener" style="color:inherit">${t("карта", "mapa", "map", "мапа")}</a>"""
 
+  /** A PLACE'S MAP (specs/shop.md "Places on the map"): a box the pages' script fills when it comes into view or is
+   * clicked — only for a place with a current point; none: nothing (the page as before) */
+  def mapBox(loc: Location)(using l: Lang): String = Geo.current(loc).fold("") { g =>
+    s"""<div class="z-map" data-map="${g.lat},${g.lon},${e(loc.address.name.replace(";", ","))}" role="img"
+      aria-label="${e(t("карта: ", "mapa: ", "map: ", "мапа: ") + loc.address.name)}" 
+      style="height:220px;margin-top:8px;border-radius:8px;background:#e8e8e8;display:flex;align-items:center;
+      justify-content:center;cursor:pointer"><span>${
+      t("Показать карту", "Pokaż mapę", "Show the map", "Показати мапу")}</span></div>"""
+  }
+
   /** where the master goes, as the client reads it: the places and prefixes, the fee */
   def areaText(a: Area)(using l: Lang): String =
     val where = (a.places ++ a.postcodes.map(p => t("индекс ", "kod ", "postcode ", "індекс ") + p + "…"))
       .mkString(", ")
-    e(where) + (if a.fee > 0 then " · " + t("выезд +", "dojazd +", "travel +", "виїзд +") + e(Money.zl(a.fee))
-      else "")
+    e(where) + (if a.radius > 0 then (if where.isEmpty then "" else " · ") + t("в радиусе ", "w promieniu ",
+      "within ", "у радіусі ") + a.radius + " km" else "") + (if a.fee > 0 then " · " + t("выезд +", "dojazd +",
+      "travel +", "виїзд +") + e(Money.zl(a.fee)) else "")
 
   /** a service's form with the modes: how (when more than one), then where, then the time — or the order form for a
    * parcel. The pages' script shows the panel of the mode chosen and asks for its slots */
@@ -422,7 +433,7 @@ color:var(--mist);margin:0 0 6px}</style>
     def card(n: Int, m: Mode, text: String) = s"""<div class="step"><span class="snum">$n</span><span class="stxt">${
       tt(m.label)}</span><span class="sdesc">$text</span></div>"""
     val cards = w.modes.zipWithIndex.map((m, i) => card(i + 1, m, m match
-      case Mode.AtShop => w.locations.map(placeText(site, _)).mkString("<br><br>")
+      case Mode.AtShop => w.locations.map(x => placeText(site, x) + mapBox(x)).mkString("<br><br>")
       case Mode.AtClient => t("Приезжаем: ", "Dojeżdżamy: ", "We come to: ", "Приїжджаємо: ") +
         w.area.fold("")(areaText) + w.area.filter(a => a.hours.nonEmpty).fold("")(a => "<br><small>" +
           e(Work.hoursText(a.hours, l)) + "</small>")

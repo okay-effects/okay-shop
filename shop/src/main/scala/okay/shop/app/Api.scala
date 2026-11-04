@@ -19,7 +19,7 @@ object Api:
   val tenMinutes: Long = 10 * 60 * 1000L
 
   def answer[R[_]](c: Conf, r: Request)(using In[Store, R], In[Mail, R], In[Captcha, R], In[Ids, R], In[Clock, R],
-    In[Notify, R], In[Media, R]): Response ! R =
+    In[Notify, R], In[Media, R], In[Geocoder, R]): Response ! R =
     val parts = r.path.split('/').toList.filter(_.nonEmpty)
     val desk = c.desk.path.split('/').toList.filter(_.nonEmpty) :+ "api"
     (r.method, parts) match
@@ -39,7 +39,7 @@ object Api:
       case ("POST", List(l, "track")) if Lang.parse(l).isDefined => trackForm(c, Lang.parse(l).get, r)
       case ("GET", List(l, "receipt")) if Lang.parse(l).isDefined => receipt(c, r)
       case ("GET", List("api", "slots")) => Bookings.slots(c, r)
-      case ("GET", List("api", "area")) => pure(Bookings.area(c, r))
+      case ("GET", List("api", "area")) => Bookings.area(c, r)
       case ("POST", List("api", "quote")) => Quotes.ask(c, r)
       case ("POST", List("api", "quote", "accept")) => Quotes.accept(c, r)
       case ("POST", List("api", "quote", "decline")) => Quotes.decline(c, r)

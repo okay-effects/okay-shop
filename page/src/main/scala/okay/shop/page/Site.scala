@@ -34,6 +34,7 @@ object Site:
     modes()
     // the assistant (specs/shop.md "The assistant"): only where the page carries its marker
     byId("okay-chat").foreach(Chat.start)
+    Maps.start()
 
   private def byId(id: String): Option[HTMLElement] =
     Option(dom.document.getElementById(id)).map(_.asInstanceOf[HTMLElement])
@@ -115,14 +116,17 @@ object Site:
       def check(): Unit =
         val city = input(form, "[name=city]").map(_.value.trim).getOrElse("")
         val code = input(form, "[name=postcode]").map(_.value.trim).getOrElse("")
+        val street = input(form, "[name=street]").map(_.value.trim).getOrElse("")
         if city.nonEmpty && code.matches("[0-9]{2}-[0-9]{3}") then
-          Async.start(Port.handle(WebJs.fetch)(Submit.area[Async + Fetch](dom.window.location.origin, city, code)))(
-            using queue).future.recover { case _ => None }.foreach {
-            case Some(true) => said.textContent = Submit.inside(l)
-            case Some(false) => said.textContent = Submit.outside(l)
+          Async.start(Port.handle(WebJs.fetch)(Submit.area[Async + Fetch](dom.window.location.origin, city, code,
+            street)))(using queue).future.recover { case _ => None }.foreach {
+            case Some((true, _)) => said.textContent = Submit.inside(l)
+            case Some((false, false)) => said.textContent = Submit.unchecked(l)
+            case Some((false, _)) => said.textContent = Submit.outside(l)
             case None => said.textContent = ""
           }
-      Seq("[name=city]", "[name=postcode]").foreach(sel => input(form, sel).foreach(_.addEventListener("change",
+      Seq("[name=city]", "[name=postcode]", "[name=street]").foreach(sel => input(form, sel).foreach(
+        _.addEventListener("change",
         (_: dom.Event) => check())))
     }
 

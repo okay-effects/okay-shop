@@ -23,10 +23,10 @@ class AssistantSuite extends munit.FunSuite:
 
   def confirm(w: World, token: String, name: String = "Anna Test", contact: String = "anna@example.com",
               conversation: String = "conv-1") =
-    type C[X] = (Pure + Storage + Store + Ids + Mail + Clock + Notify)[X]
+    type C[X] = (Pure + Storage + Store + Ids + Mail + Clock + Notify + Geocoder)[X]
     val (kept, (_, out)) = run(w.storage.handler(StoreDurable.run(Ids.seeded(7)(Mail.kept()(Clock.virtual(w.now)(
-      Notify.kept(w.notices)(ShopFacts.confirm[C](w.conf, "crew", token, name, contact, consent = true, FLang.pl,
-        "1.2.3.4", conversation))))))))
+      Notify.kept(w.notices)(Geocoder.none(ShopFacts.confirm[C](w.conf, "crew", token, name, contact, consent = true,
+        FLang.pl, "1.2.3.4", conversation)))))))))
     w.letters ++= kept
     out
 

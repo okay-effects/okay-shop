@@ -102,7 +102,7 @@ byte for byte — the atelier is `byMail` by its courier flow, a salon with a sc
   optional travel fee, a TRAVEL BUFFER (minutes before and after, reserved by the calendar) and the visits' own hours
   — else the shop's; `byMail` — a parcel (InPost paczkomat, courier): the order flow as it is, no slot; `online` — a
   video call or a phone call (`Online`: how, and its details — a link, "we call you" — given in the confirmation).
-  No radius from a base address: that would need geocoding.
+  Since 2026-11-04 also a radius (`radius` km from one of the shop's places, `from` its key; "Places on the map").
 - **Per service** (`Work.services`, by the offer's key): the modes it allows (default: all the shop's), a price
   difference per mode (an at-client surcharge), and its minutes when the content gives none (a service the host makes
   bookable). A service with minutes is booked in `atShop`, `atClient`, `online`; `byMail` is always the order form.
@@ -812,6 +812,35 @@ expressions over them; okay-facts renders every value from the shop's data. Pack
 - Tests: `AssistantSuite` — the dialogue of okay-facts' design §12 end to end on `Memory` (the fake model replaying
   fixed outputs: find, find slots, the answer rendered from the data, the booking card, confirmed, the confirmation
   pinned, the letters); the facts' visibility; limits; the widget's marker only where enabled.
+
+## Places on the map (operator, 2026-11-04; the multi-tenant search and its caches are the host's)
+
+- **A place's point** (`Location.geo: Option[Geo]`, `Geo(lat, lon, source, precision, of)`): WGS 84 degrees; `source`
+  `gugik`, `nominatim` or `owner`; `precision` `address`, `street`, `postcode`, `city` or `point`; `of` the address line
+  it was found for — a point found for another address is stale (`Geo.current`). In the work's JSON a place's `geo`
+  object; none: as before. `Geo.distance` (metres, the great circle's) and `Geo.rounded` (a client's point to 3
+  decimals) are plain functions.
+- **Geocoding as an effect** (`Geocoder.find(GeoQuery(street, postcode, city))` → `Option[Geo]`), its handlers
+  (`Geocoders`): `gugik` (GUGiK's UUG, the state's free address-point service, over `Fetch`), `nominatim(agent)`
+  (OpenStreetMap's, its usage policy: the host's identifying `User-Agent`, one request a second — the host paces and
+  caches), `chain(a, b)` (the second when the first finds nothing), `fake(map)` (tests), `none` (a site with no
+  geocoding: the radius check falls back to the lists). The engine never caches or paces: its host does.
+- **The radius**: `Area(radius, from)` beside the places and the prefixes; `Bookings.addressed` (and the quote's) asks
+  `Geocoder` for the client's address when the shop has a radius and the lists do not already say inside: within
+  `radius` km of the place `from` (or the first with a point) — inside; nothing found — the lists decide, and the answer
+  says the distance could not be checked (`Submit.unchecked`). `/api/area` answers the same.
+- **The address block** (`Pages.placeText`): a place with a point gets a map box (`data-map` with its point and its
+  name) the pages' script fills with Leaflet only when it scrolls into view or is clicked (1.9.4 from cdnjs with its SRI
+  hashes; OpenStreetMap's tiles with their attribution, the tiles' referrer policy `strict-origin-when-cross-origin`;
+  the tiles' URL `Maps.tiles`, a box's `data-tiles` may say another). A place with no point: the block byte for byte as
+  before (the atelier, the two sites).
+- **The assistant**: `Shop.point` (the first place's, hidden) in `ShopFacts`; okay-facts' `distance(#a, #b)`. The
+  router's `search` takes okay-facts-router's `Near` slot ("near me", "w okolicy Mokotowa"): the host gives the asked-of
+  place's point (`ShopRouter.turn`'s `here`; the visitor's city its `suggest`), issued as a handle `#here1` (class
+  `Here`, its `point` pinned, never visible); results sorted by distance, each with `distance(#s, #here1)` rendered by
+  the resolver; "near me" with no point: the visitor's city offered (`search.near.ask`), never guessed.
+- Tests: `GeoSuite` — a point's JSON, staleness, rounding, the radius inside/outside/unchecked with a fake geocoder,
+  GUGiK's and Nominatim's answers read (fixed JSON), the map box only with a point.
 
 ## Open core (operator, 2026-10-29)
 

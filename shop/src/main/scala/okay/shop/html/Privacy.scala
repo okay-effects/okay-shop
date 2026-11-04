@@ -29,7 +29,10 @@ object Privacy:
     val visits0 = site.work.filter(_.has(Mode.AtClient)).fold(t.sections)(_ =>
       t.sections.take(2) ++ (visit(l) +: t.sections.drop(2)))
     // the assistant's chat (specs/shop.md "The assistant"): what it keeps and for how long, after what is collected
-    val visits = if chat <= 0 then visits0 else visits0.take(2) ++ (assistant(l, chat) +: visits0.drop(2))
+    val visits1 = if chat <= 0 then visits0 else visits0.take(2) ++ (assistant(l, chat) +: visits0.drop(2))
+    // a map of its place (specs/shop.md "Places on the map"): what the map's third parties receive; none: as before
+    val mapped = site.work.exists(_.locations.exists(x => Geo.current(x).isDefined))
+    val visits = if !mapped then visits1 else visits1.take(2) ++ (maps(l) +: visits1.drop(2))
     val sections = visits.zipWithIndex.map { case ((h, body), i) => s"<h2>${i + 1}. $h</h2>\n$body" }
     s"""<!doctype html><html lang="${l.code}"><head><meta charset="utf-8">""" +
       """<meta name="viewport" content="width=device-width,initial-scale=1">""" + "\n" +
@@ -60,6 +63,21 @@ object Privacy:
   private def p(s: String): String = s"<p>$s</p>"
 
   /** the section of a shop that comes to its clients (specs/shop.md "How the work happens": privacy) */
+  /** the map's section: OpenStreetMap's tiles and the map's script, fetched only when the map is shown */
+  private def maps(l: Lang): (String, String) = l match
+    case Lang.pl => "Mapa" -> p("Mapa naszego adresu wczytuje się dopiero, gdy jest widoczna lub kliknięta: Twoja " +
+        "przeglądarka pobiera wtedy kafelki OpenStreetMap (OpenStreetMap Foundation) i skrypt mapy z cdnjs " +
+        "(Cloudflare), przekazując im swój adres IP i adres strony. Nie zbieramy przy tym Twojego położenia.")
+    case Lang.en => "The map" -> p("The map of our address loads only when it is in view or clicked: your browser " +
+        "then fetches OpenStreetMap's tiles (the OpenStreetMap Foundation) and the map's script from cdnjs " +
+        "(Cloudflare), giving them its IP address and the page's address. We do not collect your location for it.")
+    case Lang.uk => "Мапа" -> p("Мапа нашої адреси завантажується лише тоді, коли вона видима або натиснута: ваш " +
+        "браузер тоді завантажує плитки OpenStreetMap (OpenStreetMap Foundation) і скрипт мапи з cdnjs " +
+        "(Cloudflare), передаючи їм свою IP-адресу та адресу сторінки. Вашого розташування ми при цьому не збираємо.")
+    case Lang.ru => "Карта" -> p("Карта нашего адреса загружается, только когда она видна или нажата: ваш браузер " +
+        "тогда загружает плитки OpenStreetMap (OpenStreetMap Foundation) и скрипт карты с cdnjs (Cloudflare), " +
+        "передавая им свой IP-адрес и адрес страницы. Ваше местоположение мы при этом не собираем.")
+
   /** the assistant's section: its purpose, what it keeps, for `days` days of quiet, deletion in the chat, the AI */
   private def assistant(l: Lang, days: Int): (String, String) = l match
     case Lang.pl => "Asystent (czat)" -> p("Czat na stronie odpowiada na pytania o nasze usługi, ceny, wolne " +

@@ -414,6 +414,94 @@
    "uk": "Цей заклад не вказав годин роботи. Контакти й запис: {u}.",
    "ru": "Это заведение не указало часы работы. Контакты и запись: {u}.",
    "en": "This shop hasn't given its opening hours. Contact and booking: {u}."
+  },
+  "search.services.near": {
+   "pl": "Najbliżej {h}: {items}.",
+   "uk": "Найближче до {h}: {items}.",
+   "ru": "Ближе всего к {h}: {items}.",
+   "en": "Nearest to {h}: {items}.",
+   "item.near": {
+    "pl": "{s} — {w}, {d}: {p}",
+    "uk": "{s} — {w}, {d}: {p}",
+    "ru": "{s} — {w}, {d}: {p}",
+    "en": "{s} — {w}, {d}: {p}"
+   },
+   "item.time.near": {
+    "pl": "{s} — {w}, {d}: {p}, najbliżej {t}",
+    "uk": "{s} — {w}, {d}: {p}, найближче {t}",
+    "ru": "{s} — {w}, {d}: {p}, ближайшее {t}",
+    "en": "{s} — {w}, {d}: {p}, next free {t}"
+   },
+   "item.noprice.near": {
+    "pl": "{s} — {w}, {d}",
+    "uk": "{s} — {w}, {d}",
+    "ru": "{s} — {w}, {d}",
+    "en": "{s} — {w}, {d}"
+   },
+   "sep": "; "
+  },
+  "search.services.near.me": {
+   "pl": "Najbliżej Ciebie: {items}.",
+   "uk": "Найближче до вас: {items}.",
+   "ru": "Ближе всего к вам: {items}.",
+   "en": "Nearest to you: {items}.",
+   "item.near": {
+    "pl": "{s} — {w}, {d}: {p}",
+    "uk": "{s} — {w}, {d}: {p}",
+    "ru": "{s} — {w}, {d}: {p}",
+    "en": "{s} — {w}, {d}: {p}"
+   },
+   "item.time.near": {
+    "pl": "{s} — {w}, {d}: {p}, najbliżej {t}",
+    "uk": "{s} — {w}, {d}: {p}, найближче {t}",
+    "ru": "{s} — {w}, {d}: {p}, ближайшее {t}",
+    "en": "{s} — {w}, {d}: {p}, next free {t}"
+   },
+   "item.noprice.near": {
+    "pl": "{s} — {w}, {d}",
+    "uk": "{s} — {w}, {d}",
+    "ru": "{s} — {w}, {d}",
+    "en": "{s} — {w}, {d}"
+   },
+   "sep": "; "
+  },
+  "search.shops.near": {
+   "pl": "Najbliżej {h}: {items}.",
+   "uk": "Найближче до {h}: {items}.",
+   "ru": "Ближе всего к {h}: {items}.",
+   "en": "Nearest to {h}: {items}.",
+   "item.near": {
+    "pl": "{w} ({k}, {d})",
+    "uk": "{w} ({k}, {d})",
+    "ru": "{w} ({k}, {d})",
+    "en": "{w} ({k}, {d})"
+   },
+   "sep": "; "
+  },
+  "search.shops.near.me": {
+   "pl": "Najbliżej Ciebie: {items}.",
+   "uk": "Найближче до вас: {items}.",
+   "ru": "Ближе всего к вам: {items}.",
+   "en": "Nearest to you: {items}.",
+   "item.near": {
+    "pl": "{w} ({k}, {d})",
+    "uk": "{w} ({k}, {d})",
+    "ru": "{w} ({k}, {d})",
+    "en": "{w} ({k}, {d})"
+   },
+   "sep": "; "
+  },
+  "search.near.ask": {
+   "pl": "Szukasz w: {h}? Napisz dzielnicę, ulicę albo kod pocztowy — albo kliknij „W pobliżu” na stronie głównej.",
+   "uk": "Шукаєте в: {h}? Напишіть район, вулицю або поштовий індекс — або натисніть «Поруч» на головній сторінці.",
+   "ru": "Ищете в: {h}? Напишите район, улицу или почтовый индекс — или нажмите «Рядом» на главной странице.",
+   "en": "Looking in: {h}? Write a district, a street or a postcode — or tap “Near me” on the home page."
+  },
+  "search.near.where": {
+   "pl": "Gdzie szukać? Napisz miasto, dzielnicę, ulicę albo kod pocztowy — albo kliknij „W pobliżu” na stronie głównej.",
+   "uk": "Де шукати? Напишіть місто, район, вулицю або поштовий індекс — або натисніть «Поруч» на головній сторінці.",
+   "ru": "Где искать? Напишите город, район, улицу или почтовый индекс — или нажмите «Рядом» на главной странице.",
+   "en": "Where should I look? Write a city, a district, a street or a postcode — or tap “Near me” on the home page."
   }
  }
 }

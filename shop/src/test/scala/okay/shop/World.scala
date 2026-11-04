@@ -37,12 +37,16 @@ final class World(val id: String = "atelier", var human: Boolean = true,
   /** the private files kept (specs/shop.md "Photos"): by name, their bytes and type */
   val files: scala.collection.mutable.Map[String, (okay.serverless.cloud.Bytes, String)] =
     scala.collection.mutable.Map.empty
-  type W[X] = (Pure + Storage + Store + Ids + Captcha + Mail + Clock + Notify + Media)[X]
+  type W[X] = (Pure + Storage + Store + Ids + Captcha + Mail + Clock + Notify + Media + Geocoder)[X]
+  /** the geocoder's fake (specs/shop.md "Places on the map"): none found unless a test says; each query kept */
+  var geocode: okay.shop.effects.GeoQuery => Option[okay.shop.model.Geo] = _ => None
+  val geocoded: scala.collection.mutable.Buffer[okay.shop.effects.GeoQuery] = scala.collection.mutable.Buffer.empty
 
   def ask(r: Request): Response =
     seed += 1
     val (kept, (_, res)) = run(storage.handler(StoreDurable.run(Ids.seeded(seed)(Captcha.always(human)(Mail.kept()(
-      Clock.virtual(now)(Notify.kept(notices)(Media.kept(files)(Api.answer[W](conf, r))))))))))
+      Clock.virtual(now)(Notify.kept(notices)(Media.kept(files)(Geocoder.fake(geocode, geocoded)(
+      Api.answer[W](conf, r)))))))))))
     letters ++= kept
     res
 
@@ -51,7 +55,8 @@ final class World(val id: String = "atelier", var human: Boolean = true,
     storage.alarm = None
     seed += 1
     val (kept, (_, n)) = run(storage.handler(StoreDurable.run(Ids.seeded(seed)(Captcha.always(human)(Mail.kept()(
-      Clock.virtual(now)(Notify.kept(notices)(Media.kept(files)(Bookings.remind[W](conf))))))))))
+      Clock.virtual(now)(Notify.kept(notices)(Media.kept(files)(Geocoder.fake(geocode, geocoded)(
+      Bookings.remind[W](conf)))))))))))
     letters ++= kept
     n
 

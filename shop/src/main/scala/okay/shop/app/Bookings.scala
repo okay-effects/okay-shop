@@ -58,16 +58,37 @@ object Bookings:
           }
       }
 
-  /** the plan with the client's address when it is at theirs: given whole and inside the area; else why not —
-   * `address`, `area` */
-  private def addressed(c: Conf, p: Plan, f: Map[String, String]): Either[String, Plan] =
-    if !p.mode.contains(Mode.AtClient) then Right(p)
+  /** the plan with the client's address when it is at theirs: given whole and inside the area — by its lists, else
+   * by its radius (the address geocoded: within so many km of the place it is measured from); else why not —
+   * `address`, `area`, `area-unchecked` (outside the lists and the distance could not be checked) */
+  private def addressed[R[_]](c: Conf, p: Plan, f: Map[String, String])(using In[Geocoder, R])
+    : Either[String, Plan] ! R =
+    if !p.mode.contains(Mode.AtClient) then pure(Right(p))
     else
       def g(k: String, n: Int) = f.getOrElse(k, "").replaceAll("\\s+", " ").trim.take(n)
       val a = Address("", g("street", 120), g("postcode", 6), g("city", 60), g("notes", 200))
-      if a.street.isEmpty || a.city.isEmpty || !a.postcode.matches("[0-9]{2}-[0-9]{3}") then Left("address")
-      else if !c.site.work.flatMap(_.area).exists(_.inside(a.city, a.postcode)) then Left("area")
-      else Right(p.copy(address = Some(a)))
+      if a.street.isEmpty || a.city.isEmpty || !a.postcode.matches("[0-9]{2}-[0-9]{3}") then pure(Left("address"))
+      else inside[R](c, a).map {
+        case Some(true) => Right(p.copy(address = Some(a)))
+        case Some(false) => Left("area")
+        case None => Left("area-unchecked")
+      }
+
+  /** a plan made, its address checked */
+  private def checked[R[_]](c: Conf, planned: Either[String, Plan], f: Map[String, String])(using In[Geocoder, R])
+    : Either[String, Plan] ! R = planned.fold(why => pure(Left(why)), addressed[R](c, _, f))
+
+  /** INSIDE THE AREA (specs/shop.md "Places on the map"): by its lists and prefixes; else, with a radius, the address
+   * geocoded and measured from its centre — `None` when the radius could not be checked (no point found) */
+  def inside[R[_]](c: Conf, a: Address)(using In[Geocoder, R]): Option[Boolean] ! R =
+    val work = c.site.work
+    work.flatMap(_.area) match
+      case None => pure(Some(false))
+      case Some(area) if area.inside(a.city, a.postcode) => pure(Some(true))
+      case Some(area) => (for w <- work; centre <- area.center(w) if area.radius > 0 yield centre) match
+        case None => pure(Some(false))
+        case Some(centre) => Geocoder.find[R](okay.shop.effects.GeoQuery(a.street, a.postcode, a.city)).map(_.map(g =>
+            Geo.meters(centre.lat, centre.lon, g.lat, g.lon) <= area.radius * 1000L))
 
   /** the plan of a booking made: its own mode and place again, for a move */
   private def planOf(c: Conf, b: Booking): Option[Schedule] = b.mode match
@@ -102,13 +123,13 @@ object Bookings:
         })
 
   /** whether an address is inside the shop's area: the page asks before the slots */
-  def area(c: Conf, r: Request): Response =
-    val inside = c.site.work.flatMap(_.area).exists(_.inside(r.param("city").getOrElse(""),
-      r.param("postcode").getOrElse("")))
-    Web.json(Json.obj("inside" -> Json.bool(inside)))
+  def area[R[_]](c: Conf, r: Request)(using In[Geocoder, R]): Response ! R =
+    inside[R](c, Address("", r.param("street").getOrElse("").take(120), r.param("postcode").getOrElse("").take(6),
+      r.param("city").getOrElse("").take(60))).map(in => Web.json(Json.obj("inside" -> Json.bool(in.contains(true)),
+      "checked" -> Json.bool(in.isDefined))))
 
   def book[R[_]](c: Conf, r: Request)(using In[Store, R], In[Mail, R], In[Captcha, R], In[Ids, R], In[Clock, R],
-    In[Notify, R]): Response ! R =
+    In[Notify, R], In[Geocoder, R]): Response ! R =
     val f = Web.fields(r)
     val name = f.getOrElse("name", "").trim.take(120)
     val contact = f.getOrElse("contact", "").trim.take(200)
@@ -118,10 +139,10 @@ object Bookings:
     else if !f.get("rodo_consent").exists(v => v.nonEmpty && v != "false") then pure(Web.refused("consent"))
     else if Invoicing.asked(c, f).isLeft then pure(Web.refused(Invoicing.asked(c, f).left.toOption.get))
     // a hidden service takes nothing new (specs/shop.md "The owner edits the content")
-    else (plan(c, f.getOrElse("service", ""), f.getOrElse("mode", ""), f.getOrElse("place", ""))
-      .filterOrElse(!_.offer.hidden, "service").flatMap(addressed(c, _, f))
+    else checked[R](c, plan(c, f.getOrElse("service", ""), f.getOrElse("mode", ""), f.getOrElse("place", ""))
+      .filterOrElse(!_.offer.hidden, "service"), f).flatMap(planned => (planned
       .flatMap(p => masters(c, p, f.getOrElse("master", "")).map(_ => p)), start) match
-      case (Left(why), _) => pure(Web.refused(why, if why == "area" then 409 else 400))
+      case (Left(why), _) => pure(Web.refused(why, if why.startsWith("area") then 409 else 400))
       case (_, None) => pure(Web.refused("start"))
       case (Right(p), Some(at)) => Clock.now[R].flatMap { now =>
           Store.allow[R](s"book:${Web.ip(r)}", 5, Api.tenMinutes, now).flatMap { allowed =>
@@ -131,7 +152,7 @@ object Bookings:
               else taken[R](c, f, p, at, name, contact, now)
             }
           }
-        }
+        })
 
   /**
    * A BOOKING FROM THE ASSISTANT (specs/shop.md "The assistant"): the form's checks and path — name, contact, consent,
@@ -140,16 +161,16 @@ object Bookings:
    * host's key) a day; the letters and the notice as the form's. The booking, or why not and its status
    */
   def chat[R[_]](c: Conf, f: Map[String, String], ip: String, conversation: String)(using In[Store, R], In[Mail, R],
-    In[Ids, R], In[Clock, R], In[Notify, R]): Either[(String, Int), Booking] ! R =
+    In[Ids, R], In[Clock, R], In[Notify, R], In[Geocoder, R]): Either[(String, Int), Booking] ! R =
     val name = f.getOrElse("name", "").trim.take(120)
     val contact = f.getOrElse("contact", "").trim.take(200)
     val start = f.getOrElse("start", "").toLongOption
     if name.isEmpty then pure(Left(("name", 400)))
     else if !Contact.valid(contact) then pure(Left(("contact", 400)))
     else if !f.get("rodo_consent").exists(v => v.nonEmpty && v != "false") then pure(Left(("consent", 400)))
-    else (plan(c, f.getOrElse("service", ""), "", "").filterOrElse(!_.offer.hidden, "service")
-      .flatMap(addressed(c, _, f)).flatMap(p => masters(c, p, f.getOrElse("master", "")).map(_ => p)), start) match
-      case (Left(why), _) => pure(Left((why, if why == "area" then 409 else 400)))
+    else checked[R](c, plan(c, f.getOrElse("service", ""), "", "").filterOrElse(!_.offer.hidden, "service"), f)
+      .flatMap(planned => (planned.flatMap(p => masters(c, p, f.getOrElse("master", "")).map(_ => p)), start) match
+      case (Left(why), _) => pure(Left((why, if why.startsWith("area") then 409 else 400)))
       case (_, None) => pure(Left(("start", 400)))
       case (Right(p), Some(at)) => Clock.now[R].flatMap { now =>
           Store.allow[R](s"book:$ip", 5, Api.tenMinutes, now).flatMap(byIp =>
@@ -163,7 +184,7 @@ object Bookings:
                     .as(Right(b))
               }
           }
-        }
+        })
 
   /** the booking made, if its start is still free: the store decides, in its step */
   private def taken[R[_]](c: Conf, f: Map[String, String], p: Plan, at: Long, name: String, contact: String,

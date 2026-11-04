@@ -3,7 +3,8 @@ package okay.shop.assistant
 import okay.effects.json.Json
 import okay.facts.{Answer, Audit, Bind, Card, Conversation, Ent, Facts, Filter, Found, Handles, Lang as FLang, Op,
   Query, Reply, Scope, Setup, Value, Words, Zone}
-import okay.facts.router.{Amount, Combiner, Intents, Lexicon, Nearest, Probe, Route, Router, Spell, Table, When}
+import okay.facts.router.{Amount, Combiner, Intents, Lexicon, Near, Nearest, Probe, Route, Router, Spell, Table,
+  When}
 import okay.scala3.*
 import okay.scala3.std.Clock
 
@@ -117,11 +118,16 @@ object ShopRouter:
           Vector.empty[String]) ++ langs.map(x => Query("Service", scope = Scope.All, limit = 200, lang = x) ->
           (if x == l then serviceProps else Vector.empty)))
 
-  def turn[R[_]](lane: Lane, s: Setup, c: Conversation, user: String, l: FLang, focus: String)(using In[Facts, R],
+  /** THE PLACE ASKED TO BE NEAR, as the host found it (specs/shop.md "Places on the map"): its name as said (or the
+   * visitor's own, `me`), its point — never stored, given for this turn only */
+  final case class Here(name: String, lat: Double, lon: Double, me: Boolean = false)
+
+  def turn[R[_]](lane: Lane, s: Setup, c: Conversation, user: String, l: FLang, focus: String,
+                 here: Option[Here] = None, suggest: Option[String] = None)(using In[Facts, R],
     In[Clock, R], In[Audit, R]): Decision ! R =
     Clock.now[R].flatMap { now =>
       prefetch[R](focus, l).flatMap(_ => Bind.focused[R](s, c, focus, l)).flatMap { (h0, note) =>
-        val ctx = Ctx(lane, c, h0, user, l, focus, Zone.date(now))
+        val ctx = Ctx(lane, c, h0, user, l, focus, Zone.date(now), here = here, suggest = suggest)
         features[R](ctx).flatMap { (prev, extras) =>
           val route = lane.router.decide(lane.table, user, prev, extras)
           // the day, the time, the price limit said: among the slots whatever the answer
@@ -190,7 +196,10 @@ object ShopRouter:
 
   /** a turn's ground: the lane, the conversation, its handles as they stand, the words, where the user is */
   private final case class Ctx(lane: Lane, c: Conversation, h: Handles, user: String, l: FLang, focus: String,
-                               today: String, named: Option[okay.facts.Handle] = None):
+                               today: String, named: Option[okay.facts.Handle] = None, here: Option[Here] = None,
+                               suggest: Option[String] = None):
+    /** a place asked to be near ("blisko mnie", "w okolicy Mokotowa") */
+    lazy val near: Option[Near] = Near.of(user)
     def a(key: String): String = lane.answers(key, l)
     def list(key: String, variants: Vector[String]): String = lane.answers.list(key, l, variants)
     def shopId: Option[String] = Some(focus).filter(_.startsWith("shop:")).map(_.stripPrefix("shop:"))
@@ -338,9 +347,13 @@ object ShopRouter:
       search(ctx).map(_.left.map((_, slots) => ("no shop in sight", slots)).map(_.copy(intent = Some("search"))))
     // on the mall's pages, with no shop in the conversation, a service asked of is a search across the mall
     // a price asked there of one service only one shop has: its price (else a search: each shop's)
-    else if ctx.scope == Scope.All && intent == "price" then
+    // (on the mall's home a service named there is asked of before the conversation's last one:
+    // "ile kosztuje pedicure?" after a barber's turns is the pedicure's price, not the barber's service's)
+    else if ctx.shopId.isEmpty && ctx.named.isEmpty && intent == "price" then
       named[R]("Service", Scope.All, ctx.l, 200).flatMap(cands => service(ctx, cands) match
-        case Nearest.Pick.One(i, _) => priced(ctx, cands(i.toInt)._1)
+        case Nearest.Pick.One(i, _) if cands(i.toInt)._2.exists(n => Nearest.lexical(ctx.user, n, ctx.lane.lexicon) >
+          0.0) || ctx.scope == Scope.All => priced(ctx, cands(i.toInt)._1)
+        case _ if ctx.scope != Scope.All => price(ctx)
         case _ => search(ctx).map(_.map(_.copy(intent = Some("search")))))
     else if ctx.scope == Scope.All && Set("slots", "book")(intent) then
       search(ctx).map(_.map(_.copy(intent = Some("search"))))
@@ -644,9 +657,52 @@ object ShopRouter:
         }
 
   /** across the mall: the service named (by meaning), in the city named, under the price named, at the time named —
-   * else the shops whose kind or name it names */
+   * else the shops whose kind or name it names; near a place asked (its point the host's): the nearest first, each
+   * with its distance — computed by the resolver (`distance(shop(#v1), #here1)`) */
   private def search[R[_]](ctx: Ctx)(using In[Facts, R]): Out ! R =
-    named[R]("Shop", Scope.All, ctx.l, 100).flatMap { shops =>
+    if ctx.near.isDefined && ctx.here.isEmpty then pure(ok(nearAsk(ctx)))
+    else named[R]("Shop", Scope.All, ctx.l, 100).flatMap(shops => distances[R](ctx, shops.map(_._1.ent.source))
+      .flatMap(dist => search0[R](ctx, shops, dist)))
+
+  /** asked to be near with no point: the visitor's city offered (its name the host's), else where asked — never
+   * guessed */
+  private def nearAsk(ctx: Ctx): Built = ctx.suggest match
+    case Some(city) =>
+      val e = Ent("user", "Here", "suggested")
+      val (h, x) = ctx.h.issue("here", e, 0L, Vector("name" -> city), Map("name" -> okay.facts.Fact(Value.text(city),
+        e, "name")))
+      Built(h, Answer(Vector("h" -> s"name(${x.name})"), ctx.a("search.near.ask")), slots = Map("near" -> "?"))
+    case None => Built(ctx.h, Answer(Vector.empty, ctx.a("search.near.where")), slots = Map("near" -> "?"))
+
+  /** each shop's distance from the place asked, in metres (shops with no point: none) */
+  private def distances[R[_]](ctx: Ctx, sources: Vector[String])(using In[Facts, R]): Map[String, Long] ! R =
+    ctx.here match
+      case None => pure(Map.empty)
+      case Some(here) =>
+        val ids = sources.distinct
+        Facts.prefetch[R](Vector.empty, ids.map(id => ShopFacts.shopEnt(id) -> "point")).flatMap(_ =>
+          seq[R, String, Option[(String, Long)]](ids)(id => Facts.get[R](ShopFacts.shopEnt(id), "point").map(_.collect {
+            case okay.facts.Fact(Value.Point(lat, lon), _, _, _, _) => id -> okay.shop.model.Geo.meters(here.lat,
+              here.lon, lat, lon)
+          })).map(_.flatten.toMap))
+
+  /** the place asked, as a handle: its point pinned (never shown), its name as said */
+  private def hereHandle(ctx: Ctx, h: Handles): (Handles, String) =
+    val here = ctx.here.get
+    val e = Ent("user", "Here", "here")
+    val (h2, x) = h.issue("here", e, 0L, if here.me then Vector.empty else Vector("name" -> here.name),
+      Map("point" -> okay.facts.Fact(Value.Point(here.lat, here.lon), e, "point"),
+        "name" -> okay.facts.Fact(Value.text(here.name), e, "name")))
+    (h2, x.name)
+
+  private def search0[R[_]](ctx: Ctx, shops: Vector[(Found, Vector[String])], dist: Map[String, Long])(
+    using In[Facts, R]): Out ! R =
+    // near a place: the nearest first, those with no point left out
+    def nearest(fs: Vector[Found]): Vector[Found] =
+      if dist.isEmpty then fs else fs.filter(f => dist.contains(f.ent.source)).sortBy(f => dist(f.ent.source))
+    val nearly = if dist.isEmpty then "" else ".near"
+    val head = if dist.isEmpty then "" else if ctx.here.exists(_.me) then ".near.me" else ".near"
+    locally {
       def city(f: Found): String = f.visible.collectFirst { case ("city", c) => c }.getOrElse("")
       val cities = shops.map((f, _) => city(f)).filter(_.nonEmpty).distinct.filter(Spell.names(ctx.user, _))
       val inCity = shops.filter((f, _) => cities.isEmpty || cities.contains(city(f))).map(_._1.ent.source).toSet
@@ -666,7 +722,7 @@ object ShopRouter:
               Value.Money(m, "PLN"))),
               scope = Scope.All, limit = 200, lang = ctx.l)).map(_.map(_.ent).toSet)
         cheap.flatMap { under =>
-          val kept = near.filter(f => under(f.ent)).take(5)
+          val kept = nearest(near.filter(f => under(f.ent))).take(5)
           if kept.nonEmpty then
             seq[R, Found, (Boolean, Option[Found])](kept)(f => has[R](f.ent, "price").flatMap(p =>
               (if ctx.when.isEmpty then pure(Option.empty[Found]) else Facts.find[R](Query("Slot", filters =
@@ -674,20 +730,26 @@ object ShopRouter:
                 Value.Day(d))) ++ ctx.when.from.map(a => Filter("time", Op.Ge, Value.Clock(a))) ++
                 ctx.when.until.map(a => Filter("time", Op.Lt, Value.Clock(a))), scope = Scope.Source(f.ent.source),
                 limit = 1, lang = ctx.l)).map(_.headOption)).map(p -> _))).flatMap { info =>
-              val (h1, vs) = issueAll(ctx.h, kept)
+              val (h0, hx) = if dist.isEmpty then (ctx.h, "") else hereHandle(ctx, ctx.h)
+              val (h1, vs) = issueAll(h0, kept)
               val (h2, ts) = info.foldLeft((h1, Vector.empty[Option[String]])) { case ((h, acc), (_, slot)) =>
                 slot.fold((h, acc :+ None)) { s => val (h3, t) = issue(h, s); (h3, acc :+ Some(t)) }
               }
               val params = vs.zip(info).zip(ts).zipWithIndex.flatMap { case (((v, (p, _)), t), k) =>
                 val n = k + 1
                 Vector(s"s$n" -> s"name($v)", s"w$n" -> s"name(shop($v))", s"c$n" -> s"city(shop($v))") ++
-                  Option.when(p)(s"p$n" -> s"price($v)") ++ t.map(x => s"t$n" -> s"time($x) as datetime")
+                  Option.when(p)(s"p$n" -> s"price($v)") ++ t.map(x => s"t$n" -> s"time($x) as datetime") ++
+                  Option.when(hx.nonEmpty)(s"d$n" -> s"distance(shop($v), $hx)")
               }
-              val variants = info.zip(ts).map { case ((p, _), t) => if !p then "item.noprice" else if t.isDefined
-                then "item.time" else "item" }
+              val variants = info.zip(ts).map { case ((p, _), t) => (if !p then "item.noprice" else if t.isDefined
+                then "item.time" else "item") + nearly }
               val top = kept.head.ent.source
               Facts.act[R]("open", Map("shop" -> Value.Entity(Ent(top, "Shop", top))), ctx.l).map(acted =>
-                ok(Built(h2, Answer(params, ctx.list("search.services", variants)), acted.toOption.flatMap(_.card)
+                // near a place: its distance in place of its city
+                val shown = if hx.isEmpty then params else params.filterNot(_._1.matches("c\\d+"))
+                val withHere = if hx.nonEmpty && !ctx.here.exists(_.me) then ("h" -> s"name($hx)") +: shown else shown
+                ok(Built(h2, Answer(withHere, ctx.list("search.services" + head, variants)),
+                  acted.toOption.flatMap(_.card)
                   .toVector, slots0 ++ Map("service" -> kept.map(f => s"${f.ent.source}/${f.ent.key}").mkString(",")))))
             }
           else
@@ -695,16 +757,24 @@ object ShopRouter:
             val byKind = ctx.rank(shops.filter(x => inCity(x._1.ent.source)).map((f,
               names) => Nearest.Candidate(f.ent.source, names ++ f.visible.collect { case ("category", k) => k })))
             val bestKind = byKind.headOption.map(_._2).getOrElse(0.0)
-            val found = byKind.filter(r => r._2 >= ctx.lane.serviceAt && r._2 >= bestKind - 0.12).take(5)
+            val named0 = byKind.filter(r => r._2 >= ctx.lane.serviceAt && r._2 >= bestKind - 0.12)
               .flatMap(r => shops.find(_._1.ent.source == r._1).map(_._1))
+            // near a place and nothing named: the nearest shops
+            val found = nearest(if named0.isEmpty && dist.nonEmpty then shops.map(_._1).filter(f =>
+              inCity(f.ent.source)) else named0).take(5)
             if found.isEmpty && cities.isEmpty then pure(no("nothing named", slots0))
             else if found.isEmpty then pure(ok(Built(ctx.h, Answer(Vector.empty, ctx.a("search.none")),
               slots = slots0)))
             else
-              val (h, ws) = issueAll(ctx.h, found)
-              pure(ok(Built(h, Answer(ws.zipWithIndex.flatMap((w, k) => Vector(s"w${k + 1}" -> s"name($w)",
-                s"k${k + 1}" -> s"category($w)", s"c${k + 1}" -> s"city($w)")), ctx.list("search.shops",
-                ws.map(_ => "item"))), slots = slots0 ++ Map("shops" -> found.map(_.ent.source).mkString(",")))))
+              val (h0, hx) = if dist.isEmpty then (ctx.h, "") else hereHandle(ctx, ctx.h)
+              val (h, ws) = issueAll(h0, found)
+              val named = Option.when(hx.nonEmpty && !ctx.here.exists(_.me))("h" -> s"name($hx)").toVector
+              pure(ok(Built(h, Answer(named ++
+                ws.zipWithIndex.flatMap((w, k) => Vector(s"w${k + 1}" -> s"name($w)",
+                s"k${k + 1}" -> s"category($w)") ++ (if hx.isEmpty then Vector(s"c${k + 1}" -> s"city($w)")
+                else Vector(s"d${k + 1}" -> s"distance($w, $hx)"))), ctx.list("search.shops" + head,
+                ws.map(_ => "item" + nearly))),
+                slots = slots0 ++ Map("shops" -> found.map(_.ent.source).mkString(",")))))
         }
       }
     }

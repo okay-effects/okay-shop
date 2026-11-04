@@ -18,7 +18,7 @@ object Quotes:
     s"${c.origin}/${q.lang.code}/quote?ref=${okay.http.Query.encode(q.ref)}&k=${okay.http.Query.encode(q.key)}"
 
   def ask[R[_]](c: Conf, r: Request)(using In[Store, R], In[Mail, R], In[Captcha, R], In[Ids, R], In[Clock, R],
-    In[Notify, R], In[Media, R]): Response ! R =
+    In[Notify, R], In[Media, R], In[Geocoder, R]): Response ! R =
     val f = Web.fields(r)
     def g(k: String, n: Int) = f.getOrElse(k, "").trim.take(n)
     val name = g("name", 120)
@@ -30,11 +30,14 @@ object Quotes:
     val mode = offer.flatMap(o => c.site.work.map(_.modesOf(o.key))).getOrElse(Vector.empty)
     val m = Mode.parse(g("mode", 20)).filter(mode.contains).orElse(mode.headOption)
     // the client's address when the work is at theirs: given whole, inside the area
-    val address = if !m.contains(Mode.AtClient) then Right(None) else
+    val address: Either[String, Option[Address]] ! R = if !m.contains(Mode.AtClient) then pure(Right(None)) else
       val a = Address("", g("street", 120), g("postcode", 6), g("city", 60), g("notes", 200))
-      if a.street.isEmpty || a.city.isEmpty || !a.postcode.matches("[0-9]{2}-[0-9]{3}") then Left("address")
-      else if !c.site.work.flatMap(_.area).exists(_.inside(a.city, a.postcode)) then Left("area")
-      else Right(Some(a))
+      if a.street.isEmpty || a.city.isEmpty || !a.postcode.matches("[0-9]{2}-[0-9]{3}") then pure(Left("address"))
+      else Bookings.inside[R](c, a).map {
+        case Some(true) => Right(Some(a))
+        case Some(false) => Left("area")
+        case None => Left("area-unchecked")
+      }
     if name.isEmpty then pure(Web.refused("name"))
     else if !Contact.valid(contact) then pure(Web.refused("contact"))
     else if offer.isEmpty then pure(Web.refused("service"))
@@ -42,8 +45,8 @@ object Quotes:
     else if !f.get("rodo_consent").exists(v => v.nonEmpty && v != "false") then pure(Web.refused("consent"))
     else if Invoicing.asked(c, f).isLeft then pure(Web.refused(Invoicing.asked(c, f).left.toOption.get))
     else if shots.isLeft then pure(Web.refused(shots.left.toOption.get))
-    else address match
-      case Left(why) => pure(Web.refused(why, if why == "area" then 409 else 400))
+    else address.flatMap {
+      case Left(why) => pure(Web.refused(why, if why.startsWith("area") then 409 else 400))
       case Right(where) => Clock.now[R].flatMap { now =>
           Store.allow[R](s"quote:${Web.ip(r)}", 5, Api.tenMinutes, now).flatMap { allowed =>
             if !allowed then pure(Web.refused("limit", 429))
@@ -68,6 +71,7 @@ object Quotes:
             }
           }
         }
+    }
 
   /** the most photos a quote takes */
   val maxPhotos = 3

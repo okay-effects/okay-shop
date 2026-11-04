@@ -30,8 +30,12 @@ object ShopFacts:
       Prop("reviews", Type.Count(Noun.review), about = "how many reviews"),
       Prop("area", Type.Text, about = "the places it comes to (at the client's)"),
       Prop("modes", Type.Text, about = "how it works: at its place, at the client's, by parcel, online"),
-      Prop("contact", Type.Text, about = "its e-mail")),
+      Prop("contact", Type.Text, about = "its e-mail"),
+      Prop("point", Type.Point, about = "where its place is (for distance)")),
       key = Vector("id"), iri = "https://schema.org/LocalBusiness", about = "a shop"),
+    // a place the client asked to be near (specs/shop.md "Places on the map"): issued by the host, its point pinned
+    Cls("Here", "here", Vector(Prop("name", Type.Text, visible = true), Prop("point", Type.Point)),
+      about = "the place the client asked to be near"),
     Cls("Service", "v", Vector(
       Prop("name", Type.Text, visible = true), Prop("description", Type.Text, visible = true),
       Prop("price", Type.Money, about = "what it costs"), Prop("duration", Type.Duration, about = "how long"),
@@ -101,7 +105,8 @@ object ShopFacts:
       area.filter(_.nonEmpty).map(ps => "area" -> Value.text(ps.mkString(", "))) ++
       site.work.map(_.modes).filter(_.nonEmpty).map(ms => "modes" -> Value.Text(FLang.values.map(l => l ->
         ms.map(_.label(shopLang(l))).mkString(", ")).toMap)) ++
-      Option.when(c.contact.nonEmpty)("contact" -> Value.text(c.contact)), v)
+      Option.when(c.contact.nonEmpty)("contact" -> Value.text(c.contact)) ++
+      site.work.toVector.flatMap(_.locations).flatMap(Geo.current).headOption.map(g => "point" -> g.point), v)
     val services = site.shown.map { o =>
       val masters = if site.masters.isEmpty then Vector.empty else site.masters.filter(m => m.services.isEmpty ||
         m.services.contains(o.key))
@@ -236,7 +241,7 @@ object ShopFacts:
    */
   def confirm[R[_]](c: Conf, source: String, token: String, name: String, contact: String, consent: Boolean,
                     l: FLang, ip: String, conversation: String)(using In[Store, R], In[okay.shop.effects.Mail, R],
-    In[okay.shop.effects.Ids, R], In[Clock, R], In[okay.shop.effects.Notify, R])
+    In[okay.shop.effects.Ids, R], In[Clock, R], In[okay.shop.effects.Notify, R], In[okay.shop.effects.Geocoder, R])
     : Either[(String, Int), (Booking, Acted, okay.facts.Rendered)] ! R =
     slotOf(token) match
       case None => pure(Left(("slot", 400)))
