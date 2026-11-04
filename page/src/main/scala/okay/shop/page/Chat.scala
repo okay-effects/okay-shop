@@ -328,6 +328,8 @@ background:#2563eb;color:#fff;font:inherit;font-weight:600;cursor:pointer;text-d
         }
     })
     // the warming when the page is idle (a browser without `requestIdleCallback`: 1.5 s after the start)
-    if js.typeOf(js.Dynamic.global.selectDynamic("requestIdleCallback")) == "function" then
-      js.Dynamic.global.requestIdleCallback((_: js.Any) => warmUp(), js.Dynamic.literal(timeout = 3000))
+    // (the window's property: a browser without it — Safari — gets undefined, never a ReferenceError)
+    val dw = dom.window.asInstanceOf[js.Dynamic]
+    if js.typeOf(dw.selectDynamic("requestIdleCallback")) == "function" then
+      dw.requestIdleCallback((_: js.Any) => warmUp(), js.Dynamic.literal(timeout = 3000))
     else js.timers.setTimeout(1500)(warmUp())

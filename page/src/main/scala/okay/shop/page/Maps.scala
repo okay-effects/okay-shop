@@ -21,12 +21,16 @@ object Maps:
   val tiles = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
   val attribution = "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors"
 
+  /** the window as an object: a name it lacks is undefined there, never a ReferenceError (a bare global's would
+   * be) */
+  private def win: js.Dynamic = dom.window.asInstanceOf[js.Dynamic]
+
   private var loading = false
   private val waiting = scala.collection.mutable.Buffer.empty[() => Unit]
 
   /** Leaflet loaded once, then `then` (every caller's, in order) */
   def leaflet(andThen: () => Unit): Unit =
-    if !js.isUndefined(js.Dynamic.global.selectDynamic("L")) then andThen()
+    if !js.isUndefined(win.selectDynamic("L")) then andThen()
     else
       waiting += andThen
       if !loading then
@@ -58,7 +62,7 @@ object Maps:
     if again || box.getAttribute("data-shown") != "1" then
       box.setAttribute("data-shown", "1")
       leaflet { () =>
-        val L = js.Dynamic.global.L
+        val L = win.L
         val ps = points(box.getAttribute("data-map"))
         // shown again (the page's points changed): the old map taken away first
         val old = box.asInstanceOf[js.Dynamic].selectDynamic("okayMap")
@@ -86,7 +90,7 @@ object Maps:
   def start(): Unit =
     val boxes = dom.document.querySelectorAll("[data-map]")
     if boxes.length > 0 then
-      val io = js.Dynamic.global.selectDynamic("IntersectionObserver")
+      val io = win.selectDynamic("IntersectionObserver")
       val observer: Option[js.Dynamic] = Option.when(js.typeOf(io) == "function")(js.Dynamic.newInstance(io)(
         (entries: js.Array[js.Dynamic], obs: js.Dynamic) => entries.foreach { en =>
           if en.isIntersecting.asInstanceOf[Boolean] then
