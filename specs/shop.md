@@ -822,6 +822,29 @@ expressions over them; okay-facts renders every value from the shop's data. Pack
   intent's answer when the shop has not given its data; follow-ups, the words' evidence, the lexicon, Latin letters; the
   rule-breaking and others' data declined; round 3: the guard in four languages, the safe rules alone, a greeting's word
   inside a question decided by the combiner, cancel's stems).
+- **Round 4** (operator, 2026-11-04; okay-facts §17 "Round 4": the error classes fixed by data and structure):
+  - **Places** (`assistant/places.tsv` → `places.json` by okay-facts' `tools/gazetteer.scala`; `ShopRouter.places`):
+    every Polish city of over 20 000 people (GUS, 1 January 2021) and the districts of the 10 largest cities (their
+    statutes' names; TERYT's spelling), with the demo shops' own districts; each place's forms generated — Polish
+    cases, Ukrainian and Russian transliteration and cases, the large cities' exonyms — and matched folded (any script,
+    case, Latin letters for Cyrillic). A place named is the router's place evidence, decides the area over the ways of
+    working, is matched against the places the shop serves by id ("в Сопоті" is the area's "Sopot"; a known place not
+    served: `area.no`), and on the mall's home a city with no shop is "none found", never another city's shops.
+  - **A shop named on the mall's home**: asked of its hours, address, contact, ways of working or area, those of
+    that shop — a search or a price the combiner chose yields to the shop's own fact its rules name; the mall's own
+    contact (`human.mall`) from the host's entity `_mall` (a `Shop` of source `_mall`: its name and contact).
+  - **Comparable services**: a service's `kind` (`About.kinds`, the host's: okay-mall's catalogue `niche/template`),
+    its `price` comparable by it (okay-facts `Prop.comparableBy`, the resolver's `comparable` check); "cheaper
+    elsewhere" finds only services of the same kind — none of it: `compare.none.kind`, never an unrelated cheaper
+    service; a comparison across the mall keeps the nearest service's kind (or its own shop's).
+  - **The decision settled by evidence** (`settle`): a place named → the area, not the ways of working; a booking's
+    word → a booking, else free times; a contact's words (phone, e-mail, call, write) → the contact, not the address;
+    "only the X" with no comparative word → the price, not a comparison; a short follow-up naming only a place after
+    the area → the area. **Asked back** (`clarify`): the combiner's top two of a confusable pair (hours/free times,
+    hours/masters, masters/price, price/compare, free times/compare, address/contact, hours/price) under 0.8 and within
+    0.25 → "Chodzi o … czy o …?" (authored `clarify`, `choice.<intent>`), the two as choices (`Decision.Answered`'s
+    `choices`: a label, an intent); the widget shows them as buttons, a click asks the same words with `intent` — the
+    router answers that intent (`turn(…, asked)`; only a domain's intent, never `other`).
 - **Privacy**: `Privacy.page(…, chat = days)` adds the assistant's section (purpose, what is kept, for how long,
   deletion in the chat, the processor) when the shop has the chat; none: the page as before.
 - Tests: `AssistantSuite` — the dialogue of okay-facts' design §12 end to end on `Memory` (the fake model replaying

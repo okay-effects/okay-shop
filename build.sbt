@@ -50,7 +50,8 @@ lazy val assistantData = Def.task {
   def chunks(f: String): String = IO.read(base / f).grouped(20000).map(c => "\"\"\"" + c + "\"\"\"").mkString(",\n    ")
   val file = (Compile / sourceManaged).value / "okay" / "shop" / "assistant" / "AssistantData.scala"
   IO.write(file, "package okay.shop.assistant\n\n/** written by the build from assistant/ */\nobject AssistantData:\n" +
-    Seq("intents" -> "intents.json", "answers" -> "answers.json", "lexicon" -> "lexicon.json").map { case (n, f) =>
+    Seq("intents" -> "intents.json", "answers" -> "answers.json", "lexicon" -> "lexicon.json",
+      "places" -> "places.json").map { case (n, f) =>
       s"  val $n: String = Vector(\n    ${chunks(f)}).mkString\n" }.mkString +
     // the probe and the combiner as bytes (okay-facts' `Weights`), in Base64: read in well under a millisecond
     Seq("probe" -> "probe.bin", "combiner" -> "combiner.bin").map { case (n, f) =>

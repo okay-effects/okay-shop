@@ -64,6 +64,9 @@ padding:4px 8px;font-size:13px;cursor:pointer}
 .okc-chip{display:inline;padding:1px 6px;border-radius:6px;background:#fff;border:1px solid #d1d5db;font-weight:600;
 color:inherit;font:inherit;font-weight:600;cursor:help}
 button.okc-chip{cursor:pointer;border-color:#2563eb;color:#1d4ed8}
+.okc-choices{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.okc-choice{border:1px solid #2563eb;color:#1d4ed8;background:#fff;border-radius:14px;padding:4px 10px;font:inherit;
+cursor:pointer}
 .okc-raw{display:none;margin-top:6px;font:12px/1.4 ui-monospace,monospace;color:#374151;background:#fff;
 border:1px dashed #9ca3af;border-radius:6px;padding:6px;white-space:pre-wrap}
 .okc-showraw .okc-raw{display:block}
@@ -142,6 +145,8 @@ background:#2563eb;color:#fff;font:inherit;font-weight:600;cursor:pointer;text-d
      * and visible, at most once a minute in a session — the host answers with an id kept here only (no cookie: none
      * until the visitor chats) and its object warm; the first open or message brings it back */
     var warm: Option[String] = None
+    /** the last question asked, in the user's words (a choice asks them again) */
+    var lastAsked = ""
     def warmUp(): Unit =
       val now = js.Date.now()
       val last = try Option(dom.window.sessionStorage.getItem("okc-warm")).flatMap(_.toDoubleOption).getOrElse(0.0)
@@ -186,6 +191,26 @@ background:#2563eb;color:#fff;font:inherit;font-weight:600;cursor:pointer;text-d
       chip.setAttribute("aria-label", s"$text — $tip")
       chip
 
+    /** a question sent: its words, the intent a choice asked for, what the conversation shows of it */
+    def ask(text: String, intent: Option[String], shown: String): Unit =
+      lastAsked = text
+      mine(shown)
+      send.setAttribute("disabled", "")
+      val waiting = el("div", "okc-msg okc-note", w.moment)
+      log.appendChild(waiting)
+      scroll()
+      val body = js.Dynamic.literal(text = text, focus = focus, lang = lang)
+      intent.foreach(i => body.updateDynamic("intent")(i))
+      warm.foreach(x => body.updateDynamic("warm")(x))
+      warm = None
+      call("", body).recover { case _ =>
+        js.Dynamic.literal(notice = w.failed) }.foreach { r =>
+        waiting.remove()
+        send.removeAttribute("disabled")
+        answer(r)
+        input.focus()
+      }
+
     def answer(a: js.Dynamic): Unit =
       val box = el("div", "okc-msg okc-bot")
       if !js.isUndefined(a.selectDynamic("answer")) && a.answer != null then
@@ -206,6 +231,18 @@ background:#2563eb;color:#fff;font:inherit;font-weight:600;cursor:pointer;text-d
           null: js.Function2[String, js.Any, js.Any], 1))
         box.appendChild(raw)
       else box.textContent = if js.isUndefined(a.selectDynamic("notice")) then w.failed else a.notice.toString
+      // a question asked back (round 4): its answers as buttons — a click asks the same words for the one chosen
+      if !js.isUndefined(a.selectDynamic("choices")) && a.choices != null then
+        val row = el("div", "okc-choices")
+        a.choices.asInstanceOf[js.Array[js.Dynamic]].foreach { c =>
+          val b = el("button", "okc-choice", c.label.asInstanceOf[String])
+          b.setAttribute("type", "button")
+          val asked = lastAsked
+          b.addEventListener("click", (_: dom.Event) => { row.remove(); ask(asked, Some(c.intent.asInstanceOf[String]),
+            c.label.asInstanceOf[String]) })
+          row.appendChild(b)
+        }
+        box.appendChild(row)
       log.appendChild(box)
       if !js.isUndefined(a.selectDynamic("cards")) then
         a.cards.asInstanceOf[js.Array[js.Dynamic]].foreach(showCard)
@@ -311,21 +348,7 @@ background:#2563eb;color:#fff;font:inherit;font-weight:600;cursor:pointer;text-d
       val text = input.value.trim
       if text.nonEmpty then
         input.value = ""
-        mine(text)
-        send.setAttribute("disabled", "")
-        val waiting = el("div", "okc-msg okc-note", w.moment)
-        log.appendChild(waiting)
-        scroll()
-        val body = js.Dynamic.literal(text = text, focus = focus, lang = lang)
-        warm.foreach(x => body.updateDynamic("warm")(x))
-        warm = None
-        call("", body).recover { case _ =>
-          js.Dynamic.literal(notice = w.failed) }.foreach { r =>
-          waiting.remove()
-          send.removeAttribute("disabled")
-          answer(r)
-          input.focus()
-        }
+        ask(text, None, text)
     })
     // the warming when the page is idle (a browser without `requestIdleCallback`: 1.5 s after the start)
     // (the window's property: a browser without it — Safari — gets undefined, never a ReferenceError)

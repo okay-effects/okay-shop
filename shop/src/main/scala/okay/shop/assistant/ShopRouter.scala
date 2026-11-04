@@ -3,8 +3,8 @@ package okay.shop.assistant
 import okay.effects.json.Json
 import okay.facts.{Answer, Audit, Bind, Card, Conversation, Ent, Facts, Filter, Found, Handles, Lang as FLang, Op,
   Query, Reply, Scope, Setup, Value, Words, Zone}
-import okay.facts.router.{Amount, Combiner, Intents, Lexicon, Near, Nearest, Probe, Route, Router, Spell, Table,
-  When}
+import okay.facts.router.{Amount, Combiner, Intents, Lexicon, Near, Nearest, Places, Probe, Route, Router, Spell,
+  Table, When}
 import okay.scala3.*
 import okay.scala3.std.Clock
 
@@ -55,6 +55,8 @@ object ShopRouter:
   lazy val combiner: Option[Combiner] = Option.when(AssistantData.combiner.nonEmpty)(Combiner.fromBytes(
     java.util.Base64.getDecoder.decode(AssistantData.combiner)))
   lazy val lexicon: Lexicon = Lexicon.parse(AssistantData.lexicon)
+  /** the gazetteer (assistant/places.json, okay-facts' `Places`): Polish places in any script and case */
+  lazy val places: Places = Places.parse(AssistantData.places)
 
   /** the lane: the router over the table, the answers, the threshold an answer needs (the combiner's, else round 2's
    * probe thresholds), a service's nearness and its lead over the next, the words of one thing a service's name is
@@ -76,7 +78,9 @@ object ShopRouter:
 
   /** WHAT THE ROUTER DID: answered (the conversation, the reply, its route and slots), or declined (why) */
   enum Decision:
-    case Answered(c: Conversation, reply: Reply, route: Route, slots: Map[String, String])
+    /** `choices`: a question asked back offers its answers (a label, the intent a click asks: round 4) */
+    case Answered(c: Conversation, reply: Reply, route: Route, slots: Map[String, String])(
+      val choices: Vector[(String, String)] = Vector.empty)
     case Declined(route: Route, why: String, slots: Map[String, String] = Map.empty)
 
   private final case class Built(handles: Handles, answer: Answer, cards: Vector[Card] = Vector.empty,
@@ -128,13 +132,15 @@ object ShopRouter:
   final case class Here(name: String, lat: Double, lon: Double, me: Boolean = false)
 
   def turn[R[_]](lane: Lane, s: Setup, c: Conversation, user: String, l: FLang, focus: String,
-                 here: Option[Here] = None, suggest: Option[String] = None)(using In[Facts, R],
-    In[Clock, R], In[Audit, R]): Decision ! R =
+                 here: Option[Here] = None, suggest: Option[String] = None, asked: Option[String] = None)(
+    using In[Facts, R], In[Clock, R], In[Audit, R]): Decision ! R =
     Clock.now[R].flatMap { now =>
       prefetch[R](focus, l).flatMap(_ => Bind.focused[R](s, c, focus, l)).flatMap { (h0, note) =>
         val ctx = Ctx(lane, c, h0, user, l, focus, Zone.date(now), here = here, suggest = suggest)
         features[R](ctx).flatMap { (prev, extras) =>
-          val route = lane.router.decide(lane.table, user, prev, extras)
+          // the intent a choice asked for (a click on a question asked back), else the decision, settled
+          val route = asked.filter(answerable).map(i => Route(i, "rule", 1.0, 1.0, "asked"))
+            .getOrElse(settle(lane.router.decide(lane.table, user, prev, extras), ctx, prev))
           // the day, the time, the price limit said: among the slots whatever the answer
           val said = Map[String, String]() ++ ctx.when.day.map("day" -> _) ++ ctx.when.at.map(a => "at" ->
             clock(a)) ++ ctx.when.from.map(a => "from" -> clock(a)) ++ ctx.when.until.map(a => "until" -> clock(a)) ++
@@ -146,12 +152,23 @@ object ShopRouter:
             guarded[R](g.intent.stripPrefix("guard."), ctx).flatMap { b =>
               Bind.authored[R](s, c, user, l, focus, b.handles, note, b.answer, b.cards, g.intent, 1.0).map {
                 case Left(vs) => Decision.Declined(g, "invalid: " + vs.map(_.code).mkString(","), b.slots)
-                case Right((c2, reply)) => Decision.Answered(c2, reply, g, b.slots)
+                case Right((c2, reply)) => Decision.Answered(c2, reply, g, b.slots)()
               }
             }
           else if route.by == "unknown" then pure(Decision.Declined(route, "no word known"))
           else if !route.confident(lane.minP, lane.minMargin) then pure(Decision.Declined(route, "not confident"))
           else if route.intent == "other" then pure(Decision.Declined(route, "other"))
+          // two intents too close to tell (round 4): asked back, never guessed
+          else if close(route, ctx, prev, extras).isDefined then
+            val (a, b) = close(route, ctx, prev, extras).get
+            val q = Answer(Vector.empty, ctx.a("clarify").replace("@a", ctx.a(s"choice.$a")).replace("@b",
+              ctx.a(s"choice.$b")))
+            val asking = route.copy(intent = "clarify")
+            Bind.authored[R](s, c, user, l, focus, ctx.h, note, q, Vector.empty, "clarify", route.p).map {
+              case Left(vs) => Decision.Declined(route, "invalid: " + vs.map(_.code).mkString(","), said)
+              case Right((c2, reply)) => Decision.Answered(c2, reply, asking, said)(Vector(a, b).map(i =>
+                ctx.a(s"choice.$i.label") -> i))
+            }
           else build[R](route.intent, ctx).flatMap {
             case Left((why, slots)) => pure(Decision.Declined(route, why, said ++ slots))
             case Right(b) =>
@@ -161,7 +178,7 @@ object ShopRouter:
                 route.p).map {
                 case Left(vs) => Decision.Declined(route, "invalid: " + vs.map(_.code).mkString(","),
                   said ++ b.slots)
-                case Right((c2, reply)) => Decision.Answered(c2, reply, answered, said ++ b.slots)
+                case Right((c2, reply)) => Decision.Answered(c2, reply, answered, said ++ b.slots)()
               }
           }
         }
@@ -240,6 +257,52 @@ object ShopRouter:
           Built(h, Answer(ps, parts.filter(_.nonEmpty).mkString(" ")), slots = Map("guard" -> cat) ++
             picked.map(f => "service" -> f.ent.key))
 
+  /** the intents a choice may ask for: a domain's, never `other` */
+  val answerable: Set[String] = Set("price", "slots", "book", "manage", "hours", "address", "area", "modes",
+    "masters", "reviews", "compare", "search", "human")
+
+  /** words of a contact: a phone, an e-mail, to call, to write — the shop's contact, not its address */
+  private val contactWords = okay.facts.router.Rules.compile("\\b(?:telefon\\w*|numer\\w*|nr\\b|zadzwoni\\w*|" +
+    "dzwoni\\w*|mail\\w*|e-mail\\w*|napisa\\w*|kontakt\\w*|phone|call|e-?mail|contact\\w*|write to|телефон\\w*|" +
+    "номер\\w*|подзвон\\w*|позвон\\w*|зателефон\\w*|пошт\\w*|почт\\w*|написа\\w*|контакт\\w*|imeil|meil)")
+
+  /** THE DECISION SETTLED BY EVIDENCE (round 4, okay-facts §17 "Round 4"), the confusion's systematic pairs: a place
+   * named — the area, not the ways of working; a booking's word — a booking, else the free times; a contact's words —
+   * the contact, not the address; a comparison with no comparative word and "alone" — the price; a short follow-up
+   * naming only a place after the area or the ways of working — the area */
+  private def settle(r: Route, ctx: Ctx, prev: Option[String]): Route =
+    if r.by != "combined" then r
+    else
+      val to = r.intent match
+        case "modes" if ctx.placeIds.nonEmpty => "area"
+        case "book" if !ctx.books => "slots"
+        case "slots" if ctx.books => "book"
+        case "address" if contactWords.test(ctx.user) => "human"
+        case "compare" if ctx.alone && okay.facts.Validator.comparative(ctx.user).isEmpty &&
+            !ctx.lane.router.hits(ctx.user)("compare") => "price"
+        case i if Set("price", "search", "other")(i) && ctx.placeIds.nonEmpty && prev.exists(Set("area", "modes")) &&
+            Words.split(ctx.user).count(_.length >= 3) <= 2 => "area"
+        case i => i
+      if to == r.intent then r else r.copy(intent = to, by = "combined", rule = s"settled ${r.intent}")
+
+  /** pairs the combiner confuses (round 4: the confusion over train/dev), asked back when its top two are both of a
+   * pair, the first under `clarifyAt` and the margin under `clarifyMargin` */
+  val confusable: Set[Set[String]] = Set(Set("hours", "slots"), Set("hours", "masters"), Set("masters", "price"),
+    Set("price", "compare"), Set("slots", "compare"), Set("slots", "book"), Set("address", "human"),
+    Set("hours", "price"))
+  val clarifyAt = 0.8
+  val clarifyMargin = 0.25
+
+  /** the two intents to ask back between, when the decision is that close */
+  private def close(r: Route, ctx: Ctx, prev: Option[String], extras: Map[String, Double]): Option[(String, String)] =
+    if r.by != "combined" || r.rule.startsWith("settled") || r.p >= clarifyAt then None
+    else ctx.lane.router.combiner.flatMap { c =>
+      val (x, _) = ctx.lane.router.evidence(ctx.lane.table, ctx.user, prev, extras, c.features)
+      c.ranked(x).take(2) match
+        case Vector((a, pa), (b, pb)) if pa - pb < clarifyMargin && confusable(Set(a, b)) => Some((a, b))
+        case _ => None
+    }
+
   /** the conversation's last question in the user's words */
   private def lastAsked(c: Conversation): Option[String] = c.history.reverseIterator.collectFirst {
     case j if j.field("role").contains(Json.Str("user")) => j.field("content").collect { case Json.Str(t) => t }
@@ -271,7 +334,8 @@ object ShopRouter:
     yield
       val near = services.flatMap(_._2.map(Nearest.lexical(ctx.user, _, ctx.lane.lexicon))).maxOption.getOrElse(0.0)
       val master = ms.exists((_, n) => n.nonEmpty && Spell.names(ctx.user, n))
-      val place = places.exists((_, ns) => ns.exists(Spell.names(ctx.user, _))) || ctx.namesPlace
+      val place = places.exists((_, ns) => ns.exists(Spell.names(ctx.user, _))) || ctx.placeIds.nonEmpty ||
+        ctx.namesPlace
       val shopNamed = namedShop(ctx, shops).isDefined
       prev -> Map("service" -> b(near >= 0.999), "serviceNear" -> near, "master" -> b(master),
         "person" -> b(!master && unknownPerson(ctx, services)), "place" -> b(place), "day" -> b(ctx.when.day.isDefined),
@@ -336,6 +400,12 @@ object ShopRouter:
         case _ => false
       }
     lazy val amount: Amount = Amount.of(user)
+    /** the places of the gazetteer the message names, by id (round 4: any script and case) */
+    lazy val placeIds: Set[String] = ShopRouter.places.find(user).flatMap(_.places.map(_.id)).toSet
+    /** whether the message names a place called `name` (a shop's city, an area's place): by the gazetteer's ids,
+     * else by its letters */
+    def namesPlaceCalled(name: String): Boolean =
+      ShopRouter.places.find(name).flatMap(_.places.map(_.id)).exists(placeIds) || Spell.names(user, name)
 
   private object Ctx:
     /** the prepositions a person's name follows */
@@ -415,15 +485,39 @@ object ShopRouter:
       case (f, s) +: rest if s >= 0.8 && rest.headOption.forall(_._2 < s - 0.2) => Some(f)
       case _ => None
 
+  /** the mall's own entity (the host's: its name, its contact), asked of on the mall's home (round 4) */
+  val mall: Ent = Ent("_mall", "Shop", "_mall")
+
+  /** a shop's own facts its rules name, in order: on the mall's home a shop named and one of them asked, that one */
+  private val ownFacts = Vector("hours", "address", "human", "modes", "area", "reviews")
+
   private def build[R[_]](intent: String, ctx: Ctx)(using In[Facts, R], In[Clock, R]): Out ! R =
-    // on the mall's home a shop named by its name: its own facts, as on its pages
-    if ctx.shopId.isEmpty && ctx.named.isEmpty && (ofShop(intent) || Set("price", "reviews", "compare")(intent)) then
+    // on the mall's home a shop named by its name: its own facts, as on its pages — a search or a price taken for
+    // what its rules say is asked of a shop (its hours, its address, its contact: round 4)
+    if ctx.shopId.isEmpty && ctx.named.isEmpty && (ofShop(intent) || Set("price", "reviews", "compare", "search")(
+        intent)) then
       named[R]("Shop", Scope.All, ctx.l, 100).flatMap(shops => namedShop(ctx, shops) match
         case Some(f) =>
           val (h, x) = ctx.h.issue(ShopFacts.schema.prefix(f.ent.cls), f.ent, f.version, f.visible)
-          build0[R](intent, ctx.copy(h = h, named = Some(x)))
+          val asked = if Set("search", "price")(intent) then
+            ownFacts.find(ctx.lane.router.hits(ctx.user)).getOrElse(intent) else intent
+          build0[R](asked, ctx.copy(h = h, named = Some(x))).map(_.map(b => b.copy(intent = b.intent.orElse(
+            Option.when(asked != intent)(asked)))))
+        case None if intent == "human" && ctx.shop.isEmpty => mallContact[R](ctx)
         case None => build0[R](intent, ctx))
     else build0[R](intent, ctx)
+
+  /** the mall's own contact on its home, when the host gives it (round 4); else as before */
+  private def mallContact[R[_]](ctx: Ctx)(using In[Facts, R], In[Clock, R]): Out ! R =
+    Facts.get[R](mall, "contact").flatMap(c => Facts.get[R](mall, "name").flatMap {
+      case Some(n) if c.isDefined =>
+        val (h, x) = ctx.h.issue(ShopFacts.schema.prefix("Shop"), mall, n.version, Vector("name" -> (n.value match
+          case Value.Text(t) => Value.in(t, ctx.l)
+          case _ => "")))
+        pure(ok(Built(h, Answer(Vector("n" -> s"name(${x.name})", "e" -> s"contact(${x.name})"), ctx.a("human.mall")),
+          intent = Some("human"))))
+      case _ => build0[R]("human", ctx)
+    })
 
   private def build0[R[_]](intent: String, ctx: Ctx)(using In[Facts, R], In[Clock, R]): Out ! R =
     // the shops compared by their reviews: a judgement across the mall, the model's
@@ -499,7 +593,7 @@ object ShopRouter:
           s"modes(${sh.name})"), ctx.a("area.none")))) else no("no area")).flatMap(o =>
           if o.isRight then pure(o) else missing(ctx, "area.unknown"))
       case true => named[R]("Place", Scope.Source(sh.ent.source), ctx.l).map { places =>
-          places.find((_, ns) => ns.exists(Spell.names(ctx.user, _))) match
+          places.find((_, ns) => ns.exists(ctx.namesPlaceCalled)) match
             case Some((f, _)) =>
               val (h, p) = issue(ctx.h, f)
               ok(Built(h, Answer(Vector("p" -> s"name($p)", "a" -> s"area(${sh.name})"), ctx.a("area.yes")),
@@ -507,7 +601,7 @@ object ShopRouter:
             case None =>
               // a place named that is not the area's: a capitalised word past the first, or one after a preposition
               val ws = ctx.user.split("\\s+").toVector.map(_.filter(_.isLetter)).filter(_.nonEmpty)
-              val named = ws.drop(1).exists(w => w.head.isUpper) || ws.sliding(2).exists {
+              val named = ctx.placeIds.nonEmpty || ws.drop(1).exists(w => w.head.isUpper) || ws.sliding(2).exists {
                 case Vector(a, b) => Set("do", "na", "w", "we", "to", "in", "в", "у", "до", "на").contains(
                   a.toLowerCase) && b.length >= 4
                 case _ => false
@@ -705,12 +799,19 @@ object ShopRouter:
               pure(ok(Built(h, Answer(Vector("b" -> s"name($b)", "pb" -> s"price($b)", "a" -> s"name(${a.name})",
                 "pa" -> s"price(${a.name})", "c" -> s"price($b) < price(${a.name})"), ctx.a("compare.pair")),
                 slots = Map("service" -> cands(i.toInt)._1.ent.key))))
-            case _ => Facts.get[R](a.ent, "price").flatMap {
-                case None => pure(no("no price to compare"))
-                case Some(pa) => Facts.find[R](Query("Service", Value.in(a.visible.collectFirst { case ("name", n) =>
-                    Map(ctx.l -> n) }.getOrElse(Map.empty), ctx.l), Vector(Filter("price", Op.Lt, pa.value)),
-                    Scope.All, 5, ctx.l)).map(_.filterNot(_.ent == a.ent)).flatMap { cheaper =>
-                  if cheaper.isEmpty then pure(ok(Built(ctx.h, Answer(Vector("a" -> s"name(${a.name})",
+            // elsewhere in the mall: services of the same kind only (round 4) — none of it: said so
+            case _ => Facts.get[R](a.ent, "price").flatMap(p => Facts.get[R](a.ent, "kind").map(p -> _)).flatMap {
+                case (None, _) => pure(no("no price to compare"))
+                case (Some(_), None) => pure(ok(Built(ctx.h, Answer(Vector("a" -> s"name(${a.name})",
+                    "pa" -> s"price(${a.name})"), ctx.a("compare.none.kind")), slots = Map("service" -> a.ent.key))))
+                case (Some(pa), Some(kind)) => Facts.find[R](Query("Service", filters = Vector(Filter("kind", Op.Eq,
+                    kind.value)), scope = Scope.All, limit = 20, lang = ctx.l)).map(_.filterNot(_.ent == a.ent))
+                  .flatMap { same => seq[R, Found, Option[okay.facts.Fact]](same)(f => Facts.get[R](f.ent, "price"))
+                    .map(ps => same.zip(ps).collect { case (f, Some(p)) if okay.facts.Value.compare(p.value, pa.value)
+                      .exists(_ < 0) => f }.take(5)).map(same.isEmpty -> _) }.flatMap { (none, cheaper) =>
+                  if none then pure(ok(Built(ctx.h, Answer(Vector("a" -> s"name(${a.name})", "pa" ->
+                    s"price(${a.name})"), ctx.a("compare.none.kind")), slots = Map("service" -> a.ent.key))))
+                  else if cheaper.isEmpty then pure(ok(Built(ctx.h, Answer(Vector("a" -> s"name(${a.name})",
                     "pa" -> s"price(${a.name})"), ctx.a("compare.none")), slots = Map("service" -> a.ent.key))))
                   else
                     val (h, vs) = issueAll(ctx.h, cheaper)
@@ -728,9 +829,18 @@ object ShopRouter:
           val best = ranked.headOption.map(_._2).getOrElse(0.0)
           val near = ranked.filter(r => r._2 >= ctx.lane.serviceAt && r._2 >= best - 0.15).take(5)
             .map(r => cands(r._1.toInt)._1)
-          seq[R, Found, Boolean](near)(f => has[R](f.ent, "price")).map { priced =>
-            val withPrice = near.zip(priced).collect { case (f, true) => f }
+          // of one kind only (round 4): the nearest one's kind; across shops, none of a kind: not compared
+          seq[R, Found, (Boolean, Option[okay.facts.Fact])](near)(f => has[R](f.ent, "price").flatMap(p =>
+            Facts.get[R](f.ent, "kind").map(p -> _))).map { info =>
+            val top = info.headOption.flatMap(_._2).map(_.value)
+            val withPrice = near.zip(info).collect { case (f, (true, k)) if near.headOption.contains(f) ||
+              (top.isDefined && k.exists(x => okay.facts.Value.same(x.value, top.get))) ||
+              (near.headOption.exists(_.ent.source == f.ent.source) && top.isEmpty) => f }
             if withPrice.isEmpty then no("nothing to compare")
+            else if withPrice.size == 1 then
+              val (h, v) = issue(ctx.h, withPrice.head)
+              ok(Built(h, Answer(Vector("a" -> s"name($v)", "pa" -> s"price($v)"), ctx.a("compare.none.kind")),
+                slots = Map("service" -> s"${withPrice.head.ent.source}/${withPrice.head.ent.key}")))
             else
               val (h, vs) = issueAll(ctx.h, withPrice)
               val low = s"argmin(price, ${vs.mkString(", ")})"
@@ -790,12 +900,14 @@ object ShopRouter:
     val head = if dist.isEmpty then "" else if ctx.here.exists(_.me) then ".near.me" else ".near"
     locally {
       def city(f: Found): String = f.visible.collectFirst { case ("city", c) => c }.getOrElse("")
-      val cities = shops.map((f, _) => city(f)).filter(_.nonEmpty).distinct.filter(Spell.names(ctx.user, _))
+      val cities = shops.map((f, _) => city(f)).filter(_.nonEmpty).distinct.filter(ctx.namesPlaceCalled)
+      // a city of the gazetteer named where no shop of the mall is (round 4): none found, never another city's
+      val elsewhere = cities.isEmpty && ShopRouter.places.find(ctx.user).exists(_.places.exists(_.kind == "city"))
       val inCity = shops.filter((f, _) => cities.isEmpty || cities.contains(city(f))).map(_._1.ent.source).toSet
       val slots0 = Map[String, String]() ++ cities.headOption.map("city" -> _) ++
         ctx.amount.max.map(m => "max" -> (m / 100).toString) ++ ctx.when.day.map("day" -> _)
-      if cities.nonEmpty && inCity.isEmpty then pure(ok(Built(ctx.h, Answer(Vector.empty, ctx.a("search.none")),
-        slots = slots0)))
+      if (cities.nonEmpty && inCity.isEmpty) || elsewhere then pure(ok(Built(ctx.h, Answer(Vector.empty,
+        ctx.a("search.none")), slots = slots0)))
       else named[R]("Service", Scope.All, ctx.l, 200).flatMap { all =>
         val cands = all.filter(x => inCity(x._1.ent.source))
         val ranked = ctx.rank(cands.zipWithIndex.map((x, i) =>

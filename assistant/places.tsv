@@ -1,0 +1,406 @@
+# Cities: every Polish city of over 20 000 people (GUS, "Powierzchnia i ludność w przekroju terytorialnym", as of 1 January 2021, the administrative division of 1 January 2023 — the table of pl.wikipedia.org "Dane statystyczne o miastach w Polsce"), their names as the TERYT register (SIMC) writes them.
+# Districts: the official auxiliary units (dzielnice, osiedla) of the 10 largest cities as their statutes name them (Wrocław and Poznań: the historical districts; Szczecin: its 4 dzielnice), plus the districts the demo shops name (Kazimierz, Nadodrze, Wrzeszcz). Exonyms of the large cities in Ukrainian, Russian and English by hand; every other Cyrillic form generated (okay-facts PlaceForms).
+# name	kind	city	uk	ru	en	common	more
+Warszawa	city		Варшава	Варшава	Warsaw		
+Kraków	city		Краків	Краков	Krakow		Cracow
+Łódź	city		Лодзь	Лодзь	Lodz		
+Wrocław	city		Вроцлав	Вроцлав	Wroclaw		
+Poznań	city		Познань	Познань	Poznan		
+Gdańsk	city		Гданськ	Гданьск	Gdansk		
+Szczecin	city		Щецин	Щецин	Szczecin		
+Bydgoszcz	city		Бидгощ	Быдгощ	Bydgoszcz		
+Lublin	city		Люблін	Люблин	Lublin		
+Białystok	city		Білосток	Белосток	Bialystok		
+Katowice	city		Катовиці	Катовице	Katowice		
+Gdynia	city		Гдиня	Гдыня	Gdynia		
+Częstochowa	city		Ченстохова	Ченстохова	Czestochowa		
+Radom	city		Радом	Радом	Radom		
+Toruń	city		Торунь	Торунь	Torun		
+Rzeszów	city		Ряшів	Жешув	Rzeszow		
+Sosnowiec	city						
+Kielce	city		Кельце	Кельце	Kielce		
+Gliwice	city		Гливиці	Гливице	Gliwice		
+Olsztyn	city		Ольштин	Ольштын	Olsztyn		
+Zabrze	city						
+Bielsko-Biała	city						
+Bytom	city						
+Zielona Góra	city		Зелена Гура	Зелёна-Гура	Zielona Gora		
+Rybnik	city						
+Ruda Śląska	city						
+Opole	city		Ополе	Ополе	Opole		
+Tychy	city						
+Gorzów Wielkopolski	city						
+Elbląg	city						
+Dąbrowa Górnicza	city						
+Płock	city						
+Wałbrzych	city						
+Włocławek	city						
+Tarnów	city						
+Chorzów	city						
+Koszalin	city						
+Kalisz	city						
+Legnica	city						
+Grudziądz	city						
+Jaworzno	city						
+Słupsk	city						
+Jastrzębie-Zdrój	city						
+Nowy Sącz	city						
+Jelenia Góra	city						
+Siedlce	city						
+Mysłowice	city						
+Konin	city						
+Piła	city						
+Piotrków Trybunalski	city						
+Lubin	city						
+Inowrocław	city						
+Ostrów Wielkopolski	city						
+Suwałki	city						
+Stargard	city						
+Gniezno	city						
+Ostrowiec Świętokrzyski	city						
+Siemianowice Śląskie	city						
+Głogów	city						
+Pabianice	city						
+Leszno	city						
+Żory	city						
+Zamość	city		Замостя	Замосць	Zamosc		
+Pruszków	city						
+Łomża	city						
+Ełk	city						
+Tarnowskie Góry	city						
+Tomaszów Mazowiecki	city						
+Chełm	city		Холм	Хелм	Chelm		
+Mielec	city						
+Kędzierzyn-Koźle	city						
+Przemyśl	city		Перемишль	Перемышль	Przemysl		
+Stalowa Wola	city						
+Tczew	city						
+Biała Podlaska	city						
+Bełchatów	city						
+Świdnica	city						
+Będzin	city						
+Zgierz	city						
+Piekary Śląskie	city						
+Racibórz	city						
+Legionowo	city						
+Ostrołęka	city						
+Rumia	city						
+Świętochłowice	city						
+Wejherowo	city						
+Zawiercie	city						
+Piaseczno	city						
+Skierniewice	city						
+Starachowice	city						
+Wodzisław Śląski	city						
+Starogard Gdański	city						
+Puławy	city						
+Tarnobrzeg	city						
+Kołobrzeg	city						
+Krosno	city						
+Radomsko	city						
+Dębica	city						
+Otwock	city						
+Skarżysko-Kamienna	city						
+Ciechanów	city						
+Nysa	city						
+Kutno	city						
+Sieradz	city						
+Zduńska Wola	city						
+Mikołów	city						
+Świnoujście	city						
+Mińsk Mazowiecki	city						
+Szczecinek	city						
+Chojnice	city						
+Żyrardów	city						
+Świdnik	city						
+Ząbki	city						
+Bolesławiec	city						
+Kwidzyn	city						
+Nowa Sól	city						
+Malbork	city						
+Knurów	city						
+Oświęcim	city						
+Jarosław	city						
+Żary	city						
+Sanok	city						
+Oleśnica	city						
+Wołomin	city						
+Marki	city						
+Chrzanów	city						
+Sochaczew	city						
+Czechowice-Dziedzice	city						
+Sopot	city		Сопот	Сопот	Sopot		
+Brzeg	city						
+Lębork	city						
+Olkusz	city						
+Jasło	city						
+Cieszyn	city						
+Kraśnik	city						
+Nowy Targ	city						
+Iława	city						
+Oława	city						
+Dzierżoniów	city						
+Ostróda	city						
+Grodzisk Mazowiecki	city						
+Police	city						
+Luboń	city						
+Pruszcz Gdański	city						
+Myszków	city						
+Mława	city						
+Czeladź	city						
+Września	city						
+Żywiec	city						
+Augustów	city						
+Swarzędz	city						
+Zgorzelec	city						
+Bochnia	city						
+Bielawa	city						
+Łuków	city						
+Śrem	city						
+Giżycko	city						
+Brodnica	city						
+Krotoszyn	city						
+Nowy Dwór Mazowiecki	city						
+Łowicz	city						
+Czerwionka-Leszczyny	city						
+Wyszków	city						
+Gorlice	city						
+Zakopane	city						
+Kętrzyn	city						
+Reda	city						
+Jarocin	city						
+Turek	city						
+Kłodzko	city						
+Biłgoraj	city						
+Pszczyna	city						
+Wągrowiec	city						
+Świecie	city						
+Żagań	city						
+Kobyłka	city						
+Bielsk Podlaski	city						
+Wałcz	city						
+Skawina	city						
+Wieliczka	city						
+Białogard	city						
+Kościerzyna	city						
+Kościan	city						
+Środa Wielkopolska	city					yes	
+Lubliniec	city						
+Kluczbork	city						
+Sandomierz	city						
+Bartoszyce	city						
+Szczytno	city						
+Świebodzice	city						
+Piastów	city						
+Jawor	city						
+Polkowice	city						
+Ostrów Mazowiecka	city						
+Łaziska Górne	city						
+Goleniów	city						
+Płońsk	city						
+Zambrów	city						
+Wieluń	city						
+Aleksandrów Łódzki	city						
+Grajewo	city						
+Nowa Ruda	city						
+Lubartów	city						
+Świebodzin	city						
+Rydułtowy	city						
+Mrągowo	city						
+Orzesze	city						
+Koło	city						
+Działdowo	city						
+Gryfino	city						
+Opoczno	city						
+Józefów	city						
+Lubań	city						
+Prudnik	city						
+Hajnówka	city						
+Gostyń	city						
+Rawicz	city						
+Bemowo	district	Warszawa					
+Białołęka	district	Warszawa					
+Bielany	district	Warszawa					
+Mokotów	district	Warszawa					
+Ochota	district	Warszawa				yes	
+Praga-Południe	district	Warszawa					
+Praga-Północ	district	Warszawa					
+Rembertów	district	Warszawa					
+Śródmieście	district	Warszawa					
+Targówek	district	Warszawa					
+Ursus	district	Warszawa					
+Ursynów	district	Warszawa					
+Wawer	district	Warszawa					
+Wesoła	district	Warszawa				yes	
+Wilanów	district	Warszawa					
+Włochy	district	Warszawa				yes	
+Wola	district	Warszawa				yes	
+Żoliborz	district	Warszawa					
+Stare Miasto	district	Kraków					
+Grzegórzki	district	Kraków					
+Prądnik Czerwony	district	Kraków					
+Prądnik Biały	district	Kraków					
+Krowodrza	district	Kraków					
+Bronowice	district	Kraków					
+Zwierzyniec	district	Kraków				yes	
+Dębniki	district	Kraków					
+Łagiewniki-Borek Fałęcki	district	Kraków					
+Swoszowice	district	Kraków					
+Podgórze Duchackie	district	Kraków					
+Bieżanów-Prokocim	district	Kraków					
+Podgórze	district	Kraków					
+Czyżyny	district	Kraków					
+Mistrzejowice	district	Kraków					
+Bieńczyce	district	Kraków					
+Wzgórza Krzesławickie	district	Kraków					
+Nowa Huta	district	Kraków					
+Kazimierz	district	Kraków					
+Bałuty	district	Łódź					
+Górna	district	Łódź				yes	
+Polesie	district	Łódź					
+Śródmieście	district	Łódź					
+Widzew	district	Łódź					
+Stare Miasto	district	Wrocław					
+Śródmieście	district	Wrocław					
+Krzyki	district	Wrocław				yes	
+Fabryczna	district	Wrocław				yes	
+Psie Pole	district	Wrocław					
+Nadodrze	district	Wrocław					
+Stare Miasto	district	Poznań					
+Nowe Miasto	district	Poznań					
+Jeżyce	district	Poznań					
+Grunwald	district	Poznań					
+Wilda	district	Poznań					
+Aniołki	district	Gdańsk				yes	
+Brętowo	district	Gdańsk					
+Brzeźno	district	Gdańsk					
+Chełm	district	Gdańsk					
+Jasień	district	Gdańsk					
+Kokoszki	district	Gdańsk					
+Krakowiec-Górki Zachodnie	district	Gdańsk					
+Letnica	district	Gdańsk					
+Matarnia	district	Gdańsk					
+Młyniska	district	Gdańsk					
+Nowy Port	district	Gdańsk					
+Oliwa	district	Gdańsk				yes	
+Olszynka	district	Gdańsk					
+Orunia-Św. Wojciech-Lipce	district	Gdańsk					
+Osowa	district	Gdańsk					
+Piecki-Migowo	district	Gdańsk					
+Przeróbka	district	Gdańsk				yes	
+Przymorze Małe	district	Gdańsk					
+Przymorze Wielkie	district	Gdańsk					
+Rudniki	district	Gdańsk					
+Siedlce	district	Gdańsk					
+Stogi	district	Gdańsk				yes	
+Strzyża	district	Gdańsk					
+Suchanino	district	Gdańsk					
+Śródmieście	district	Gdańsk					
+Ujeścisko-Łostowice	district	Gdańsk					
+VII Dwór	district	Gdańsk					
+Wrzeszcz Dolny	district	Gdańsk					
+Wrzeszcz Górny	district	Gdańsk					
+Wyspa Sobieszewska	district	Gdańsk					
+Wzgórze Mickiewicza	district	Gdańsk					
+Zaspa-Młyniec	district	Gdańsk					
+Zaspa-Rozstaje	district	Gdańsk					
+Żabianka-Wejhera-Jelitkowo-Tysiąclecia	district	Gdańsk					
+Orunia Górna-Gdańsk Południe	district	Gdańsk					
+Wrzeszcz	district	Gdańsk					
+Śródmieście	district	Szczecin					
+Północ	district	Szczecin				yes	
+Zachód	district	Szczecin				yes	
+Prawobrzeże	district	Szczecin					
+Bartodzieje	district	Bydgoszcz					
+Bielawy	district	Bydgoszcz					
+Błonie	district	Bydgoszcz				yes	
+Bocianowo	district	Bydgoszcz					
+Śródmieście	district	Bydgoszcz					
+Stare Miasto	district	Bydgoszcz					
+Brdyujście	district	Bydgoszcz					
+Siernieczek	district	Bydgoszcz					
+Czyżkówko	district	Bydgoszcz					
+Flisy	district	Bydgoszcz				yes	
+Glinki	district	Bydgoszcz				yes	
+Rupienica	district	Bydgoszcz					
+Górzyskowo	district	Bydgoszcz					
+Jachcice	district	Bydgoszcz					
+Kapuściska	district	Bydgoszcz					
+Leśne	district	Bydgoszcz				yes	
+Łęgnowo	district	Bydgoszcz					
+Łęgnowo Wieś	district	Bydgoszcz					
+Miedzyń	district	Bydgoszcz					
+Prądy	district	Bydgoszcz				yes	
+Fordon	district	Bydgoszcz					
+Okole	district	Bydgoszcz				yes	
+Osowa Góra	district	Bydgoszcz					
+Piaski	district	Bydgoszcz				yes	
+Smukała	district	Bydgoszcz					
+Opławiec	district	Bydgoszcz					
+Janowo	district	Bydgoszcz					
+Stary Fordon	district	Bydgoszcz					
+Szwederowo	district	Bydgoszcz					
+Tatrzańskie	district	Bydgoszcz				yes	
+Wilczak	district	Bydgoszcz				yes	
+Jary	district	Bydgoszcz				yes	
+Wyżyny	district	Bydgoszcz				yes	
+Wzgórze Wolności	district	Bydgoszcz					
+Zimne Wody	district	Bydgoszcz					
+Czersko Polskie	district	Bydgoszcz					
+Abramowice	district	Lublin					
+Bronowice	district	Lublin					
+Czechów Południowy	district	Lublin					
+Czechów Północny	district	Lublin					
+Czuby Południowe	district	Lublin					
+Czuby Północne	district	Lublin					
+Dziesiąta	district	Lublin				yes	
+Felin	district	Lublin					
+Głusk	district	Lublin					
+Hajdów-Zadębie	district	Lublin					
+Kalinowszczyzna	district	Lublin					
+Konstantynów	district	Lublin					
+Kośminek	district	Lublin					
+Ponikwoda	district	Lublin					
+Rury	district	Lublin				yes	
+Sławin	district	Lublin					
+Sławinek	district	Lublin					
+Stare Miasto	district	Lublin					
+Szerokie	district	Lublin				yes	
+Śródmieście	district	Lublin					
+Tatary	district	Lublin				yes	
+Węglin Południowy	district	Lublin					
+Węglin Północny	district	Lublin					
+Wieniawa	district	Lublin					
+Wrotków	district	Lublin					
+Za Cukrownią	district	Lublin					
+Zemborzyce	district	Lublin					
+Czechów	district	Lublin					
+Centrum	district	Białystok				yes	
+Białostoczek	district	Białystok					
+Sienkiewicza	district	Białystok				yes	
+Bojary	district	Białystok					
+Piaski	district	Białystok				yes	
+Przydworcowe	district	Białystok				yes	
+Młodych	district	Białystok				yes	
+Antoniuk	district	Białystok					
+Jaroszówka	district	Białystok					
+Wygoda	district	Białystok				yes	
+Piasta I	district	Białystok					
+Piasta II	district	Białystok					
+Skorupy	district	Białystok				yes	
+Mickiewicza	district	Białystok				yes	
+Dojlidy	district	Białystok					
+Bema	district	Białystok				yes	
+Kawaleryjskie	district	Białystok				yes	
+Nowe Miasto	district	Białystok					
+Zielone Wzgórza	district	Białystok					
+Starosielce	district	Białystok					
+Słoneczny Stok	district	Białystok					
+Leśna Dolina	district	Białystok					
+Wysoki Stoczek	district	Białystok					
+Dziesięciny I	district	Białystok					
+Dziesięciny II	district	Białystok					
+Bacieczki	district	Białystok					
+Zawady	district	Białystok				yes	
+Dojlidy Górne	district	Białystok					
+Bagnówka	district	Białystok					

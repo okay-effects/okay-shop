@@ -11,8 +11,10 @@ import okay.shop.html.Conf
 import okay.shop.model.*
 
 /** what the host knows of a shop that its content does not say: its category in the four languages (the mall's
- * niche), its city (the mall's directory); the version of its config */
-final case class About(category: Map[FLang, String] = Map.empty, city: String = "", version: Long = 0L)
+ * niche), its city (the mall's directory); the version of its config; each service's kind by its key (round 4: what
+ * makes two shops' services comparable — okay-mall's catalogue: `niche/template`) */
+final case class About(category: Map[FLang, String] = Map.empty, city: String = "", version: Long = 0L,
+                       kinds: Map[String, String] = Map.empty)
 
 /**
  * THE SHOP'S FACTS (specs/shop.md "The assistant"): the schema — schema.org's words with the overlay's keys and
@@ -39,7 +41,9 @@ object ShopFacts:
       about = "the place the client asked to be near"),
     Cls("Service", "v", Vector(
       Prop("name", Type.Text, visible = true), Prop("description", Type.Text, visible = true),
-      Prop("price", Type.Money, about = "what it costs"), Prop("duration", Type.Duration, about = "how long"),
+      Prop("price", Type.Money, about = "what it costs", comparableBy = "kind"),
+      Prop("duration", Type.Duration, about = "how long"),
+      Prop("kind", Type.Text, about = "what kind of service it is: two shops' prices compare only of one kind"),
       Prop("bookable", Type.Bool, about = "booked online for a time"), Prop("shop", Type.Entity("Shop")),
       Prop("masters", Type.Entity("Master"), functional = false, about = "who does it")),
       key = Vector("shop", "key"), iri = "https://schema.org/Service", about = "a service, with its price"),
@@ -117,6 +121,7 @@ object ShopFacts:
         "description" -> text(o.description),
         "bookable" -> Value.Bool(site.books(o)), "shop" -> Value.Entity(shop)) ++
         Option.when(o.priced && !o.quote)("price" -> Value.Money(o.price, "PLN")) ++
+        about.kinds.get(o.key).map(k => "kind" -> Value.text(k)) ++
         Option.when(o.minutes > 0)("duration" -> Value.Minutes(o.minutes)) ++
         Option.when(masters.nonEmpty)("masters" -> Value.Many(masters.map(m => Value.Entity(Ent(source, "Master",
           m.key))))), v)

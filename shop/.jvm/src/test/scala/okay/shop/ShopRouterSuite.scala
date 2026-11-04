@@ -262,3 +262,35 @@ class ShopRouterSuite extends munit.FunSuite:
       turn(w, t) match
         case Decision.Answered(_, _, route, _) => assertEquals(route.intent, "manage", t)
         case other => fail(s"$t: ${said(other)}")
+
+  def routed(d: Decision): (String, String) = d match
+    case Decision.Answered(_, _, route, _) => (route.intent, said(d))
+    case Decision.Declined(route, why, _) => (s"declined:${route.intent}", why)
+
+  test("round 4: a place in any script and case is the area, not the ways of working; a place not served said so"):
+    val w = World("crew")
+    for (t, l) <- Seq("в Пясечно приїжджаєте?" -> FLang.uk, "в Пясечно приезжаете?" -> FLang.ru,
+        "dojeżdżacie do Piaseczna?" -> FLang.pl) do
+      val (i, a) = routed(turn(w, t, l))
+      assertEquals(i, "area", s"$t: $a")
+      assert(a.contains("Piaseczno"), s"$t: $a")
+    val (i, a) = routed(turn(w, "dojeżdżacie do Sopotu?"))
+    assertEquals(i, "area")
+    assert(!a.contains("Sopot") && a.contains("Warszawa"), a)
+
+  test("round 4: the confusion's pairs settled by evidence — a booking's word, a contact's words"):
+    val w = World("crew")
+    assertEquals(routed(turn(w, "jaki macie numer telefonu?"))._1, "human")
+    assertEquals(routed(turn(w, "chcę napisać maila, jaki adres?"))._1, "human")
+    assertEquals(routed(turn(w, "jaki jest wasz adres?"))._1, "address")
+
+  test("round 4: a choice asked for answers that intent; every clarifying text and label is authored"):
+    val w = World("crew")
+    val program = Audit.ignore(ShopRouter.turn[A](lane, setup, Conversation(), "strzyżenie w sobotę?", FLang.pl,
+      "shop:crew", asked = Some("hours")))
+    val d = run(w.storage.handler(StoreDurable.run(Clock.virtual(w.now)(ShopFacts.facts(w.conf, "crew", About())(
+      program)))))._2
+    assertEquals(routed(d)._1, "hours")
+    for i <- Vector("hours", "slots", "masters", "price", "compare", "book", "address", "human"); l <- FLang.values do
+      val q = ShopRouter.answers("clarify", l).replace("@a", ShopRouter.answers(s"choice.$i", l))
+      assert(!q.exists(_.isDigit) && ShopRouter.answers(s"choice.$i.label", l).nonEmpty, s"$i $l")

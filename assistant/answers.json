@@ -672,6 +672,120 @@
    "uk": "За даними закладу можна оплатити: {m}. Про інші способи оплати запитайте заклад.",
    "ru": "По данным заведения можно оплатить: {m}. О других способах оплаты спросите заведение.",
    "en": "By the shop's data you can pay by: {m}. Ask the shop about other ways of paying."
+  },
+  "compare.none.kind": {
+   "pl": "{a} kosztuje tu {pa}; w galerii nie ma takiej samej usługi do porównania.",
+   "uk": "{a} тут коштує {pa}; у галереї немає такої самої послуги для порівняння.",
+   "ru": "{a} здесь стоит {pa}; в галерее нет такой же услуги для сравнения.",
+   "en": "{a} costs {pa} here; the mall has no other shop with the same service to compare."
+  },
+  "human.mall": {
+   "pl": "Do galerii {n} napiszesz tutaj: {e}.",
+   "uk": "Написати галереї {n} можна сюди: {e}.",
+   "ru": "Написать галерее {n} можно сюда: {e}.",
+   "en": "You can write to the mall {n} here: {e}."
+  },
+  "clarify": {
+   "pl": "Chodzi o @a czy o @b?",
+   "uk": "Йдеться про @a чи про @b?",
+   "ru": "Речь о @a или о @b?",
+   "en": "Do you mean @a or @b?"
+  },
+  "choice.hours": {
+   "pl": "godziny otwarcia",
+   "uk": "години роботи",
+   "ru": "часах работы",
+   "en": "the opening hours"
+  },
+  "choice.hours.label": {
+   "pl": "Godziny otwarcia",
+   "uk": "Години роботи",
+   "ru": "Часы работы",
+   "en": "Opening hours"
+  },
+  "choice.slots": {
+   "pl": "wolne terminy",
+   "uk": "вільний час",
+   "ru": "свободном времени",
+   "en": "free times"
+  },
+  "choice.slots.label": {
+   "pl": "Wolne terminy",
+   "uk": "Вільний час",
+   "ru": "Свободное время",
+   "en": "Free times"
+  },
+  "choice.masters": {
+   "pl": "to, kto wykonuje usługę",
+   "uk": "те, хто виконує послугу",
+   "ru": "том, кто выполняет услугу",
+   "en": "who does the service"
+  },
+  "choice.masters.label": {
+   "pl": "Kto wykonuje",
+   "uk": "Хто виконує",
+   "ru": "Кто выполняет",
+   "en": "Who does it"
+  },
+  "choice.price": {
+   "pl": "cenę",
+   "uk": "ціну",
+   "ru": "цене",
+   "en": "the price"
+  },
+  "choice.price.label": {
+   "pl": "Cena",
+   "uk": "Ціна",
+   "ru": "Цена",
+   "en": "The price"
+  },
+  "choice.compare": {
+   "pl": "porównanie cen",
+   "uk": "порівняння цін",
+   "ru": "сравнении цен",
+   "en": "a comparison of prices"
+  },
+  "choice.compare.label": {
+   "pl": "Porównanie cen",
+   "uk": "Порівняння цін",
+   "ru": "Сравнение цен",
+   "en": "Compare prices"
+  },
+  "choice.book": {
+   "pl": "rezerwację",
+   "uk": "запис",
+   "ru": "записи",
+   "en": "booking"
+  },
+  "choice.book.label": {
+   "pl": "Rezerwacja",
+   "uk": "Запис",
+   "ru": "Запись",
+   "en": "Book"
+  },
+  "choice.address": {
+   "pl": "adres",
+   "uk": "адресу",
+   "ru": "адресе",
+   "en": "the address"
+  },
+  "choice.address.label": {
+   "pl": "Adres",
+   "uk": "Адреса",
+   "ru": "Адрес",
+   "en": "The address"
+  },
+  "choice.human": {
+   "pl": "kontakt",
+   "uk": "контакт",
+   "ru": "контакте",
+   "en": "the contact"
+  },
+  "choice.human.label": {
+   "pl": "Kontakt",
+   "uk": "Контакт",
+   "ru": "Контакт",
+   "en": "Contact"
   }
  }
 }
