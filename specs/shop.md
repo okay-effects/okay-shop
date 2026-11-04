@@ -796,7 +796,12 @@ expressions over them; okay-facts renders every value from the shop's data. Pack
   said, its address when it has one; `health` no medical advice — the person doing the service or a doctor;
   `advice` the person doing the service, the service named (its price) or a few services, the contact. The contact
   is the shop's e-mail, else its page. On the mall's home (`guard.<category>.mall`) the same without a shop's values.
-  `guard.cooldown`: the host's fixed answer while a conversation cools down (`ShopRouter.fixed`). The patterns are
+  `guard.cooldown`: the host's fixed answer while a conversation cools down (`ShopRouter.fixed`). The guard is its
+  own first step (operator, 2026-11-05; okay-facts §17): `ShopRouter.guardTurn` needs no table and no router (a
+  service its answer names found by its words alone, okay-facts' `Table.empty`), so a host runs it before its router
+  lane and its model lane in every configuration — the router off, its table missing — with the same answers;
+  `turn` runs it first too. Its data is bundled with the code; `ShopRouter.guardReady` says whether it is whole
+  (every category's patterns, its answers in every language) — when not, a host fails closed. The patterns are
   narrow: a false refusal has no model behind it — their false positives counted on okay-mall's every set and the
   intents' phrasings; the safe rules
   (`safe`: whole-message greetings, thanks, "help") answered at once; everything else by the combiner (`combiner.bin`)

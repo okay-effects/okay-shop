@@ -3,8 +3,8 @@ package okay.shop.assistant
 import okay.effects.json.Json
 import okay.facts.{Answer, Audit, Bind, Card, Conversation, Ent, Facts, Filter, Found, Handles, Lang as FLang, Op,
   Query, Reply, Scope, Setup, Value, Words, Zone}
-import okay.facts.router.{Amount, Combiner, Intents, Lexicon, Near, Nearest, Places, Probe, Route, Router, Spell,
-  Table, When}
+import okay.facts.router.{Amount, Combiner, Guard, Intents, Lexicon, Near, Nearest, Places, Probe, Route, Router,
+  Spell, Table, When}
 import okay.scala3.*
 import okay.scala3.std.Clock
 
@@ -45,11 +45,25 @@ object Answers:
 object ShopRouter:
   lazy val intents = Intents.parse(AssistantData.intents)
   /** the guard's patterns by category, in order (okay-facts §17 "The turn decision") */
-  lazy val guard: Vector[(String, String)] = Intents.guard(AssistantData.intents)
+  lazy val guard: Guard = Guard.parse(AssistantData.intents)
   /** the categories the guard answers; another (a bare pattern's `guard`) is answered as out of domain */
   val guardCategories: Vector[String] = Vector("injection", "others", "bargain", "health", "payments", "amenities",
     "advice", "domain")
   lazy val answers: Answers = Answers.parse(AssistantData.answers)
+
+  /** THE GUARD'S DATA WHOLE (bundled with the code: `intents.json`'s guard, `answers.json`'s `guard.*`): every
+   * category's patterns, its answers on a shop and on the mall's home, the contact's and the cool-down's, in every
+   * language — else why not (a host then fails closed: no turn to the model unguarded; okay-mall) */
+  lazy val guardReady: Either[String, Guard] = scala.util.Try {
+    val missing = guardCategories.filterNot(guard.categories.contains)
+    val keys = guardCategories.flatMap(c => Vector(s"guard.$c", s"guard.$c.mall")) ++ Vector("guard.contact",
+      "guard.cooldown")
+    val unsaid = for k <- keys; l <- FLang.values.toVector if answers.heads.get(k).flatMap(_.get(l)).isEmpty
+      yield s"$k.$l"
+    if missing.nonEmpty then Left(s"no patterns of ${missing.mkString(", ")}")
+    else if unsaid.nonEmpty then Left(s"no answer ${unsaid.take(5).mkString(", ")}")
+    else Right(guard)
+  }.toEither.left.map(e => s"the guard's data did not load: ${e.getMessage}").flatten
   lazy val probe: Probe = Probe.fromBytes(java.util.Base64.getDecoder.decode(AssistantData.probe))
   /** the combiner fitted and calibrated over this probe (okay-mall's `Fit`); none yet: the evidence's glance */
   lazy val combiner: Option[Combiner] = Option.when(AssistantData.combiner.nonEmpty)(Combiner.fromBytes(
@@ -67,8 +81,12 @@ object ShopRouter:
 
   def lane(table: Table): Lane = lane(table, combiner)
 
+  /** the guard's own lane: no table (a service its answer names found by its words alone), so its answers are the
+   * same whether a host has its table or not */
+  lazy val guardLane: Lane = lane(Table.empty)
+
   def lane(table: Table, c: Option[Combiner]): Lane =
-    new Lane(table, Router(intents, probe, guard, c), answers, minP = c.fold(0.7)(_.threshold),
+    new Lane(table, Router(intents, probe, guard.patterns.map((g, p, _) => (g, p)), c), answers, minP = c.fold(0.7)(_.threshold),
       minMargin = if c.isDefined then 0.0 else 0.2, lexicon = lexicon)
 
   /** the static table the probe was fitted over: in the JVM's jar at `resource`; a Worker's host keeps it in its
@@ -134,6 +152,39 @@ object ShopRouter:
   def turn[R[_]](lane: Lane, s: Setup, c: Conversation, user: String, l: FLang, focus: String,
                  here: Option[Here] = None, suggest: Option[String] = None, asked: Option[String] = None)(
     using In[Facts, R], In[Clock, R], In[Audit, R]): Decision ! R =
+    // the guard first, on its own (a host that ran it already gets the same None here)
+    guardTurn[R](s, c, user, l, focus).flatMap {
+      case Some(d) => pure(d)
+      case None => routed[R](lane, s, c, user, l, focus, here, suggest, asked)
+    }
+
+  /**
+   * THE GUARD, a turn's first step (okay-facts §17 "The turn decision" step 1; operator 2026-11-05: independent of the
+   * router): its patterns alone, no table, no router — a host runs it before its router and its model lane, in every
+   * configuration. A turn it takes is answered by its category's fixed authored answer (`Answered`, `by = guard`), or,
+   * that answer invalid, `Declined` — which a host NEVER sends to the model; none: not the guard's
+   */
+  def guardTurn[R[_]](s: Setup, c: Conversation, user: String, l: FLang, focus: String)(
+    using In[Facts, R], In[Clock, R], In[Audit, R]): Option[Decision] ! R =
+    guard.route(user) match
+      case None => pure(None)
+      case Some(route) => Clock.now[R].flatMap { now =>
+          prefetch[R](focus, l).flatMap(_ => Bind.focused[R](s, c, focus, l)).flatMap { (h0, note) =>
+            val ctx = Ctx(guardLane, c, h0, user, l, focus, Zone.date(now))
+            val g = route.copy(intent = "guard." + (if guardCategories.contains(route.guard) then route.guard
+              else "domain"))
+            guarded[R](g.intent.stripPrefix("guard."), ctx).flatMap { b =>
+              Bind.authored[R](s, c, user, l, focus, b.handles, note, b.answer, b.cards, g.intent, 1.0).map {
+                case Left(vs) => Some(Decision.Declined(g, "invalid: " + vs.map(_.code).mkString(","), b.slots))
+                case Right((c2, reply)) => Some(Decision.Answered(c2, reply, g, b.slots)())
+              }
+            }
+          }
+        }
+
+  private def routed[R[_]](lane: Lane, s: Setup, c: Conversation, user: String, l: FLang, focus: String,
+                           here: Option[Here], suggest: Option[String], asked: Option[String])(
+    using In[Facts, R], In[Clock, R], In[Audit, R]): Decision ! R =
     Clock.now[R].flatMap { now =>
       prefetch[R](focus, l).flatMap(_ => Bind.focused[R](s, c, focus, l)).flatMap { (h0, note) =>
         val ctx0 = Ctx(lane, c, h0, user, l, focus, Zone.date(now), here = here, suggest = suggest)
@@ -152,17 +203,7 @@ object ShopRouter:
           val said = Map[String, String]() ++ ctx.when.day.map("day" -> _) ++ ctx.when.at.map(a => "at" ->
             clock(a)) ++ ctx.when.from.map(a => "from" -> clock(a)) ++ ctx.when.until.map(a => "until" -> clock(a)) ++
             ctx.amount.max.map(m => "max" -> (m / 100).toString)
-          // the guard: the category's fixed authored answer, never the model (operator, 2026-11-04)
-          if route.by == "guard" then
-            val g = route.copy(intent = "guard." + (if guardCategories.contains(route.guard) then route.guard
-              else "domain"))
-            guarded[R](g.intent.stripPrefix("guard."), ctx).flatMap { b =>
-              Bind.authored[R](s, c, user, l, focus, b.handles, note, b.answer, b.cards, g.intent, 1.0).map {
-                case Left(vs) => Decision.Declined(g, "invalid: " + vs.map(_.code).mkString(","), b.slots)
-                case Right((c2, reply)) => Decision.Answered(c2, reply, g, b.slots)()
-              }
-            }
-          else if route.by == "unknown" then pure(Decision.Declined(route, "no word known"))
+          if route.by == "unknown" then pure(Decision.Declined(route, "no word known"))
           else if !route.confident(lane.minP, lane.minMargin) then pure(Decision.Declined(route, "not confident"))
           else if route.intent == "other" then pure(Decision.Declined(route, "other"))
           // two intents too close to tell (round 4): asked back, never guessed
