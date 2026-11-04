@@ -835,7 +835,7 @@ expressions over them; okay-facts renders every value from the shop's data. Pack
     contact (`human.mall`) from the host's entity `_mall` (a `Shop` of source `_mall`: its name and contact).
   - **Comparable services**: a service's `kind` (`About.kinds`, the host's: okay-mall's catalogue `niche/template`),
     its `price` comparable by it (okay-facts `Prop.comparableBy`, the resolver's `comparable` check); "cheaper
-    elsewhere" finds only services of the same kind — none of it: `compare.none.kind`, never an unrelated cheaper
+    elsewhere" finds only other shops' services of the same kind — none of it: `compare.none.kind`, never an unrelated cheaper
     service; a comparison across the mall keeps the nearest service's kind (or its own shop's).
   - **The decision settled by evidence** (`settle`): a place named → the area, not the ways of working; a booking's
     word → a booking, else free times; a contact's words (phone, e-mail, call, write) → the contact, not the address;

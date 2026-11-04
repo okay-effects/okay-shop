@@ -821,13 +821,14 @@ object ShopRouter:
               pure(ok(Built(h, Answer(Vector("b" -> s"name($b)", "pb" -> s"price($b)", "a" -> s"name(${a.name})",
                 "pa" -> s"price(${a.name})", "c" -> s"price($b) < price(${a.name})"), ctx.a("compare.pair")),
                 slots = Map("service" -> cands(i.toInt)._1.ent.key))))
-            // elsewhere in the mall: services of the same kind only (round 4) — none of it: said so
+            // elsewhere in the mall (other shops): services of the same kind only (round 4) — none of it: said so
             case _ => Facts.get[R](a.ent, "price").flatMap(p => Facts.get[R](a.ent, "kind").map(p -> _)).flatMap {
                 case (None, _) => pure(no("no price to compare"))
                 case (Some(_), None) => pure(ok(Built(ctx.h, Answer(Vector("a" -> s"name(${a.name})",
                     "pa" -> s"price(${a.name})"), ctx.a("compare.none.kind")), slots = Map("service" -> a.ent.key))))
                 case (Some(pa), Some(kind)) => Facts.find[R](Query("Service", filters = Vector(Filter("kind", Op.Eq,
-                    kind.value)), scope = Scope.All, limit = 20, lang = ctx.l)).map(_.filterNot(_.ent == a.ent))
+                    kind.value)), scope = Scope.All, limit = 20, lang = ctx.l))
+                  .map(_.filterNot(_.ent.source == a.ent.source))
                   .flatMap { same => seq[R, Found, Option[okay.facts.Fact]](same)(f => Facts.get[R](f.ent, "price"))
                     .map(ps => same.zip(ps).collect { case (f, Some(p)) if okay.facts.Value.compare(p.value, pa.value)
                       .exists(_ < 0) => f }.take(5)).map(same.isEmpty -> _) }.flatMap { (none, cheaper) =>
