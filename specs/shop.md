@@ -647,7 +647,9 @@ page changes); what the storefront shows is `Site.rated` (the host keeps it from
 
 ## Clients' letters: the ways (operator, 2026-10-30)
 
-The owner's and the staff's letters go by Email Routing's `send_email` (`MAIL`: verified destinations, any plan). A
+The owner's and the staff's letters go by Email Routing's `send_email` (`MAIL`: verified destinations, any plan) —
+or, when the host says `Mailing.staffWay = "client"` (a host whose owners sign themselves up and are no verified
+destinations: the mall's self-made shops), the clients' way below. A
 client's letter goes the way `MAIL_CLIENT` names (`MailCloud`, `Mailing.client`); each answers whether it went, and
 why not is logged — the status and the provider's error name, never an address nor the letter's words:
 

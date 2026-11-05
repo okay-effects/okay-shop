@@ -101,6 +101,16 @@ class MailCloudSuite extends munit.FunSuite:
       note.replyTo, Some("Test Atelier")))
   }
 
+  test("the owner and the staff by the clients' way when the host says so (a self-made shop): not by MAIL") {
+    val by = cloudflare.copy(staffWay = "client")
+    val (_, toOwner, _, _) = sending(by)(Mail.toOwner[C](note))
+    assertEquals(toOwner.map(_._1), Vector("CLIENT_MAIL"))
+    val (_, toStaff, _, _) = sending(by)(Mail.toStaff[C]("staff@example.com", note))
+    assertEquals(toStaff.map((b, l) => (b, l.to)), Vector(("CLIENT_MAIL", "staff@example.com")))
+    val (_, routed, _, _) = sending(cloudflare)(Mail.toStaff[C]("staff@example.com", note))
+    assertEquals(routed.map(_._1), Vector("MAIL"))
+  }
+
   test("a client by Email Service's binding; refused there: not sent, said why in the log") {
     val (sent, letters, _, log) = sending(cloudflare)(Mail.toClient[C]("anna@example.com", note))
     assert(!sent)
