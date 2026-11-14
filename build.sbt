@@ -23,7 +23,7 @@ ThisBuild / pagesRepository := (ThisBuild / baseDirectory).value / "target" / "p
 ThisBuild / publishTo := Some(MavenCache("pages", (ThisBuild / pagesRepository).value))
 ThisBuild / Compile / packageDoc / publishArtifact := false
 
-val okayServerless = "0.1.0"
+val okayServerless = "0.2.0"
 val okayUi = "0.1.0"
 val munit = Def.setting("org.scalameta" %%% "munit" % "1.2.3" % Test)
 
@@ -79,7 +79,9 @@ lazy val shop = crossProject(JVMPlatform, JSPlatform).crossType(CrossType.Pure).
     val to = (Compile / resourceManaged).value / "okay" / "shop" / "assistant" / "static.safetensors"
     IO.copyFile((ThisBuild / baseDirectory).value / "assistant" / "static.safetensors", to)
     Seq(to)
-  }.taskValue)
+  }.taskValue,
+    // the JVM's handlers (JdkFetch) for the tests that reach a real service: okay-serverless 0.2.0's module `jvm`
+    libraryDependencies += "io.github.okay-effects" %% "okay-serverless-jvm" % okayServerless % Test)
 
 /** THE WORKSHOP: its program on okay-ui, `Staff` over `Fetch`; in a page `okay.shop.workshop.InThePage` */
 lazy val workshop = crossProject(JVMPlatform, JSPlatform).crossType(CrossType.Pure).in(file("workshop"))

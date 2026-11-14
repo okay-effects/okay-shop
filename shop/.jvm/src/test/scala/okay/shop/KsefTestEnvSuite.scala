@@ -2,7 +2,8 @@ package okay.shop
 
 import okay.scala3.*
 import okay.scala3.std.{Async, Clock}
-import okay.serverless.cloud.{Cloud, Crypto, JdkFetch, Platform}
+import okay.serverless.cloud.{Cloud, Crypto, Platform}
+import okay.serverless.jvm.JdkFetch
 import okay.shop.invoice.*
 import okay.shop.model.{Method, Of}
 
