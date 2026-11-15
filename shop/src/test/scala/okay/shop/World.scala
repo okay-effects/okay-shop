@@ -42,9 +42,11 @@ final class World(val id: String = "atelier", var human: Boolean = true,
   var geocode: okay.shop.effects.GeoQuery => Option[okay.shop.model.Geo] = _ => None
   val geocoded: scala.collection.mutable.Buffer[okay.shop.effects.GeoQuery] = scala.collection.mutable.Buffer.empty
 
+  // the server's world, run as a run of its own: a page's program under test asks it from inside its own run
   def ask(r: Request): Response =
     seed += 1
-    val (kept, (_, res)) = run(storage.handler(StoreDurable.run(Ids.seeded(seed)(Captcha.always(human)(Mail.kept()(
+    val (kept, (_, res)) = runIsolated(storage.handler(StoreDurable.run(Ids.seeded(seed)(
+      Captcha.always(human)(Mail.kept()(
       Clock.virtual(now)(Notify.kept(notices)(Media.kept(files)(Geocoder.fake(geocode, geocoded)(
       Api.answer[W](conf, r)))))))))))
     letters ++= kept
@@ -54,7 +56,8 @@ final class World(val id: String = "atelier", var human: Boolean = true,
   def alarm(): Int =
     storage.alarm = None
     seed += 1
-    val (kept, (_, n)) = run(storage.handler(StoreDurable.run(Ids.seeded(seed)(Captcha.always(human)(Mail.kept()(
+    val (kept, (_, n)) = runIsolated(storage.handler(StoreDurable.run(Ids.seeded(seed)(
+      Captcha.always(human)(Mail.kept()(
       Clock.virtual(now)(Notify.kept(notices)(Media.kept(files)(Geocoder.fake(geocode, geocoded)(
       Bookings.remind[W](conf)))))))))))
     letters ++= kept
@@ -64,7 +67,7 @@ final class World(val id: String = "atelier", var human: Boolean = true,
   def ksefRound(): Int =
     storage.alarm = None
     type K[X] = (Pure + Storage + Store + Clock + okay.shop.invoice.Ksef)[X]
-    run(storage.handler(StoreDurable.run(Clock.virtual(now)(ksefFake.run(
+    runIsolated(storage.handler(StoreDurable.run(Clock.virtual(now)(ksefFake.run(
       okay.shop.app.Invoicing.ksef[K](conf))))))._2
 
   private def at(r: Request, headers: (String, String)*): Request =
