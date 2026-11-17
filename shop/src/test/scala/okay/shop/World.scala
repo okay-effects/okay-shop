@@ -43,12 +43,14 @@ final class World(val id: String = "atelier", var human: Boolean = true,
   val geocoded: scala.collection.mutable.Buffer[okay.shop.effects.GeoQuery] = scala.collection.mutable.Buffer.empty
 
   // the server's world, run as a run of its own: a page's program under test asks it from inside its own run
-  def ask(r: Request): Response =
+  def ask(r: Request): Response = run(Api.answer[W](conf, r))
+
+  /** a program of the shop's effects run in this world (the engine's own programs, tested without a request) */
+  def run[A](p: A ! W): A =
     seed += 1
     val (kept, (_, res)) = runIsolated(storage.handler(StoreDurable.run(Ids.seeded(seed)(
       Captcha.always(human)(Mail.kept()(
-      Clock.virtual(now)(Notify.kept(notices)(Media.kept(files)(Geocoder.fake(geocode, geocoded)(
-      Api.answer[W](conf, r)))))))))))
+      Clock.virtual(now)(Notify.kept(notices)(Media.kept(files)(Geocoder.fake(geocode, geocoded)(p))))))))))
     letters ++= kept
     res
 

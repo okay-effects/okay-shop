@@ -254,17 +254,29 @@ object Bookings:
       case Some(b) => (planOf(c, b), f.getOrElse("start", "").toLongOption) match
         case (None, _) => pure(Web.refused("no schedule"))
         case (_, None) => pure(Web.refused("start"))
-        case (Some(s), Some(at)) => Clock.now[R].flatMap(now => moving(c, b, s, f.getOrElse("master", "")) match
-            case _ if c.site.offer(b.service).exists(_.isClass) =>
-              Store.reseat[R](b.ref, at, s, c.site.offer(b.service).get, now)
-            case Left(why) => pure(Left(why))
-            case Right(Some((cs, keys))) => Store.rebookWith[R](b.ref, at, cs, keys, now)
-            case Right(None) => Store.rebook[R](b.ref, at, s, now)).flatMap {
+        case (_, Some(at)) => Clock.now[R].flatMap(now => rebook[R](c, b, at, f.getOrElse("master", ""), now))
+          .flatMap {
             case Left(why) => pure(Web.refused(why, 409))
-            case Right(x) => Clock.now[R].flatMap(n => Reviewing.later[R](c, x, n)).flatMap(_ =>
-                told(c, x, Letters.rebooked(c, x), Letters.rebookedOwner(c, x), Notice.Moved(x))).as(answer(c, x))
+            case Right(x) => told(c, x, Letters.rebooked(c, x), Letters.rebookedOwner(c, x), Notice.Moved(x))
+                .as(answer(c, x))
           }
     }
+
+  /** A BOOKING MOVED to `at`, no letter yet: in its own mode and place, its master kept when free or the one asked
+   * (`master`), a class's seat — the store decides in its step (`taken`, `full`, `no such booking`); its review
+   * asked anew. Or why not: `no schedule`, `master` */
+  def rebook[R[_]](c: Conf, b: Booking, at: Long, master: String, now: Long)(using In[Store, R])
+    : Either[String, Booking] ! R = planOf(c, b) match
+    case None => pure(Left("no schedule"))
+    case Some(s) => (moving(c, b, s, master) match
+        case _ if c.site.offer(b.service).exists(_.isClass) =>
+          Store.reseat[R](b.ref, at, s, c.site.offer(b.service).get, now)
+        case Left(why) => pure(Left(why))
+        case Right(Some((cs, keys))) => Store.rebookWith[R](b.ref, at, cs, keys, now)
+        case Right(None) => Store.rebook[R](b.ref, at, s, now)).flatMap {
+        case Left(why) => pure(Left(why))
+        case Right(x) => Reviewing.later[R](c, x, now).as(Right(x))
+      }
 
   def page[R[_]](c: Conf, l: Lang, r: Request)(using In[Store, R]): Response ! R =
     owned[R](Map("ref" -> r.param("ref").getOrElse(""), "k" -> r.param("k").getOrElse(""))).flatMap {

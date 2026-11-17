@@ -75,10 +75,81 @@ and the 60 sealed phrases
 - A reading driven by okay-frames' `Reading`: an oracle reads all 60 phrases; a weigher with no opinion is
   asked 60 times and answers nothing wrongly (`Measure`).
 
-Not built yet (the rest of A1): **the desk from a shop's data** (`Conf`, the store's bookings, `Slots.free` for a
-service's real starts instead of every start of the day) and **the compiler** from a command to the workshop's
-existing operations (`Bookings.reserve` / `move` / `cancel`, a master's days off, `Payments`' mark, the
-workshop's list). Until then nothing here can change a shop's data.
+### The desk from a shop's data (`Desks`, 2026-11-17)
+
+`Desks.read(conf)`, a program over `Store` and `Clock` (`Desks.of(site, bookings, now)` is its pure part):
+
+- **days** — the days of the booking horizon (`Schedule.horizon`), today in Poland's time first: `Slots`' own days.
+- **times** — EVERY start on a schedule's step inside any opening span the shop has on any day: its week and its
+  exceptions, its places' and its visits' hours, each master's own week; and a class's own starts. It is one list
+  for all services and days, so it is NOT the free starts: a start of the desk may be closed that day, too late for
+  a long service, or taken. That is decided where it always was, by `Slots` in the store's step, and a command at
+  such a start is refused `taken`. The law kept instead: every start `/api/slots` offers anybody is a day and a
+  time of the desk. (A desk of the free starts of each service and day needs a `Desk` whose times depend on the
+  lines chosen before — not built.)
+- **services** — the services shown (not hidden) and booked for a time, by key, in the content's order.
+- **masters** — `Site.masters`, by key; none in a shop of one calendar (then a master's line offers only `any`,
+  and a day off has nobody to name).
+- **bookings** — the store's active bookings from now on, by their start, as `Booked`: the ref, the client's name,
+  the service's and the master's keys, the day and the minutes from midnight in Poland's time.
+
+### The compiler (`Run`, 2026-11-17)
+
+`Run(conf, command, who): Either[Refusal, Ran]`, a program over `Store`, `Mail` and `Clock`. It takes a command
+that WAS ALREADY CONFIRMED (said back by `Words.say`, accepted by the person) and never a reading alone; `who` is
+the person signed in to the workshop, checked by the caller. It runs the engine's existing operations and has
+none of its own:
+
+- **`Move`** — `Bookings.rebook` (the page's move without its letters: the booking's own mode and place,
+  `Store.Rebook` / `RebookWith` / `Reseat`, its review asked anew), then the client's letter `Letters.rebooked`.
+  Done: `Ran.Moved(booking, told)`. Refused (`Refusal.Refused`, the engine's own word): `no such booking`,
+  `taken`, `full`, `master`, `no schedule`, `start`.
+- **`Cancel`** — `Workshop.unbook` (the workshop's cancel: `Store.CancelBooking`, the client's letter). Done:
+  `Ran.Cancelled(booking, told)`. Refused: `no such booking`.
+- **`Paid`** — `Store.Pay` with a `Mark(Of.Booking, ref, "paid", amount, way, today)`: `Payments.mark`'s rules (the
+  staff marks, only the owner changes), the receipt numbered in that step. Done: `Ran.Paid(payment)`. Refused:
+  `no such booking`, `owner`, `amount`, `day`.
+- **`Show`** — `Workshop.listed` (the workshop's list), the day's and the master's. Done: `Ran.Listed(bookings)`.
+- **`Cannot`** — nothing. `Ran.NothingToDo`.
+
+Notes:
+
+- A master's move keeps the booking's master: they are asked for, so the move is theirs still or `taken`. The
+  words confirmed name no other master, and the page's rule (pass to the first free master) would change one
+  unsaid. A booking of no master of the shop's (made before the masters) moves by the page's rule.
+- Like the workshop's cancel, a master's move and cancel write to the client only (no letter to the owner, no
+  notice): the staff did it themselves.
+- `Show` lists what the workshop lists — any status, a cancelled booking too.
+- For this `Bookings.rebook`, `Workshop.unbook` and `Workshop.listed` were cut out of the routes that had them
+  inline (`POST /api/booking/move`, the workshop's `booking/cancel` and `bookings`); the routes call them and
+  answer as before.
+
+**Refused, because the engine has no operation for it** (`Refusal.Missing`, nothing changed, nothing faked):
+
+- **`Book`** — a booking made by the staff. `Bookings.reserve` writes the client's contact and `Consent(now,
+  policy)`: the client's own consent to the privacy policy, given on the form. A master's word is neither.
+  Missing: a booking the staff makes for a client — who made it, a contact that may be absent, and what stands in
+  the consent's place (an owner's decision, with the privacy policy's text) — in the model, the store's step and
+  the letters.
+- **`DayOff`** — a master's days off are `Master.off`, the site's content (`site.md`'s `json masters` block, or a
+  host's copy), read into `Conf`; the store has no step for them and `Content.write` does not write masters.
+  Missing: days off kept in the store (or the masters written back by `Content`), and the slots reading them.
+
+Both stay commands of the space: the options offer them and the words say them, so a reader may read them and the
+person is told plainly which operation is missing.
+
+Tests, `CommandsRunSuite`, on the fictional `salon` (one calendar) and `crew` (modes, places, three masters)
+through the tests' `World` (okay-serverless' `Memory`): the desks equal the data, and every start `/api/slots`
+offers is the desk's; a move, a cancel and a payment read back from the store with their letters; the list equal
+to the workshop's own (`GET <desk>/api/bookings`); each refusal with the store's keys (but its count of steps)
+and the letters as they were; a command of the real desk said and parsed in the four languages, then run.
+Checked by mutation, each caught: starts cut an hour short, the masters' weeks or the classes' starts left out,
+cancelled or past bookings kept, a booking's time an hour off, hidden services kept; a move free to change the
+master or telling nobody, a payment marked as the owner's, the list without its day or its master, a day off
+answered as done, a cancel telling nobody.
+
+Still not built in A1: the frame said back and confirmed on a page (A3 calls `Desks.read`, `Words.say`, then
+`Run`), and the two missing operations above.
 
 ## Results
 

@@ -144,7 +144,7 @@ border:0;border-radius:12px;background:#2a1f14;color:#fff;cursor:pointer}</style
       case ("POST", List("email")) => letter(c, json(r), now)
       case ("GET", List("inquiries")) => Store.inquiries[R](200).map(is =>
           ok(Json.obj("inquiries" -> Json.Arr(is.map(Codec.inquiry)))))
-      case ("GET", List("bookings")) => Store.bookings[R](now - day, now + 60 * day).map { bs =>
+      case ("GET", List("bookings")) => listed[R](now).map { bs =>
           // the masters' (specs/shop.md "Masters"): each booking's master's name, and whether it is the person's
           val me = c.site.masters.find(m => m.email.nonEmpty && m.email == email).map(_.key).getOrElse("")
           ok(Json.obj("bookings" -> Json.Arr(bs.map(b => Json.Obj(Codec.booking(b).fields ++ Vector(
@@ -154,14 +154,25 @@ border:0;border-radius:12px;background:#2a1f14;color:#fff;cursor:pointer}</style
         }
       case ("GET", List("quotes")) => Quotes.list(c)
       case ("POST", List("quote", "reply")) => Quotes.reply(c, json(r))
-      case ("POST", List("booking", "cancel")) => Store.cancelBooking[R](json(r).getOrElse("ref", ""), now).flatMap {
-          case None => pure(refused("no such booking", 404))
-          case Some(b) => b.email.fold(pure(false))(to => Mail.toClient[R](to, Letters.unbooked(c, b)))
-              .map(sent => ok(Json.obj("sent" -> Json.bool(sent))))
+      case ("POST", List("booking", "cancel")) => unbook[R](c, json(r).getOrElse("ref", ""), now).map {
+          case None => refused("no such booking", 404)
+          case Some((_, sent)) => ok(Json.obj("sent" -> Json.bool(sent)))
         }
       case _ => pure(Response.notFound()))
 
   private val day = 86400000L
+
+  /** THE BOOKINGS THE WORKSHOP LISTS: any status, from a day ago to sixty days ahead, by their start */
+  def listed[R[_]](now: Long)(using In[Store, R]): Vector[Booking] ! R = Store.bookings[R](now - day, now + 60 * day)
+
+  /** A BOOKING CANCELLED BY THE STAFF: the client told when they left an email — the booking, and whether the
+   * letter was sent; none: no such active booking */
+  def unbook[R[_]](c: Conf, ref: String, now: Long)(using In[Store, R], In[Mail, R])
+    : Option[(Booking, Boolean)] ! R = Store.cancelBooking[R](ref, now).flatMap {
+    case None => pure(None)
+    case Some(b) => b.email.fold(pure(false))(to => Mail.toClient[R](to, Letters.unbooked(c, b))).map(sent =>
+        Some(b -> sent))
+  }
   /** the reports' link, in the workshop's languages */
   val reports = "Raporty · Звіти · Reports"
 
