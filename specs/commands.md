@@ -51,17 +51,20 @@ The 60 phrases are the sealed set from A2 on: never trained on, never used to tu
 - **`Desk`** — the shop as a command sees it: the days of the horizon, a day's starts, the services' and masters'
   keys and names, the bookings to come (`Booked`). Every option comes from it or from the text.
 - **`Command`** — `Book`, `Move`, `Cancel`, `DayOff`, `Paid`, `Show`, `Cannot`.
-- **`Frames`** — an action's lines in the order they are decided (`holes`); a line's `options`: services, masters
-  (and `any`, but never for a day off), days, starts and bookings from the desk, the ways of paying from
-  `Method`; a client's name among the text's own spans of one to three words, none across a punctuation mark; an
-  amount among the text's own numbers. `close` makes the command of the lines chosen and refuses a value that is
-  not one of its options; `lines` is its inverse.
+- **`Commands`** — the space of commands, an okay-frames `Space[Desk, Command]` (since 2026-11-17; before that a
+  `Frames` of its own, the fourth writing of the same interface): the first decision is the action, then the
+  action's `lines` in a fixed order; a line's `options`: services, masters (and `any`, but never for a day off),
+  days, starts and bookings from the desk, the ways of paying from `Method`; a client's name among the text's
+  own spans of one to three words, none across a punctuation mark; an amount among the text's own numbers.
+  okay-frames' `close` makes the command of the choices and refuses a value that is not one of its options;
+  `path` is its inverse.
 - **`Words`** — a command's canonical words in the four languages (`say`) and their parser (`parse`). The words
   are labelled lines, not prose (`Book: «Emma» — Haircut, Marek, Friday 20.11 at 15:00.`), so no name is ever
   put in a case; a booking is said with its reference first, so no two read alike. Templates are data, one set a
   language; the parser reads by the same templates and answers only a command that says back to the same words.
 
-Laws, `CommandsSuite` (theory: okay-desk specs/theory.md §3), over the fictional shop and the 60 sealed phrases
+Laws, `CommandsSuite` by okay-frames' `Laws` (theory: okay-desk specs/theory.md §3), over the fictional shop
+and the 60 sealed phrases
 (`Fixtures.phrases`, written by the build from `scripts/commands/phrases.tsv`):
 
 - **L1** every line's options are finite and there; **L2** each phrase's hand-written command is reachable by the
@@ -69,6 +72,8 @@ Laws, `CommandsSuite` (theory: okay-desk specs/theory.md §3), over the fictiona
 - **L5** `parse(say(c)) == c` for the phrases' 60 commands and each kind over the shop's options, in every
   language (about 580 commands a language); two commands never say the same; other words are no command.
 - Checked by mutation: the parser's last literal found at its first place fails L5; `any` not offered fails L2.
+- A reading driven by okay-frames' `Reading`: an oracle reads all 60 phrases; a weigher with no opinion is
+  asked 60 times and answers nothing wrongly (`Measure`).
 
 Not built yet (the rest of A1): **the desk from a shop's data** (`Conf`, the store's bookings, `Slots.free` for a
 service's real starts instead of every start of the day) and **the compiler** from a command to the workshop's

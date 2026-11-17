@@ -1,13 +1,14 @@
 package okay.shop.commands
 
+import okay.frames.{Choice, Hole, Space}
 import okay.shop.model.*
 
 /**
  * THE MASTER'S COMMANDS IN WORDS (specs/commands.md): what a master says is read into a COMMAND whose every value
  * is chosen among the options the shop itself offers; the command is said back in canonical words and run only
  * after the master confirms. This file is the exact part — the command, the options of each of its lines, its
- * canonical words in the four languages and their parser. The reader that chooses is not here, and no choice of it
- * is ever an action by itself.
+ * canonical words in the four languages and their parser — as a space of okay-frames (`Commands`), right by that
+ * library's laws. The reader that chooses is not here, and no choice of it is ever an action by itself.
  */
 
 /** a booking as a command names it: its day `2026-11-17`, its time in minutes from midnight */
@@ -29,23 +30,24 @@ enum Command:
   case Show(day: String, master: Option[String])
   case Cannot
 
-/** a line of the frame: one decision */
-enum Hole:
-  case Client, Service, Master, Day, Time, Booking, Amount, Way
-  def key: String = toString.toLowerCase
-
-object Frames:
+/**
+ * THE SPACE OF COMMANDS: the first decision is the action, then the action's lines in a fixed order. Every option
+ * is the desk's or the text's own; `close` (okay-frames) is the only way from choices to a command.
+ */
+object Commands extends Space[Desk, Command]:
+  val name = "commands"
+  val Action = "action"
   val Any = "any"
   val actions: Vector[String] = Vector("book", "move", "cancel", "dayoff", "paid", "list", "cannot")
 
   /** the lines of an action, in the order they are decided */
-  def holes(action: String): Vector[Hole] = action match
-    case "book"   => Vector(Hole.Client, Hole.Service, Hole.Master, Hole.Day, Hole.Time)
-    case "move"   => Vector(Hole.Booking, Hole.Day, Hole.Time)
-    case "cancel" => Vector(Hole.Booking)
-    case "dayoff" => Vector(Hole.Master, Hole.Day)
-    case "paid"   => Vector(Hole.Booking, Hole.Amount, Hole.Way)
-    case "list"   => Vector(Hole.Day, Hole.Master)
+  def lines(action: String): Vector[String] = action match
+    case "book"   => Vector("client", "service", "master", "day", "time")
+    case "move"   => Vector("booking", "day", "time")
+    case "cancel" => Vector("booking")
+    case "dayoff" => Vector("master", "day")
+    case "paid"   => Vector("booking", "amount", "way")
+    case "list"   => Vector("day", "master")
     case _        => Vector.empty
 
   private val edge = ",.;:!?\"«»()".toSet
@@ -84,46 +86,55 @@ object Frames:
     found.result().distinct
 
   /** THE OPTIONS of a line: finite, from the shop's data or the text's own words — nothing else can be chosen */
-  def options(desk: Desk, text: String, action: String, hole: Hole): Vector[String] = hole match
-    case Hole.Client  => spans(text)
-    case Hole.Service => desk.services.map(_._1)
-    case Hole.Master  => desk.masters.map(_._1) ++ (if action == "dayoff" then Vector.empty else Vector(Any))
-    case Hole.Day     => desk.days
-    case Hole.Time    => desk.times.map(Span.label)
-    case Hole.Booking => desk.bookings.map(_.ref)
-    case Hole.Amount  => numbers(text)
-    case Hole.Way     => Method.values.toVector.map(_.key)
+  def options(desk: Desk, text: String, action: String, line: String): Vector[String] = line match
+    case "client"  => spans(text)
+    case "service" => desk.services.map(_._1)
+    case "master"  => desk.masters.map(_._1) ++ (if action == "dayoff" then Vector.empty else Vector(Any))
+    case "day"     => desk.days
+    case "time"    => desk.times.map(Span.label)
+    case "booking" => desk.bookings.map(_.ref)
+    case "amount"  => numbers(text)
+    case "way"     => Method.values.toVector.map(_.key)
+    case _         => Vector.empty
 
-  /** a command's lines, as they were chosen */
-  def lines(c: Command): (String, Map[Hole, String]) =
+  def next(desk: Desk, text: String, chosen: Vector[Choice]): Option[Hole] = chosen.headOption match
+    case None => Some(Hole(Action, actions))
+    case Some(a) => lines(a.option).lift(chosen.size - 1).map(l => Hole(l, options(desk, text, a.option, l)))
+
+  def assemble(desk: Desk, chosen: Vector[Choice]): Option[Command] =
+    val of = chosen.map(c => c.hole -> c.option).toMap
+    def master = of.get("master").filter(_ != Any)
+    def time = of.get("time").flatMap(Span.minutes)
+    of.get(Action).flatMap {
+      case "book"   => for c <- of.get("client"); s <- of.get("service"); d <- of.get("day"); t <- time
+        yield Command.Book(c, s, master, d, t)
+      case "move"   => for b <- of.get("booking"); d <- of.get("day"); t <- time yield Command.Move(b, d, t)
+      case "cancel" => of.get("booking").map(Command.Cancel(_))
+      case "dayoff" => for m <- of.get("master"); d <- of.get("day") yield Command.DayOff(m, d)
+      case "paid"   => for b <- of.get("booking"); a <- of.get("amount").flatMap(Money.parse)
+        w <- of.get("way").flatMap(k => Method.values.find(_.key == k)) yield Command.Paid(b, a, w)
+      case "list"   => of.get("day").map(Command.Show(_, master))
+      case "cannot" => Some(Command.Cannot)
+      case _        => None
+    }
+
+  def path(desk: Desk, c: Command): Vector[Choice] =
     def m(o: Option[String]) = o.getOrElse(Any)
-    c match
-      case Command.Book(cl, s, ma, d, t) => "book" -> Map(Hole.Client -> cl, Hole.Service -> s, Hole.Master -> m(ma),
-        Hole.Day -> d, Hole.Time -> Span.label(t))
-      case Command.Move(b, d, t) => "move" -> Map(Hole.Booking -> b, Hole.Day -> d, Hole.Time -> Span.label(t))
-      case Command.Cancel(b)     => "cancel" -> Map(Hole.Booking -> b)
-      case Command.DayOff(ma, d) => "dayoff" -> Map(Hole.Master -> ma, Hole.Day -> d)
-      case Command.Paid(b, a, w) => "paid" -> Map(Hole.Booking -> b, Hole.Amount -> amount(a), Hole.Way -> w.key)
-      case Command.Show(d, ma)   => "list" -> Map(Hole.Day -> d, Hole.Master -> m(ma))
-      case Command.Cannot        => "cannot" -> Map.empty
+    val (action, values) = c match
+      case Command.Book(cl, s, ma, d, t) => "book" -> Vector(cl, s, m(ma), d, Span.label(t))
+      case Command.Move(b, d, t)         => "move" -> Vector(b, d, Span.label(t))
+      case Command.Cancel(b)             => "cancel" -> Vector(b)
+      case Command.DayOff(ma, d)         => "dayoff" -> Vector(ma, d)
+      case Command.Paid(b, a, w)         => "paid" -> Vector(b, amount(a), w.key)
+      case Command.Show(d, ma)           => "list" -> Vector(d, m(ma))
+      case Command.Cannot                => "cannot" -> Vector.empty
+    Choice(Action, action) +: lines(action).zip(values).map(Choice(_, _))
 
-  /** THE COMMAND of the lines chosen — none when a line is missing or its value is not one of its options */
-  def close(desk: Desk, text: String, action: String, chosen: Map[Hole, String]): Option[Command] =
-    val hs = holes(action)
-    val ok = actions.contains(action) && chosen.keySet == hs.toSet &&
-      hs.forall(h => options(desk, text, action, h).contains(chosen(h)))
-    def master = Some(chosen(Hole.Master)).filter(_ != Any)
-    def time = Span.minutes(chosen(Hole.Time))
-    if !ok then None
-    else action match
-      case "book"   => time.map(Command.Book(chosen(Hole.Client), chosen(Hole.Service), master, chosen(Hole.Day), _))
-      case "move"   => time.map(Command.Move(chosen(Hole.Booking), chosen(Hole.Day), _))
-      case "cancel" => Some(Command.Cancel(chosen(Hole.Booking)))
-      case "dayoff" => Some(Command.DayOff(chosen(Hole.Master), chosen(Hole.Day)))
-      case "paid"   => for a <- Money.parse(chosen(Hole.Amount)); w <- Method.values.find(_.key == chosen(Hole.Way))
-        yield Command.Paid(chosen(Hole.Booking), a, w)
-      case "list"   => Some(Command.Show(chosen(Hole.Day), master))
-      case _        => Some(Command.Cannot)
+  /** the canonical words in a language's code; an unknown code is said in English and parses to nothing */
+  def say(desk: Desk, c: Command, language: String): String =
+    Words.say(desk, c, Lang.parse(language).getOrElse(Lang.en))
+  def parse(desk: Desk, words: String, language: String): Option[Command] =
+    Lang.parse(language).flatMap(Words.parse(desk, words, _))
 
 /**
  * THE CANONICAL WORDS of a command and their parser. The law (`CommandsSuite`): `parse(say(c)) == c` for every
