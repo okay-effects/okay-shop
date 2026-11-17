@@ -154,7 +154,8 @@ class WorkshopSuite extends munit.FunSuite:
     val saved = play(w, b, (open ++ Seq(Act.press("Дані для фактури"), Act.press("Зберегти", "name" -> "TEST Kupiec",
       "nip" -> "2222222222", "street" -> "ul. B 2", "postcode" -> "30-001", "city" -> "Kraków")))*)
     assert(texts(saved.at).contains("NIP 2222222222"), texts(saved.at))
-    play(w, b, (open ++ Seq(Act.press("Оплачено"), Act.press("Записати", "amount" -> "60.00", "method" -> "card")))*)
+    play(w, b, (open ++ Seq(Act.press("Оплачено"), Act.press("Записати", "amount" -> "60.00",
+      "method" -> "Картка (card)")))*) // by its label: an option's key is okay-ui's spelling of the label
     val issued = play(w, b, (open :+ Act.press("Виставити фактуру"))*)
     assertEquals(issued.problems, Nil)
     assert(texts(issued.at).contains("FV/2026/10/1"), texts(issued.at))
