@@ -87,7 +87,7 @@ private[commands] object Tongues:
 
   private def ruIdiom(h: When.Hearing, i: Int, role: When.Role): Option[(Int, Int, Int)] =
     def of(j: Int) = h.word(j).flatMap(ruOf.get).filter(_ <= 12)
-    h.word(i).flatMap {
+    h.word(i).orElse(Some("")).flatMap { // digits are no word: the last case hears them (`10 минут шестого`)
       case w if w.startsWith("пол") && w.length > 3 && ruOf.get(w.drop(3)).exists(_ <= 12) =>
         Some((before(ruOf(w.drop(3))), 30, i + 1))
       case "пол" | "половина" | "половине" | "половину" => of(i + 1).map(o => (before(o), 30, i + 2))
@@ -165,7 +165,7 @@ private[commands] object Tongues:
   private def ukIdiom(h: When.Hearing, i: Int, role: When.Role): Option[(Int, Int, Int)] =
     def hour(j: Int) = h.clock(j)
     def quarter(j: Int) = h.word(j).exists(Set("чверть", "чверті"))
-    h.word(i).flatMap {
+    h.word(i).orElse(Some("")).flatMap { // digits are no word: the last case hears them (`10 минут шестого`)
       case w if w.startsWith("пів") && w.length > 3 && ukHours.get(w.drop(3)).exists(_ <= 12) =>
         Some((before(ukHours(w.drop(3))), 30, i + 1))
       case "пів" | "половина" | "половині" | "половину" =>
@@ -258,7 +258,7 @@ private[commands] object Tongues:
 
   private def plIdiom(h: When.Hearing, i: Int, role: When.Role): Option[(Int, Int, Int)] =
     def hour(j: Int) = h.clock(j)
-    h.word(i).flatMap {
+    h.word(i).orElse(Some("")).flatMap { // digits are no word: the last case hears them (`10 минут шестого`)
       case "wpol" | "pol" if h.word(i + 1).contains("do") => hour(i + 2).map((o, n) => (before(o), 30, n))
       case "w" if h.word(i + 1).contains("pol") && h.word(i + 2).contains("do") =>
         hour(i + 3).map((o, n) => (before(o), 30, n))
@@ -333,7 +333,7 @@ private[commands] object Tongues:
     def hour(j: Int) = h.clock(j).filter(_._1 <= 12)
     def after(j: Int) = h.is(j, Set("past", "after"))
     def to(j: Int) = h.is(j, Set("to", "till", "of", "before"))
-    h.word(i).flatMap {
+    h.word(i).orElse(Some("")).flatMap { // digits are no word: the last case hears them (`10 минут шестого`)
       case "half" if h.word(i + 1).contains("past") => hour(i + 2).map((o, n) => (o, 30, n))
       case "half" if h.word(i + 1).exists(enHours.contains) => hour(i + 1).map((o, n) => (o, 30, n))
       case "a" if h.word(i + 1).contains("quarter") => enIdiom(h, i + 1, role)
@@ -383,6 +383,9 @@ private[commands] object Tongues:
     currency = money,
     counted = set("people persons person guests kids hours hour hrs street st road rd avenue ave lane"),
     idiom = enIdiom, one = set("a an"))
+
+  /** `instead of`: the day or the time after it is the one NOT meant */
+  val instead: Set[String] = set("вместо замість zamiast instead")
 
   /** every language's words of paying, and of what a number counts that is no hour: a phrase is heard by each
    * language of its letters, and one must not take for a time what another knows for people or money */

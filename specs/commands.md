@@ -204,6 +204,187 @@ sbt "commandsBench/runMain okay.shop.commands.bench.ReadSet sealed <adapter|none
 sbt "commandsBench/runMain okay.shop.commands.bench.Tables scripts/commands/reader-s1.tsv …"
 ```
 
+## A2b as built (2026-11-18): days and times computed
+
+A2 missed its bar, and its misses that no agreement of readers can see were words for days and times. So they are
+no longer read: an exact organ hears them, and the reader weighs only what the organ leaves open.
+
+**How clean this step is.** The sealed set's misses told WHICH KINDS of expression to compute — a time in words,
+a day by its distance, a move said as a difference; seven of its expressions are quoted in "Results / A2" above,
+and could not be unseen. The organ was therefore written from each language's whole system of saying days and
+times, not from those seven; `phrases.tsv` was not opened, the organ was not run on it and nothing was tuned on it
+before the one final reading. Still: the sealed number after this step is less clean than a first reading — the
+set chose the direction.
+
+### The organ (`When`, `Tongues`; `shop`, both platforms, no model, no effect, no new dependency)
+
+- **Dates reused, not written.** The engine's own calendar: `Reports.epochDay` / `ofEpoch` / `plus` and
+  `Civil.ymd` (Hinnant's algorithm, already used by `Slots`, `Words.day`, the reports). okay-simple's
+  `okay-effects-time-value` (`okay.effects.time.Date`) has the same and is not a dependency of okay-shop; the
+  engine's calendar predates it and was not swapped here. `When` holds no date arithmetic but `+ n` on a day number
+  and a weekday by `floorMod`.
+- **`Tongue`** — how one language says days and times, as data: weekdays in their case forms and short writings,
+  months, numerals in their case forms, the ordinals an hour or a date is said by, the words before a day or a
+  time (`on`, `from`, `until`), the parts of the day, the words of a move by a difference; and the language's own
+  halves and quarters as a small function (`idiom`). Words are written folded — lower case, `ё` as `е`, no
+  apostrophe, Polish letters without their marks (`środę` is `srode`, as typed on a phone).
+- **`When.hear(text)`** — a phrase is cut into words, numbers (`15`, `15:30`, `20.11`, `3pm`, `15-ту`) and marks;
+  a reference (`b12`, `R-17`) is one opaque word; a name the canonical words quote (`«…»`) is skipped. Every
+  language of the phrase's letters hears it (Cyrillic: Russian and Ukrainian; Latin: Polish and English — a
+  phrase's language is not asked for), left to right, at each place a difference first, then a day, then a time;
+  of two languages' hearings of the same words the longer wins. What is heard is before any calendar: `In(days)`,
+  `Weekday(w, bare | this | next)`, `Date(day, month)`, a week, `At(hour, minute, twelve-hour?, part of day)`, a
+  part of the day said apart, `Later(minutes)`, `DaysLater(days)`.
+- **`When.days(desk, text, action, booking)`**, **`When.times(…)`** — the heard put on a desk (today is its first
+  day), answered as a **`Narrowed`**: `Unsaid` (nothing heard: the options stay), `Among(options)` (the heard
+  values that ARE the desk's options) or `Outside(said)` (heard, and none is an option — said so, never widened).
+- **`Computed`** — the space of commands with those two lines narrowed: `Commands.next`, but a day's or a time's
+  hole offers only `Among`'s options; `Outside` offers none (the phrase is not read: `unread`, the master is
+  told); `Unsaid` offers all. A hole of one option is not weighed by any reader (okay-frames' `Reading`). Paths,
+  words and parser are `Commands`' own, so said back → canonical parser → the same frame holds as before.
+  `Commands` itself is unchanged: A1's laws and the 60 sealed phrases' reachability are what they were.
+
+The API, whole:
+
+```scala
+enum Narrowed { case Unsaid; case Among(options: Vector[String]); case Outside(said: Vector[String]) }
+object When:
+  def hear(text: String): Vector[Heard]             // what a phrase says, before any desk
+  def days(desk: Desk, text: String, action: String, booking: Option[Booked] = None): Narrowed   // 2026-11-20
+  def times(desk: Desk, text: String, action: String, booking: Option[Booked] = None): Narrowed  // 15:00
+object Computed extends Space[Desk, Command]       // Commands, its day and time holes narrowed by When
+```
+
+What is heard, in each of the four languages:
+
+- **days** — today, tomorrow, the day after (`послезавтра`, `післязавтра`, `pojutrze`), also as adjectives
+  (`dzisiejszych`); in N days, in a week, in N weeks; weekdays in all case forms and short writings; this / next /
+  the nearest weekday; next week, this week; dates: `20 November`, `November 20th`, `20.11`, `20/11`, `the 20th`,
+  `20-го`, `20 числа`, `15-go`, and in words (`двадцатого`, `dwudziestego pierwszego`, `the twentieth`).
+- **times** — `15:00`, `15.00`, `15 30`, `3pm`, `3 p.m.`, `at 3`, `в 3`, `о 15`, `na 15`, `на 15-ту`,
+  `o godz. 15`, `3 часа`, `3 o'clock`; numerals in words in their case forms (`в три`, `к трём`, `о третій`,
+  `na trzecią`, `o piętnastej trzydzieści`, `семнадцать тридцать`); halves and quarters in each language's own
+  system — `полшестого`, `половина шестого`, `четверть шестого`, `без четверти шесть`, `десять минут шестого`,
+  `три с половиной`; `пів на шосту`, `пів до шостої`, `чверть на шосту`, `чверть по п'ятій`, `за чверть шоста`;
+  `wpół do szóstej`, `kwadrans po ósmej`, `za kwadrans dziewiąta`, `za dziesięć szósta`; `half past five`,
+  `half five`, `quarter to ten`, `ten past four`; noon and midnight; parts of the day, said after the time
+  (`три дня`, `8 вечера`, `о 4 вечора`, `3 pm`) or anywhere in the phrase (`вечером`, `rano`, `після обіду`,
+  `this afternoon`, `tonight`).
+- **a move by a difference** — later / earlier by N minutes, N hours, half an hour, an hour and a half, a day, a
+  week (`на час позже`, `на пів години раніше`, `o godzinę później`, `an hour later`, `later by an hour`); the
+  same time; the same day. Applied only to a move whose booking is known: the booking's own day or time, shifted.
+
+Conventions for what is ambiguous — decided from how the languages are used, and where usage is truly split, BOTH
+candidates are answered (two options are still an exact narrowing; the reader or the master picks):
+
+- **A bare weekday** (`on Friday`, `в пятницу`) is the nearest such day after today. Said ON that weekday it is
+  today or a week from today: both.
+- **`this` / `the nearest` weekday** (`this Friday`, `в эту среду`, `w tę środę`, `найближчої суботи`) is the
+  nearest such day, today counted.
+- **`next` weekday** (`next Friday`, `в следующую среду`, `w przyszły piątek`, `наступної п'ятниці`): speakers of
+  all four languages split between "the next one to come" and "the one of next week". Both are answered when they
+  differ — that is, when the weekday is still ahead in this week (said on a Wednesday, `next Friday` is this
+  Friday or the one after). When it is today's weekday or already past this week, the two are one day (said on a
+  Monday, `next Monday` / `w przyszły poniedziałek` is the Monday in seven days), and it is settled.
+- **A weekday with `next week`** (`Wednesday next week`, `в среду на следующей неделе`, `we wtorek w przyszłym
+  tygodniu`) is that weekday of the next calendar week (Monday to Sunday): settled. `next week` with no weekday is
+  that week's days.
+- **`через день`** (Russian, Ukrainian) is tomorrow or the day after: both. `через 1 день`, `in a day`, `za
+  dzień` are tomorrow.
+- **A day and a weekday said together** (`Friday 20.11`, `завтра, в четверг`) are one day when they agree; when
+  they do not, both.
+- **`10.11`** is a date when the horizon has such a day; else a time when the desk has such a start; else a date
+  outside the horizon. `15.30`, `15.00` are times (no such month).
+- **A time by a twelve-hour clock** — `at 3`, `в три`, `9:30`, `полшестого`, `half past five`: the hour or twelve
+  more. A part of the day settles it (`дня`: 12–18; `вечера`, `pm`: the afternoon half; `утра`, `am`: the morning;
+  `ночи`: 21–04). With no part said, both are tried against the desk's starts: one left is settled (`at 3` when the
+  desk opens at 8), two are both answered (`at 8` on a desk from 7 to 21). `15`, `15:00`, and an hour written
+  with a leading zero (`09:00`, as the canonical words write) are a twenty-four-hour clock: one time.
+- **Russian `на 3 часа`** is taken for three o'clock, as said in a salon; it can also mean "for three hours".
+  `на час` alone (an hour, or one o'clock, or by an hour) is not heard at all. Ukrainian `на 2 години` and Polish
+  `na 2 godziny` are a length, never a time.
+- **In a move** a day or a time said after `from` (`с пятницы`, `z 10`, `from 3`) is what the booking leaves, and
+  one equal to the booking's own is the booking's description — both dropped when anything else is said (`from
+  10 to 12` is 12; `Anna's Friday haircut to Saturday` is Saturday; `Anna's Friday haircut to 11:30` keeps
+  Friday). **Elsewhere** `from 3 to 4` is 3: the `until` after a `from` is the end. In every action a day said
+  after `instead of` (`вместо`, `замість`, `zamiast`) is dropped when another is said.
+- **What is no day and no time**: a number after a word of paying or before a currency (`paid 150`, `12.50 zł`), a
+  reference, a number with nothing around it that says a time (`Lipowa 12`, `2 haircuts`, `600 000 000`), a number
+  of people, minutes, days or weeks (`for 3 people`, `на 2 години`), English `at 12 Baker Street`. And the narrowing
+  is asked only for an action's own lines: a payment has no day and no time line at all.
+- An ordinal alone below the eleventh (`пятого`, `the fifth`) is a date only after a word for a day (`на пятое`,
+  `on the fifth`) or before a month or `числа`: `второго мастера` is no date.
+
+Tests, `WhenSuite`, both platforms, none of its phrases of the sealed set: a table of expressions a language with
+the narrowing expected, written from the language's grammar — English 73, Russian 75, Ukrainian 77, Polish 76 —
+each with the phrases that say neither a day nor a time; 53 moves (by a difference; from one day or time to
+another); the space (`a settled line has one option, an outside one none`, every other line `Commands`' own); and
+the property: for 120 random desks, every canonical saying (`Words.say`) of a booking, a list, a day off and four
+moves, in the four languages (about 3000 sayings), is narrowed to exactly its own day and time, its command is
+reachable in `Computed`, and a reader is never asked for a day or a time of it. Checked by mutation, each caught:
+`next` weekday as the nearest alone; the booking's own day not dropped in a move; a half read as the hour named.
+In the bench (`GenSuite`): the 2000 canonical training texts over generated desks are all settled and reachable.
+
+**The organ on the teacher's texts, no model** (`Narrowing`; the 2273 texts of A2 — the development set of this
+step, with the tables above; the sealed set and the new held-out slice were not used):
+
+| line | settled to the meant one | narrowed, the meant among | unsaid | the meant one lost |
+| --- | --- | --- | --- | --- |
+| day (1224 lines) | 1021 (83%) | 43 | 98 | 62 (5.1%) |
+| time (881 lines) | 777 (88%) | 11 | 77 | 16 (1.8%) |
+
+- **All 62 lost days are one thing, and it is the texts'**: a day seven or more days ahead named by a bare weekday
+  ("Put Oliver down …, Wednesday at half past nine" for the Wednesday of next week). The teacher was told "a
+  weekday, or the day's number" and given no rule for a far day; a person would say "next Wednesday" or the date.
+  So about one day in twenty of A2's training texts teaches a reader a wrong day. Not repaired in A2's texts; the
+  teacher's rule is corrected for the new held-out slice below.
+- The 16 lost times: the teacher's own slips (`полвторого` written for 14:30, `wpół do trzeciej` for 14:00,
+  `четверть третьего` for 14:30 — the organ's reading is the right one), and broken phrases (`о дванадцятій без
+  півгодини`, `в восемь соропяти`).
+- Unsaid is mostly a move that does not say the day or the time it keeps. Of the rest: typos (`ввівторок`,
+  `четверь`), `на szóste`, an ordinal below the eleventh alone (`четвертого`).
+- Found on these texts and added: `пів на п'ятнадцяту` and `wpół do piętnastej` (hours past twelve),
+  `о сьомій годині тридцять хвилин`, `piętnaście piętnaście`, `о половині десятої`, `20-те`, `dzisiejszych`,
+  `wpół do jednej`, the teacher's `тридцятій` and `trzydzieście` for thirty.
+
+### The held-out slice with every action (`Teach held`)
+
+Why the first one had three actions: an attempt `i` drew its desk by `i / 8` and its action by `(i / 4) % 15`, and
+a desk was held out when its seed was a multiple of 20 — so `i / 4` was 0 or 1 modulo 40, and modulo 15 that is
+only six places of the shares, all `book`, `move` or `list`. The desk decided the action.
+
+The existing texts cannot give a clean slice (every other desk was trained on), so the new one is NEW texts over
+NEW desks: seeds from 500000, a desk an attempt; no training ever drew them (the teacher's texts are over seeds
+1000–1439, the canonical ones from 100000). The action is the attempt's number's alone. Texts are asked for until
+every kind has its share in every language: 75 a language, 300 in all, in the sealed set's shares — 25 `book`, 15
+`move` (9 by a new day and time, 6 by a difference: `Gen.relative` — half an hour to two hours on the booking's
+day, another day at the same time, a day or a week later), 10 `cancel`, 5 `dayoff`, 10 `paid`, 5 `list`, 5
+`cannot`. A list and a cancel are asked for "in everyday words, as a question or a remark". The teacher's rules
+are A2's and one more: a weekday alone is the nearest such day (see above). Kept by A2's two checks, unchanged.
+The people's names are from the same lists as the training's; the desks, bookings and phrases are new.
+
+### To run (the GPU does one at a time)
+
+```sh
+sbt "commandsBench/runMain okay.shop.commands.bench.Narrowing <texts.jsonl>"       # the organ alone, no model
+sbt "commandsBench/runMain okay.shop.commands.bench.Teach held 0 4000"             # held.jsonl (appends)
+sbt "commandsBench/runMain okay.shop.commands.bench.ReadSet new <adapter> <out.tsv> new+when <adapter> <out.tsv>"
+sbt "commandsBench/runMain okay.shop.commands.bench.ReadSet sealed+when <adapter> scripts/commands/<name>.tsv"
+```
+
+### Not done in A2b
+
+- A weekday with a bare day number (`Monday 24`); `Friday week`, `the Friday after next`; a time from now (`через
+  час`, `in an hour`); `back` / `forward`, `назад` / `вперёд` as directions of a move; a part of the day with no
+  hour (`after lunch` alone narrows nothing); hours above twelve in English words but `fifteen thirty`.
+- A weekday's short writing that is also a name or a word (`Sob`, `Sat`, `Sun`) is heard as the day, outside the
+  canonical quotes.
+- In a move, a day or a time the phrase does NOT say is left to the reader (it stays the booking's by the frame's
+  rule, but "not heard" is not "not said"): only an explicit difference or `the same` is computed.
+- The desk's times are still one list for all days and services (A1): the organ narrows among them, it does not
+  know a start is closed that day.
+- A1's page (A3) does not call the organ yet; `Run` and `Desks` are untouched.
+
 ## Results
 
 ### A0 (run 2026-11-18)

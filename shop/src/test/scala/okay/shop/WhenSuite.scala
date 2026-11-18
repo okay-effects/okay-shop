@@ -113,6 +113,9 @@ class WhenSuite extends munit.FunSuite:
       Emma at 3 am tomorrow | 1 | x
       Emma on Friday at a quarter to six in the evening | 2 | 17:45
       Emma tomorrow at fifteen thirty | 1 | 15:30
+      Emma tomorrow at 5 past 3 | 1 | x
+      Emma tomorrow at 15 past 3 | 1 | 15:15
+      Kate on Saturday instead of Friday | 3 | -
       Show today's bookings | 0 | -
       Book a thirty minute slot | - | -
       """, "book", None)
@@ -193,6 +196,8 @@ class WhenSuite extends munit.FunSuite:
       Олю в пятницу двадцать минут шестого | 2 | x
       Олю завтра в 3 часа 30 минут | 1 | 15:30
       Покажи завтрашние записи | 1 | -
+      Олю завтра в 15 минут шестого | 1 | 17:15
+      Анну в субботу вместо пятницы | 3 | -
       """, "book", None)
     assert(n >= 60, n)
 
@@ -273,6 +278,8 @@ class WhenSuite extends munit.FunSuite:
       Що на 10-те у всіх? | 7 | -
       Назара в понеділок о половині дванадцятої | 5 | 11:30
       Надію завтра о восьмій тридцятій | 1 | 08:30,20:30
+      Олю завтра 15 по п'ятій | 1 | 17:15
+      Анну в суботу замість п'ятниці | 3 | -
       """, "book", None)
     assert(n >= 60, n)
 
@@ -352,6 +359,8 @@ class WhenSuite extends munit.FunSuite:
       Ewę jutro na piętnaście piętnaście | 1 | 15:15
       Lista dzisiejszych zapisów | 0 | -
       Olę dziś na wpół do jednej | 0 | 12:30
+      Ewę jutro 15 po czwartej | 1 | 16:15
+      Annę w sobotę zamiast piątku | 3 | -
       """, "book", None)
     assert(n >= 60, n)
 

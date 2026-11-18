@@ -24,7 +24,7 @@ object When:
   /** a part of the day, which settles a time said by a twelve-hour clock */
   enum Part { case Morning, Day, Evening, Night, Am, Pm }
   /** the word before a day or a time: `from` it, `until` it, or any other */
-  enum Role { case Plain, From, Until }
+  enum Role { case Plain, From, Until, Instead }
   enum Mode { case Bare, This, Next }
 
   /** a day as a phrase says it */
@@ -143,7 +143,8 @@ object When:
         unit.fold(n -> (i + 1))(u => (n + u) -> (i + 2))
       })
 
-    private def role(i: Int): Role = if is(i, t.from) then Role.From else if is(i, t.until) then Role.Until
+    private def role(i: Int): Role = if is(i, Tongues.instead) then Role.Instead
+      else if is(i, t.from) then Role.From else if is(i, t.until) then Role.Until
       else Role.Plain
 
     /** a number that is money: a currency after it, a word of paying before it */
@@ -421,10 +422,12 @@ object When:
         if options.contains(s) then Narrowed.Among(Vector(show(s))) else Narrowed.Outside(Vector(show(s)))
       }
       else
-        val live = sets.map((as, s) => as -> s.filter(options.contains)).filter(_._2.nonEmpty)
         def unless(of: Vector[(Role, Vector[A])], drop: ((Role, Vector[A])) => Boolean) =
           val rest = of.filterNot(drop)
           if rest.isEmpty then of else rest
+        // what is said `instead of` is not the one meant
+        val live = unless(sets.map((as, s) => as -> s.filter(options.contains)).filter(_._2.nonEmpty),
+          _._1 == Role.Instead)
         val kept =
           // a move goes FROM what the booking has, which the phrase may say, to the rest
           if action == "move" then
