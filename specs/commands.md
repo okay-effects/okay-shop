@@ -197,8 +197,8 @@ adapters, the logs — is in `COMMANDS_OUT` (`~/work/my/okay-shop-private/comman
 To run again, each step one command (the GPU does one at a time — the gateway is the same GPU):
 
 ```sh
-sbt "commandsBench/runMain okay.shop.commands.bench.Teach 0 4320"          # the teacher's texts (appends)
-COMMANDS_SEED=1 sbt "commandsBench/runMain okay.shop.commands.bench.Train" # an adapter an epoch, seeds 1 2 3
+sbt "commandsBench/runMain okay.shop.commands.bench.Teach 0 3515"          # the teacher's texts (appends)
+COMMANDS_SEED=1 COMMANDS_EPOCHS=1 sbt "commandsBench/runMain okay.shop.commands.bench.Train" # seeds 1 2 3
 sbt "commandsBench/runMain okay.shop.commands.bench.ReadSet held <adapter> <out.tsv>"
 sbt "commandsBench/runMain okay.shop.commands.bench.ReadSet sealed <adapter|none> scripts/commands/<name>.tsv"
 sbt "commandsBench/runMain okay.shop.commands.bench.Tables scripts/commands/reader-s1.tsv …"
@@ -245,3 +245,110 @@ Consequences for the next steps:
 - Relative days and spoken times ("післязавтра", "пів на першу") are the place to compute and not to read: the
   frame offers days and times as options from the Desk, and the words for them belong to `Words`, per language.
 - The set stays sealed. The prompt is not tuned after this run.
+
+### A2 (run 2026-11-18)
+
+**Not done by its criterion.** Two readers agreeing, on the 60 sealed phrases: right 32–34 (53–57%), wrong 5–8
+(8–13%); the criterion is right ≥ 80% and wrong ≤ 2%. Every answer is in `scripts/commands/reader-*.tsv`.
+
+The texts. The teacher was asked 3515 times (4320 were planned; the run was stopped there, another session's
+training on the same GPU): **2273 kept (65%)**, 1242 rejected — the teacher reading its own phrase back to another
+day 581, time 251, service 108, action 71, master 28, booking 15, way 10 (by the first line that differs; in all,
+the day differs in 633 and the time in 417); a new booking without its one mark 172 (41 of them in the first 320
+attempts, before the second asking); a phrase that does not close (an amount not in digits) 6; none for a span
+that is no option, a name that is not the given one, a reference said. Kept by language: en 686, ru 539, pl 534,
+uk 514; by action: book 561, paid 411, cancel 409, move 320, cannot 229, list 175, dayoff 168 — a booking and a
+move, which name a day and a time, are rejected most, so they are a smaller share than they were asked for.
+
+The training. 2179 of the teacher's texts and 1033 canonical ones (94 of the teacher's held out: the desks of one
+seed in twenty), 723 tokens a text, 3212 steps an epoch, about 0.72 s a step alone on this GPU.
+
+| adapter | training loss | held-out loss | held-out texts right (94) |
+| --- | --- | --- | --- |
+| seed 1, epoch 1 | 0.0496 | 0.0305 | 72 |
+| seed 1, epoch 2 | 0.0244 | 0.0401 | 65 |
+| seed 2, epoch 1 | 0.0451 | 0.0609 | 53 |
+| seed 3, epoch 1 | 0.0473 | 0.0390 | 68 |
+
+One epoch was chosen on seed 1's held-out loss (0.0305 against 0.0401), before any sealed phrase was read; the
+held-out readings, made later, say the same (72 against 65). A flaw found afterwards: by the way attempts are
+numbered, a held-out desk has only bookings, moves and lists — the held-out slice has no cancel, payment, day off
+or `cannot`, and is small.
+
+The measure on the sealed 60 (all 60 hand-written commands are reachable by choices, `Laws.reach`; a reading takes
+0.42–0.45 s a phrase):
+
+| reader | right | wrong | unread | en | pl | ru | uk |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Qwen3 0.6B untrained | 4 | 55 | 1 | 1/15 | 1/15 | 2/15 | 0/15 |
+| seed 1 | 42 | 18 | 0 | 13/15 | 11/15 | 11/15 | 7/15 |
+| seed 2 | 38 | 22 | 0 | 10/15 | 10/15 | 10/15 | 8/15 |
+| seed 3 | 41 | 19 | 0 | 11/15 | 10/15 | 12/15 | 8/15 |
+| the ceiling (35B, A0) | 49 | 11 | 0 | 15/15 | 12/15 | 11/15 | 11/15 |
+
+By line — the action over all 60, another line over the phrases whose action was read right:
+
+| reader | action | client | service | master | day | time | booking | amount | way |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| untrained | 19/60 | 3/4 | 4/4 | 4/8 | 1/9 | 3/5 | 6/11 | 8/8 | 6/8 |
+| seed 1 | 54/60 | 14/18 | 18/18 | 26/26 | 32/35 | 21/27 | 24/24 | 7/7 | 7/7 |
+| seed 2 | 49/60 | 20/20 | 20/20 | 24/24 | 25/31 | 22/27 | 21/21 | 8/8 | 7/8 |
+| seed 3 | 51/60 | 18/19 | 19/19 | 27/27 | 31/34 | 22/26 | 20/22 | 8/8 | 8/8 |
+
+Readers agreeing — the same command from each, else the master is asked:
+
+| readers | right | asked | wrong | en r/a/w | pl r/a/w | ru r/a/w | uk r/a/w |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| seeds 1 + 2 | 33 | 22 | 5 | 10/4/1 | 9/4/2 | 8/7/0 | 6/7/2 |
+| seeds 1 + 3 | 34 | 20 | 6 | 11/3/1 | 9/4/2 | 10/4/1 | 4/9/2 |
+| seeds 2 + 3 | 32 | 20 | 8 | 10/2/3 | 8/4/3 | 9/6/0 | 5/8/2 |
+| seeds 1 + 2 + 3 | 27 | 29 | 4 | 10/4/1 | 7/6/2 | 7/8/0 | 3/11/1 |
+
+Two more adapters, each read once, outside the three seeds:
+
+| reader | right | wrong | unread |
+| --- | --- | --- | --- |
+| the pilot: 186 of the teacher's texts and 85 canonical, four epochs | 40 | 18 | 2 |
+| seed 1 after its second epoch | 50 | 10 | 0 |
+
+What the tables say, plainly:
+
+- **The training works; more texts of the same kind did not add.** Untrained, the model answers nearly everything
+  `list, today, olena` (4/60). Two hundred texts seen four times (about 1100 steps) give 40/60; twelve times as
+  many seen once (3212 steps) give 38–42.
+- **What the shop names is read**: the service 57/57, the master 77/77, the booking 65/67, the amount and the way
+  45/46 over the three seeds. The client's span 52/57 — the misses are the phrase's first word taken for the name
+  ("Завтра", "Борода", "Фарбування"), four of the five by seed 1.
+- **11 phrases are missed by all three seeds**, and they are of three kinds:
+  - a time in words, 4: "полшестого", "на дев'яту", "пів на першу", "wpół do dziesiątej" — the last read 10:30 by
+    all three ("half past ten" for "half to ten");
+  - a day by its distance, 3: "післязавтра" read tomorrow by all three (the ceiling missed it too), "w przyszły
+    poniedziałek" read today or tomorrow, "Wednesday next week" read this Wednesday by all three;
+  - a move said as a difference, 4: "на годину пізніше", "pół godziny wcześniej", "an hour earlier", "в то же
+    время" — read as a cancel, a day off, `cannot` or a wrong time. The texts have next to none of these: a move
+    was drawn by its new day and time, and the teacher said them.
+- **The other 22 phrases are missed by one or two seeds**: a list or a cancel read `cannot` (seed 2: six of them,
+  "Что у меня завтра?", "Co mam w piątek?"), a surname matched to another booking (seed 3, twice), a booking in
+  a terse order of words read a day off ("Koloryzacja, Ewa Lis, sobota, 11:00, u Oleny").
+- **Agreement is a doubt that works, and not enough.** It takes the wrong answers from 18–22 down to 5–8 at the
+  price of 20–22 questions. What is left is what the readers misread ALIKE — the words for times and days above:
+  no number of seeds asks about those.
+- **The epochs.** The second epoch of seed 1 reads 50/60 here and 65/94 on the held-out texts, the first 42/60
+  and 72/94: the two sets disagree, and the held-out one is small and of three actions. The seeds were trained
+  for one epoch, as chosen before the sealed set was read; whether two epochs are better is NOT settled by one
+  adapter, and choosing them now would be choosing on the sealed set.
+
+What follows for A3 and for the reader:
+
+- A reader that is right two times in three is a draft, not an answer. A3's page must make a wrong line cheap:
+  the command said back with every line a choice among the same options (`Commands.next`), one tap to change,
+  then Confirm. That page is worth building as it is — nothing runs without the confirmation either way.
+- Days and times are to be COMPUTED, as A0 already said: an exact organ per language for "післязавтра",
+  "wpół do dziesiątej", "next week", which either fills the line or narrows its options before the reader weighs
+  them. They are 7 of the 11 common misses, and the only misses that agreement cannot see.
+- A move by a difference ("an hour later", "the same time") needs its own texts, and perhaps its own line (a
+  shift from the booking's time): computing the new time from the booking is exact, reading it is not.
+- The next measure of the reader itself, in this order: a held-out slice with every action in it; texts for the
+  relative moves and for lists and cancels in everyday words; three seeds at two epochs against one. The sealed
+  set stays sealed: these are chosen on the held-out texts.
+- Not tried: the options weighed as index tokens; a model larger than 0.6B (okay-desk: 1.7B halves the errors).

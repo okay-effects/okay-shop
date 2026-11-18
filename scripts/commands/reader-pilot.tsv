@@ -1,0 +1,61 @@
+lang	phrase	gold	read	margin
+ru	Запиши Олю Иванову на стрижку в пятницу в три к Марку	book client=Олю Иванову;service=haircut;master=marek;day=2026-11-20;time=15:00	book client=Олю Иванову;service=haircut;master=marek;day=2026-11-18;time=13:00	0.018
+ru	Завтра в 11 маникюр для Светланы, к Елене	book client=Светланы;service=manicure;master=olena;day=2026-11-17;time=11:00	book client=Светланы;service=manicure;master=olena;day=2026-11-17;time=11:00	0.019
+ru	Нужно покрасить Катю в субботу в десять утра	book client=Катю;service=color;master=any;day=2026-11-21;time=10:00	-	0.945
+ru	Борода, Андрей, сегодня в полшестого, Марек	book client=Андрей;service=beard;master=marek;day=2026-11-16;time=17:30	move booking=b1;day=2026-11-16;time=09:00	0.143
+ru	Поставь Наталью на стрижку на вторник 24-го на 9:30	book client=Наталью;service=haircut;master=any;day=2026-11-24;time=09:30	book client=Наталью;service=haircut;master=any;day=2026-11-24;time=09:30	0.491
+ru	Перенеси Анну Ковальскую на среду на 12:30	move booking=b1;day=2026-11-18;time=12:30	move booking=b1;day=2026-11-18;time=12:30	0.598
+ru	Пётр Новак просит передвинуть на четыре	move booking=b2;day=2026-11-17;time=16:00	move booking=b2;day=2026-11-18;time=16:30	0.166
+ru	Петренко не может в четверг, давай в пятницу в то же время	move booking=b4;day=2026-11-20;time=16:30	cancel booking=b4	3.208
+ru	Отмени запись Оксаны Мельник	cancel booking=b3	cancel booking=b3	4.049
+ru	Мария Вишневская не придёт, убери её	cancel booking=b5	cancel booking=b5	2.972
+ru	В четверг Елена не работает	dayoff master=olena;day=2026-11-19	dayoff master=olena;day=2026-11-19	0.415
+ru	Ковальская заплатила 120 наличными	paid booking=b1;amount=120;way=cash	paid booking=b1;amount=120;way=cash	3.177
+ru	Новак оплатил картой 80 злотых	paid booking=b2;amount=80;way=card	paid booking=b2;amount=80;way=card	2.959
+ru	Что у меня завтра?	list day=2026-11-17;master=any	list day=2026-11-17;master=any	0.132
+ru	Закажи мне новую машинку для стрижки	cannot	cannot	1.563
+uk	Запиши Ірину на стрижку в четвер о другій до Олени	book client=Ірину;service=haircut;master=olena;day=2026-11-19;time=14:00	book client=Ірину;service=haircut;master=olena;day=2026-11-19;time=09:30	0.087
+uk	Манікюр для Тетяни післязавтра об 11:30	book client=Тетяни;service=manicure;master=any;day=2026-11-18;time=11:30	move booking=b5;day=2026-11-18;time=11:30	0.018
+uk	Постав Богдана на бороду сьогодні о п'ятій до Марека	book client=Богдана;service=beard;master=marek;day=2026-11-16;time=17:00	book client=Богдана;service=beard;master=marek;day=2026-11-16;time=09:30	0.193
+uk	Фарбування для Лесі в п'ятницю, 27-го, о десятій ранку, до Олени	book client=Лесі;service=color;master=olena;day=2026-11-27;time=10:00	move booking=b5;day=2026-11-27;time=09:00	0.161
+uk	У суботу о 13:00 стрижка, клієнт Юрій Коваль	book client=Юрій Коваль;service=haircut;master=any;day=2026-11-21;time=13:00	book client=Юрій Коваль;service=haircut;master=any;day=2026-11-21;time=13:00	0.193
+uk	Перенеси Івана Петренка на п'ятницю на дев'яту	move booking=b4;day=2026-11-20;time=09:00	move booking=b4;day=2026-11-20;time=18:30	0.144
+uk	Оксана Мельник хоче на годину пізніше	move booking=b3;day=2026-11-18;time=13:00	cancel booking=b3	0.375
+uk	Пересунь Анну Ковальську на завтра на пів на першу	move booking=b1;day=2026-11-17;time=12:30	move booking=b1;day=2026-11-18;time=09:30	0.036
+uk	Скасуй запис Петра Новака	cancel booking=b2	cancel booking=b2	3.132
+uk	Ковальська відмовилась, зніми її	cancel booking=b1	cancel booking=b1	3.792
+uk	Марек у суботу вихідний	dayoff master=marek;day=2026-11-21	dayoff master=marek;day=2026-11-21	0.196
+uk	Мельник заплатила 250 карткою	paid booking=b3;amount=250;way=card	paid booking=b3;amount=250;way=card	2.437
+uk	Петренко переказав 90 на рахунок	paid booking=b4;amount=90;way=transfer	paid booking=b4;amount=90;way=transfer	0.875
+uk	Хто записаний до Олени в середу?	list day=2026-11-18;master=olena	list day=2026-11-18;master=olena	0.472
+uk	Яка завтра погода у Вроцлаві?	cannot	cannot	5.032
+pl	Zapisz Kasię na strzyżenie w piątek o 15 do Marka	book client=Kasię;service=haircut;master=marek;day=2026-11-20;time=15:00	book client=Kasię;service=haircut;master=marek;day=2026-11-20;time=15:00	0.054
+pl	Manicure dla Joanny jutro o wpół do dziesiątej	book client=Joanny;service=manicure;master=any;day=2026-11-17;time=09:30	list day=2026-11-17;master=olena	0.207
+pl	Koloryzacja, Ewa Lis, sobota, 11:00, u Oleny	book client=Ewa Lis;service=color;master=olena;day=2026-11-21;time=11:00	list day=2026-11-21;master=olena	0.221
+pl	Wpisz Tomka na brodę dziś na 18	book client=Tomka;service=beard;master=any;day=2026-11-16;time=18:00	book client=Tomka;service=beard;master=any;day=2026-11-16;time=18:00	0.107
+pl	W przyszły poniedziałek o dziesiątej strzyżenie dla Adama Wójcika u Marka	book client=Adama Wójcika;service=haircut;master=marek;day=2026-11-23;time=10:00	book client=Adama Wójcika;service=haircut;master=marek;day=2026-11-17;time=10:00	0.125
+pl	Przenieś Marię Wiśniewską na czwartek na 13	move booking=b5;day=2026-11-19;time=13:00	move booking=b5;day=2026-11-19;time=13:00	0.250
+pl	Piotr Nowak chce przyjść pół godziny wcześniej	move booking=b2;day=2026-11-17;time=13:30	cancel booking=b2	2.000
+pl	Przełóż Annę Kowalską na środę, ta sama godzina	move booking=b1;day=2026-11-18;time=10:00	move booking=b1;day=2026-11-18;time=10:00	0.539
+pl	Odwołaj wizytę Ivana Petrenki	cancel booking=b4	cancel booking=b4	3.459
+pl	Oksana Melnyk rezygnuje, usuń ją	cancel booking=b3	cancel booking=b3	4.170
+pl	Olena ma wolne w piątek	dayoff master=olena;day=2026-11-20	dayoff master=olena;day=2026-11-20	0.577
+pl	Wiśniewska zapłaciła 70 zł gotówką	paid booking=b5;amount=70;way=cash	paid booking=b5;amount=70;way=cash	2.269
+pl	Kowalska zapłaciła 120 przelewem	paid booking=b1;amount=120;way=transfer	paid booking=b1;amount=120;way=transfer	2.599
+pl	Co mam w piątek?	list day=2026-11-20;master=any	list day=2026-11-20;master=any	0.317
+pl	Wystaw fakturę dla firmy ABC na 500 zł	cannot	paid booking=b5;amount=500;way=transfer	0.299
+en	Book Emma for a haircut on Friday at 3 with Marek	book client=Emma;service=haircut;master=marek;day=2026-11-20;time=15:00	book client=Emma;service=haircut;master=marek;day=2026-11-20;time=15:00	0.054
+en	Manicure for Sophie tomorrow at half past ten	book client=Sophie;service=manicure;master=any;day=2026-11-17;time=10:30	-	0.750
+en	Put John Smith down for a beard trim today at 6 pm, Marek	book client=John Smith;service=beard;master=marek;day=2026-11-16;time=18:00	book client=John Smith;service=beard;master=marek;day=2026-11-16;time=18:00	0.596
+en	Colouring for Lucy on Wednesday next week at noon with Olena	book client=Lucy;service=color;master=olena;day=2026-11-25;time=12:00	book client=Lucy;service=color;master=olena;day=2026-11-18;time=12:00	0.331
+en	Haircut, David, Saturday, 9 in the morning	book client=David;service=haircut;master=any;day=2026-11-21;time=09:00	book client=David;service=haircut;master=any;day=2026-11-21;time=09:00	0.143
+en	Move Anna Kowalska to Thursday at 11	move booking=b1;day=2026-11-19;time=11:00	move booking=b1;day=2026-11-19;time=11:00	0.482
+en	Ivan Petrenko asked to come an hour earlier	move booking=b4;day=2026-11-19;time=15:30	move booking=b4;day=2026-11-18;time=16:30	0.179
+en	Reschedule Maria Wiśniewska to next Monday, same time	move booking=b5;day=2026-11-23;time=09:30	move booking=b5;day=2026-11-23;time=09:30	0.247
+en	Cancel Piotr Nowak's appointment	cancel booking=b2	cancel booking=b2	3.629
+en	Oksana Melnyk can't make it, take her off	cancel booking=b3	cancel booking=b3	4.127
+en	Marek is off on Wednesday	dayoff master=marek;day=2026-11-18	dayoff master=marek;day=2026-11-18	0.491
+en	Nowak paid 80 by card	paid booking=b2;amount=80;way=card	paid booking=b2;amount=80;way=card	3.292
+en	Petrenko paid 90 in cash	paid booking=b4;amount=90;way=cash	paid booking=b4;amount=90;way=cash	3.542
+en	What does Marek have on Thursday?	list day=2026-11-19;master=marek	list day=2026-11-19;master=marek	0.279
+en	Order more shampoo from the supplier	cannot	cannot	6.027
