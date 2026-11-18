@@ -34,23 +34,24 @@ object Sealed:
  * A SET READ BY A READER (specs/commands.md A2), each answer written to a TSV: language, phrase, the meant
  * command, the command read (`-` when no command came out), the least margin.
  *
- *   sbt "commandsBench/runMain okay.shop.commands.bench.ReadSet sealed|held <adapter|none> <out.tsv>"
- * `sealed`: the 60 phrases; `held`: the teacher's texts over the held-out desks (COMMANDS_TEXTS).
+ *   sbt "commandsBench/runMain okay.shop.commands.bench.ReadSet sealed|held <adapter|none> <out.tsv> …"
+ * `sealed`: the 60 phrases; `held`: the teacher's texts over the held-out desks (COMMANDS_TEXTS). Several
+ * readings, three arguments each, are one job on the GPU.
  */
 object ReadSet:
   def line(path: Vector[Choice]): String = (path.head.option + " " + Asking.fields(path)).trim
 
-  def main(args: Array[String]): Unit =
-    val set = args(0) match
+  def main(args: Array[String]): Unit = args.grouped(3).foreach { case Array(which, adapter, out) =>
+    val set = which match
       case "sealed" => Sealed.phrases
-      case which =>
+      case _ =>
         val texts = Texts.load(Teach.texts)
         // `held`: the texts over the held-out desks; `seen`: a hundred of those trained on (the pipeline's check)
         if which == "held" then texts.filter(s => Texts.heldOut(s.seed))
         else texts.filterNot(s => Texts.heldOut(s.seed)).take(100)
     val unreachable = set.count(s => s.command.forall(c => Laws.reach(Commands)(s.desk, s.text, c).nonEmpty))
-    println(s"${set.size} texts, ${set.size - unreachable} reachable by choices")
-    val reader = Reader.load(Some(args(1)).filter(_ != "none"))
+    println(s"$which by $adapter: ${set.size} texts, ${set.size - unreachable} reachable by choices")
+    val reader = Reader.load(Some(adapter).filter(_ != "none"))
     val t0 = System.nanoTime()
     val rows = set.map { s =>
       val r = reader.read(s.desk, s.text)
@@ -59,9 +60,10 @@ object ReadSet:
       println(f"${s.lang} ${if got == line(s.path) then "right" else "WRONG"} $margin%5.2f ${s.text} → $got")
       f"${s.lang}\t${s.text}\t${line(s.path)}\t$got\t$margin%.3f"
     }
-    Files.write(Path.of(args(2)), ("lang\tphrase\tgold\tread\tmargin" +: rows).asJava)
-    println(f"${rows.size} read, ${(System.nanoTime() - t0) / 1e9 / rows.size}%.2f s a phrase; written ${args(2)}")
+    Files.write(Path.of(out), ("lang\tphrase\tgold\tread\tmargin" +: rows).asJava)
+    println(f"${rows.size} read, ${(System.nanoTime() - t0) / 1e9 / rows.size}%.2f s a phrase; written $out")
     reader.close()
+  }
 
 /**
  * THE TABLES of readers' answers (`ReadSet`'s files): each reader's right, wrong and unread, by language and by

@@ -151,6 +151,59 @@ answered as done, a cancel telling nobody.
 Still not built in A1: the frame said back and confirmed on a page (A3 calls `Desks.read`, `Words.say`, then
 `Run`), and the two missing operations above.
 
+## A2 as built (2026-11-18): the small reader, trained and measured
+
+`commandsBench` (`commands-bench/`, package `okay.shop.commands.bench`): the JVM alone, on mlx-scala (Apple's GPU),
+never published and not among `root`'s modules — `sbt test` and a release never need MLX. Its own tests,
+`sbt commandsBench/test` (`GenSuite`), need no model either. What is not for git — the teacher's texts, the
+adapters, the logs — is in `COMMANDS_OUT` (`~/work/my/okay-shop-private/commands`).
+
+- **`Asking`** — what the reader is asked, one writing for training and reading: a fixed rule of six lines; the desk
+  as text (today, the days each with its weekday, the first two marked today and tomorrow, the starts as a range
+  and a step, the services' keys with their names in the four languages, the masters' keys and names, the bookings
+  each on a line with its reference first); the phrase. A day is written with its weekday (`Fri 2026-11-20`),
+  every other option as it is.
+- **`Reader`** — the reading by choices (okay-frames' `Reading.run` over `Commands`): the answer is, for each choice,
+  a newline, the hole's name and a colon, a space and the option; after the last, the turn's end. At a hole every
+  option is weighed by the mean log-probability of its tokens AND of the token that follows it (the next line's
+  newline, or the end) — unlike okay-desk's `FramePort`, which weighs the option's own tokens: a client's options
+  are spans of the phrase, one the beginning of another, and only the end tells "Olu" from "Olu Nowak". The best
+  is taken; `close` makes the command. A hole of one option is not weighed; a hole of none (a payment in a phrase
+  with no number) ends the reading with no command — `unread`. The model never writes a token of its own.
+- **`Gen`** — fictional desks, each the function of a seed: one of nine trades (hair, nails, beauty, massage, a
+  garage, pets, lessons, tattoo, photo; a quarter of the desks a salon of the first three together), two to six
+  services, none to four masters (a fifth of the desks with Cyrillic names), a step of 15, 30 or 60 minutes,
+  hours from 7–10 to 16–21, a horizon of 7, 14 or 21 days from a day of 2026–2027, none to eight bookings with a
+  numbered or a store-like reference, their clients' names Polish, English, Ukrainian (in Latin or Cyrillic) or
+  Russian. Commands in the sealed set's shares of the actions, the four languages in turn; a move changes the
+  day, the time or both. All names come from lists of common first names and surnames; the names of the sealed
+  shop's people are not in the lists, and no desk has its services or its bookings (`GenSuite`).
+- **`Texts.canon`** — the canonical words (`Words.say`) as texts: free and exact.
+- **`Teach`** — the teacher's phrases: Qwen3.6-35B through the local gateway, thinking off, temperature 0.9, is
+  given the command's canonical words, today, a style drawn at random, and writes how a master would say it, a
+  new client's name marked `[[…]]` (for `cannot`: a topic outside, of thirty). Kept only if (i) the marks
+  stripped, the command — its client the marked span — closes over the phrase's own options, the span begins as
+  the given name does, and the phrase does not say the booking's reference; and (ii) the teacher, asked apart at
+  temperature 0 with the desk before it, reads the phrase back into the same command — every line but the
+  client's words (a large model writes a name back in the nominative: A0). From attempt 320 on, a new booking
+  written without its mark is asked for once more, and marks in another command are only stripped.
+- **`Train`** — LoRA rank 16 on every projection, lr 2e-4, an example a step (okay-desk's `FrameTrain`), the
+  seed the adapter's first values and the texts' order. The texts: the teacher's kept phrases and half as many
+  canonical ones, none over a held-out desk (one seed in twenty, `Texts.heldOut`).
+- **`ReadSet`**, **`Tables`** — a set read by a reader into a TSV (`sealed`: the 60 phrases; `held`: the teacher's
+  texts over the held-out desks), and the tables of such files: each reader's right, wrong and unread by language
+  and by line, and every pair and all three as one reader with a doubt — the same command from each, or `asked`.
+
+To run again, each step one command (the GPU does one at a time — the gateway is the same GPU):
+
+```sh
+sbt "commandsBench/runMain okay.shop.commands.bench.Teach 0 4320"          # the teacher's texts (appends)
+COMMANDS_SEED=1 sbt "commandsBench/runMain okay.shop.commands.bench.Train" # an adapter an epoch, seeds 1 2 3
+sbt "commandsBench/runMain okay.shop.commands.bench.ReadSet held <adapter> <out.tsv>"
+sbt "commandsBench/runMain okay.shop.commands.bench.ReadSet sealed <adapter|none> scripts/commands/<name>.tsv"
+sbt "commandsBench/runMain okay.shop.commands.bench.Tables scripts/commands/reader-s1.tsv …"
+```
+
 ## Results
 
 ### A0 (run 2026-11-18)
