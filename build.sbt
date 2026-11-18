@@ -107,3 +107,17 @@ lazy val worker = (project in file("worker")).enablePlugins(ScalaJSPlugin).depen
 
 lazy val root = (project in file(".")).aggregate(shop.jvm, shop.js, workshop.jvm, workshop.js, page, worker)
   .settings(publish / skip := true)
+
+/** THE COMMANDS' SMALL READER, TRAINED AND MEASURED (specs/commands.md A2): the JVM alone, with mlx-scala (Apple's
+ * GPU); never published and not among `root`'s modules, so `sbt test` and a release never need MLX.
+ * `sbt "commandsBench/runMain okay.shop.commands.bench.…"`; MLX_SCALA_LIB: the directory of libokm.dylib */
+val mlxNativeLib =
+  sys.env.get("MLX_SCALA_LIB").map(file).getOrElse(file("../mlx-scala/native-lib/out/lib")).getCanonicalFile
+lazy val commandsBench = (project in file("commands-bench")).dependsOn(shop.jvm)
+  .settings(name := "okay-shop-commands-bench", publish / skip := true,
+    resolvers += "mlx-scala" at "https://sergey-scherbina.github.io/mlx-scala/maven",
+    libraryDependencies ++= Seq("io.github.sergey-scherbina" %% "mlx-scala" % "0.1.0",
+      "io.github.sergey-scherbina" %% "mlx-scala-llm" % "0.1.0", munit.value),
+    run / fork := true, run / baseDirectory := (ThisBuild / baseDirectory).value,
+    run / javaOptions ++= Seq("--enable-native-access=ALL-UNNAMED", s"-Dokm.lib=$mlxNativeLib/libokm.dylib",
+      "-Xss16m"))
