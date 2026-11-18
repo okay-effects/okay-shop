@@ -195,6 +195,36 @@ object Gen:
       case "cannot" => Command.Cannot
       case _ => book
 
+  /**
+   * A MOVE SAID AS A DIFFERENCE (A2b): a booking moved by half an hour to two hours on its own day, to another
+   * day at its own time, or by a day or a week at its own time — with the difference in words, for the teacher's
+   * note. None when the desk has no booking, or no such start or day.
+   */
+  def relative(r: Random, d: Desk): Option[(Command, String)] = if d.bookings.isEmpty then None else
+    val b = pick(r, d.bookings)
+    def words(n: Int, one: String, many: Map[Int, String]) =
+      many.getOrElse(math.abs(n), one) + (if n > 0 then " later" else " earlier")
+    weighted(r, 0 -> 5, 1 -> 2, 2 -> 3) match
+      case 0 =>
+        val by = Vector(-120, -90, -60, -60, -30, -30, 30, 30, 60, 60, 60, 90, 120)
+          .filter(m => d.times.contains(b.time + m))
+        if by.isEmpty then None else
+          val m = pick(r, by)
+          val said = words(m, "an hour", Map(30 -> "half an hour", 90 -> "an hour and a half", 120 -> "two hours"))
+          Some(Command.Move(b.ref, b.day, b.time + m) -> (" Note: only the time changes. Say the new time ONLY as " +
+            s"a difference from the booking's own time — $said — with no clock time for it, and no day."))
+      case 1 =>
+        val days = d.days.filter(_ != b.day)
+        if days.isEmpty then None else Some(Command.Move(b.ref, pick(r, days), b.time) ->
+          " Note: only the day changes. Say the new day, and that the time stays the same (the same time).")
+      case _ =>
+        val by = Vector(1, 1, 7, 7, -1).filter(n => d.days.contains(Reports.plus(b.day, n)))
+        if by.isEmpty then None else
+          val n = pick(r, by)
+          val said = words(n, "a day", Map(7 -> "a week"))
+          Some(Command.Move(b.ref, Reports.plus(b.day, n), b.time) -> (" Note: only the day changes. Say the new " +
+            s"day ONLY as a difference from the booking's own day — $said — with no weekday and no date for it."))
+
   /** what a master may ask that is no command of the shop's: the teacher's topics for `cannot` */
   val outside: Vector[String] = Vector("change the price of a service", "last month's revenue",
     "send a client a reminder message", "add a new service to the list", "the weather tomorrow",

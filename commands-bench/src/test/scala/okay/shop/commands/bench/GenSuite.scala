@@ -1,7 +1,7 @@
 package okay.shop.commands.bench
 
 import okay.frames.Laws
-import okay.shop.commands.Commands
+import okay.shop.commands.{Commands, Computed}
 import okay.shop.model.Lang
 
 /** THE GENERATED TEXTS (specs/commands.md A2), the part with no model: desks differ and are their seed's; every
@@ -23,6 +23,20 @@ class GenSuite extends munit.FunSuite:
       val c = s.command.getOrElse(fail(s"no command: ${s.json}"))
       assertEquals(Laws.reach(Commands)(s.desk, s.text, c), None, s.text)
       assertEquals(Commands.parse(s.desk, s.text, s.lang), Some(c), s.text)
+
+  test("A2b: every canonical text's day and time are settled by the organ, its command still reachable"):
+    for s <- canon; c <- s.command do
+      assertEquals(Laws.reach(Computed)(s.desk, s.text, c), None, s.text)
+    assert(Narrowing.of(canon).forall(_._3 == "settled"), Narrowing.of(canon).find(_._3 != "settled"))
+
+  test("A2b: a move by a difference is a move of the desk's, by a start or a day the desk has"):
+    val moves = (1L to 400L).flatMap(seed => Gen.relative(new scala.util.Random(seed), Gen.desk(Teach.heldFrom + seed))
+      .map(Gen.desk(Teach.heldFrom + seed) -> _))
+    assert(moves.size > 250, moves.size)
+    for (desk, (c, note)) <- moves do
+      assert(Commands.close(desk, "", Commands.path(desk, c)).contains(c), c)
+      assert(note.contains("later") || note.contains("earlier") || note.contains("the same time"), note)
+    assertEquals(Teach.heldQuota.values.sum, 75)
 
   test("the actions in the sealed set's shares, the languages in turn"):
     assertEquals(canon.groupBy(_.lang).view.mapValues(_.size).toMap, Lang.values.map(_.code -> 500).toMap)

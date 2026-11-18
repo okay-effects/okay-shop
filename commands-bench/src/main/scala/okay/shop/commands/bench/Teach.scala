@@ -120,17 +120,19 @@ object Teach:
     }.toOption
 
   /** the request a text is written from: the canonical words, today, what a move leaves, a style */
-  private def request(r: Random, desk: Desk, c: Command, l: Lang): String =
+  private def request(r: Random, desk: Desk, c: Command, l: Lang, noted: Option[String] = None,
+                      styled: Option[String] = None): String =
     val head = s"Language: ${names(l)}. "
-    val style = s" Style: ${styles(r.nextInt(styles.size))}."
+    val drawn = styles(r.nextInt(styles.size))
+    val style = s" Style: ${styled.getOrElse(drawn)}."
     c match
       case Command.Cannot => s"${head}Outside topic: ${Gen.outside(r.nextInt(Gen.outside.size))}.$style"
       case _ =>
-        val note = c match
+        val note = noted.getOrElse(c match
           case Command.Move(b, d, t) => desk.bookings.find(_.ref == b).fold("") { e =>
             if e.day == d then " Note: only the time changes." else if e.time == t then " Note: only the day changes."
             else "" }
-          case _ => ""
+          case _ => "")
         s"${head}Today: ${Words.day(desk.days.head, l)}. Command: ${Words.say(desk, c, l)}$note$style"
 
   /** a marked name is the given one's: each of its words begins as one of the given name's words does */
@@ -145,9 +147,13 @@ object Teach:
     val r = new Random(i * 7L + 1)
     val desk = Gen.desk(seed)
     val c = Gen.command(r, desk, Gen.shares((i / 4) % Gen.shares.size), l)
-    val asked = request(r, desk, c, l)
+    tried(seed, l, desk, c, request(r, desk, c, l), "teacher", writing)
+
+  /** a command written by the teacher as asked, checked and read back */
+  private def tried(seed: Long, l: Lang, desk: Desk, c: Command, asked: String, source: String, rules: String)
+      : Either[(String, String, String), Said] =
     def marked(phrase: String) = "\\[\\[(.+?)\\]\\]".r.findAllMatchIn(phrase).map(_.group(1).trim).toVector
-    def write = ask(writing, asked, 0.9, 80).map(_.trim.linesIterator.nextOption().getOrElse("").trim)
+    def write = ask(rules, asked, 0.9, 80).map(_.trim.linesIterator.nextOption().getOrElse("").trim)
     // a new booking written without its one mark is asked for once more (from attempt 320 on; the pilot was not)
     val written = write match
       case Some(p) if c.isInstanceOf[Command.Book] && marked(p).size != 1 => write
@@ -186,15 +192,63 @@ object Teach:
                       case "day" => "\\d{4}-\\d{2}-\\d{2}".r.findFirstIn(v).getOrElse(v)
                       case _ => v)
                   }
-                  if back == path then Right(Said(seed, l.code, "teacher", text, path))
+                  if back == path then Right(Said(seed, l.code, source, text, path))
                   else if back.head != path.head then no("read: action", answer)
                   else no("read: " + back.zip(path).collect { case (b, p) if b != p => p.hole }.mkString(","), answer)
 
-  def main(args: Array[String]): Unit =
+  private def append(file: String, line: String): Unit = Files.writeString(out.resolve(file), line + "\n",
+    StandardOpenOption.CREATE, StandardOpenOption.APPEND): Unit
+
+  /**
+   * THE HELD-OUT SLICE WITH EVERY ACTION IN IT (A2b): texts over NEW desks — seeds from `heldFrom` on, which no
+   * training ever drew (the teacher's are 1000…, the canonical ones 100000…) — a desk an attempt, the action by
+   * the attempt's number alone (so not by the desk, as `Texts.heldOut` had it), until every kind has its share in
+   * every language: of 75 a language, the sealed set's shares of the actions, the moves 9 by a new day and time and
+   * 6 by a difference (`Gen.relative`). A list and a cancel are asked for in everyday words. The teacher is told
+   * one more rule: a weekday alone is the nearest such day.
+   */
+  val heldFrom = 500000L
+  val heldQuota: Map[String, Int] = Map("book" -> 25, "move" -> 9, "move-rel" -> 6, "cancel" -> 10, "dayoff" -> 5,
+    "paid" -> 10, "list" -> 5, "cannot" -> 5)
+  def heldTexts: Path = out.resolve("held.jsonl")
+  /** a held text's kind: its action, a move by a difference apart */
+  def kind(s: Said): String = if s.source == "held-rel" then "move-rel" else s.path.head.option
+  private val nearest = writing + "\n- A weekday alone means the NEAREST such day counted from today. For a day a " +
+    "week or more ahead say \"next week\" with the weekday, or the day's number."
+  private val everyday = "everyday words, said aloud as a question or a remark — not as an order to the assistant"
+
+  private def held(from: Int, until: Int): Unit =
+    var have = (if Files.exists(heldTexts) then Texts.load(heldTexts) else Vector.empty)
+      .groupBy(s => (kind(s), s.lang)).view.mapValues(_.size).toMap.withDefaultValue(0)
+    def wanted = heldQuota.exists((k, n) => Lang.values.exists(l => have((k, l.code)) < n))
+    var j = from
+    var asked = 0
+    while j < until && wanted do
+      val l = Lang.values(j % 4)
+      val r = new Random(j * 7L + 3)
+      val desk = Gen.desk(heldFrom + j)
+      val action = Gen.shares((j / 4) % Gen.shares.size)
+      val relative = if action == "move" && have(("move-rel", l.code)) < heldQuota("move-rel") then
+        Gen.relative(r, desk) else None
+      val (c, note, source) = relative match
+        case Some((c, note)) => (c, Some(note), "held-rel")
+        case None => (Gen.command(r, desk, action, l), None, "held")
+      val k = if source == "held-rel" then "move-rel" else Commands.path(desk, c).head.option
+      if have((k, l.code)) < heldQuota(k) then
+        val style = if k == "list" || k == "cancel" then Some(everyday) else None
+        asked += 1
+        tried(heldFrom + j, l, desk, c, request(r, desk, c, l, note, style), source, nearest) match
+          case Right(said) => append("held.jsonl", said.json); have = have.updated((k, l.code), have((k, l.code)) + 1)
+          case Left((reason, phrase, back)) =>
+            append("held-rejected.tsv", s"$j\t$k\t$reason\t$phrase\t${back.replaceAll("\\s+", " ")}")
+        if asked % 25 == 0 then println(s"$j: asked $asked; kept " + heldQuota.keys.toVector.sorted.map(k =>
+          s"$k ${Lang.values.map(l => have((k, l.code))).mkString("/")}").mkString(", "))
+      j += 1
+    println(s"stopped at $j, asked $asked; every share ${if wanted then "NOT " else ""}filled")
+
+  def main(args: Array[String]): Unit = if args.head == "held" then held(args(1).toInt, args(2).toInt) else
     val (from, until) = (args(0).toInt, args(1).toInt)
     Files.createDirectories(out)
-    def append(file: String, line: String): Unit = Files.writeString(out.resolve(file), line + "\n",
-      StandardOpenOption.CREATE, StandardOpenOption.APPEND): Unit
     var kept = 0
     var why = Map.empty[String, Int].withDefaultValue(0)
     val t0 = System.nanoTime()

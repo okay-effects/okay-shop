@@ -5,7 +5,7 @@ import mlx.{Dtype, Scope}
 import mlx.Mlx.*
 import mlx.llm.{Adaptable, Chat, Lora, Model, Models}
 import okay.effects.json.Json
-import okay.frames.{Choice, Reading}
+import okay.frames.{Choice, Reading, Space}
 import okay.shop.commands.{Command, Commands, Desk}
 
 /**
@@ -67,14 +67,15 @@ final class Reader(chat: Chat, model: Model):
       }
     finally s.close()
 
-  /** THE READING of a phrase over a desk: every hole's options weighed, the best taken */
-  def read(desk: Desk, text: String): Reading[Desk, Command] =
+  /** THE READING of a phrase over a desk: every hole's options weighed, the best taken. The space is `Commands`,
+   * or `Computed` (A2b): then a day or a time the phrase settles is not weighed at all */
+  def read(desk: Desk, text: String, space: Space[Desk, Command] = Commands): Reading[Desk, Command] =
     val asked = prompt(desk, text)
-    Reading.run(Commands)(desk, text) { (r, h) =>
+    Reading.run(space)(desk, text) { (r, h) =>
       val context = asked ++ r.chosen.toArray.flatMap(c => head(c.hole) ++ option(c)) ++ head(h.name)
       score(context, h.options.map { o =>
         val c = Choice(h.name, o)
-        option(c) :+ (if Commands.next(desk, text, r.chosen :+ c).isEmpty then end else newline)
+        option(c) :+ (if space.next(desk, text, r.chosen :+ c).isEmpty then end else newline)
       })
     }
 
