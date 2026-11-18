@@ -187,3 +187,38 @@ object Narrowing:
       val ahead = s.path.collectFirst { case Choice("day", d) => s.desk.days.indexOf(d) }.fold("")(n => s", day +$n")
       println(s"$kind $line\t${s.lang}\t${s.text}\t${ReadSet.line(s.path)}\ttoday " +
         Asking.day(s.desk.days.head) + ahead)
+
+/**
+ * WHAT THE ORGAN WOULD CHANGE IN READINGS ALREADY MADE, NO MODEL (A2b) — an estimate, not a measure: each answer of
+ * a `ReadSet` file over the first held-out texts is walked through `Computed`; a day or a time the organ settles
+ * replaces the reader's, one it leaves several of keeps the reader's if it is among them (else the first), one it
+ * finds outside the desk makes the answer unread. The other lines are kept as read — a real reading may read them
+ * otherwise once an earlier line changes.
+ *
+ *   sbt "commandsBench/runMain okay.shop.commands.bench.Foreseen <held.tsv> …"
+ */
+object Foreseen:
+  def main(args: Array[String]): Unit =
+    val texts = Texts.load(Teach.texts).map(s => s.text -> s).toMap
+    for file <- args do
+      val rows = Files.readAllLines(Path.of(file)).asScala.toVector.drop(1).map(_.split("\t", -1))
+        .filter(r => texts.contains(r(1)))
+      var before = 0; var after = 0; var unread = 0
+      for r <- rows do
+        val s = texts(r(1))
+        val read = if r(3) == "-" then None else
+          val (action, rest) = r(3).span(_ != ' ')
+          Some(Asking.path(action, rest.trim))
+        if r(3) == r(2) then before += 1
+        val walked = read.flatMap(_.foldLeft(Option(Vector.empty[Choice])) { (done, c) =>
+          done.flatMap(chosen => Computed.next(s.desk, s.text, chosen).flatMap { hole =>
+            if hole.options.isEmpty then None
+            else Some(chosen :+ (if hole.options.contains(c.option) then c else Choice(c.hole, hole.options.head)))
+          })
+        })
+        walked match
+          case Some(path) if ReadSet.line(path) == r(2) => after += 1
+          case None => unread += 1
+          case _ =>
+      println(s"$file: ${rows.size} texts; right as read $before; with the organ's days and times $after right, " +
+        s"${rows.size - after - unread} wrong, $unread unread")

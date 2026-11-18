@@ -22,7 +22,13 @@ object Train:
     val name = sys.env.getOrElse("COMMANDS_NAME", "reader")
     val all = Texts.load(Teach.texts)
     val taught = sys.env.get("COMMANDS_ONLY").fold(all)(n => all.take(n.toInt))
-    val (held, mine) = taught.partition(s => Texts.heldOut(s.seed))
+    val (held, first) = taught.partition(s => Texts.heldOut(s.seed))
+    // A2b: more texts (COMMANDS_MORE, a file); and none whose day or time the organ refutes (COMMANDS_CLEAN)
+    val more = sys.env.get("COMMANDS_MORE").fold(Vector.empty[Said])(f => Texts.load(java.nio.file.Path.of(f)))
+    val refuted = if sys.env.contains("COMMANDS_CLEAN") then
+      Narrowing.of(first ++ more).collect { case (s, _, "LOST") => s }.toSet else Set.empty[Said]
+    val mine = (first ++ more).filterNot(refuted)
+    println(s"${first.size} of the first texts, ${more.size} more, ${refuted.size} refuted by the organ and left out")
     val canon = Texts.canon(sys.env.get("COMMANDS_CANON").fold(mine.size / 2)(_.toInt), 100000)
       .filterNot(s => Texts.heldOut(s.seed))
     val items = mine ++ canon

@@ -246,9 +246,43 @@ object Teach:
       j += 1
     println(s"stopped at $j, asked $asked; every share ${if wanted then "NOT " else ""}filled")
 
-  def main(args: Array[String]): Unit = if args.head == "held" then held(args(1).toInt, args(2).toInt) else
-    val (from, until) = (args(0).toInt, args(1).toInt)
+  /**
+   * MORE TEXTS FOR THE TRAINING (A2b, when the held-out slice says the reader is the gap): what A2's texts have
+   * next to none of — moves by a difference (three attempts in five), lists and cancels in everyday words (one
+   * each) — over training desks of their own, seeds from `moreFrom`: neither A2's nor the held-out slice's.
+   */
+  val moreFrom = 200000L
+  def moreTexts: Path = out.resolve("more.jsonl")
+
+  private def more(from: Int, until: Int): Unit =
+    var kept = 0
+    var asked = 0
+    for j <- from until until do
+      val l = Lang.values(j % 4)
+      val r = new Random(j * 7L + 5)
+      val desk = Gen.desk(moreFrom + j)
+      val drawn: Option[(Command, Option[String], Option[String], String)] = (j / 4) % 5 match
+        case 3 => Some((Gen.command(r, desk, "list", l), None, Some(everyday), "more"))
+        case 4 => if desk.bookings.isEmpty then None
+          else Some((Gen.command(r, desk, "cancel", l), None, Some(everyday), "more"))
+        case _ => Gen.relative(r, desk).map((c, note) => (c, Some(note), None, "more-rel"))
+      for (c, note, style, source) <- drawn do
+        asked += 1
+        tried(moreFrom + j, l, desk, c, request(r, desk, c, l, note, style), source, nearest) match
+          case Right(said) => kept += 1; append("more.jsonl", said.json)
+          case Left((reason, phrase, back)) =>
+            append("more-rejected.tsv", s"$j\t$source\t$reason\t$phrase\t${back.replaceAll("\\s+", " ")}")
+        if asked % 50 == 0 then println(s"${j + 1}: kept $kept of $asked")
+    println(s"kept $kept of $asked")
+
+  def main(args: Array[String]): Unit =
     Files.createDirectories(out)
+    if args.head == "held" then held(args(1).toInt, args(2).toInt)
+    else if args.head == "more" then more(args(1).toInt, args(2).toInt)
+    else first(args(0).toInt, args(1).toInt)
+
+  /** A2's texts: the attempts of a range */
+  private def first(from: Int, until: Int): Unit =
     var kept = 0
     var why = Map.empty[String, Int].withDefaultValue(0)
     val t0 = System.nanoTime()

@@ -37,6 +37,9 @@ invented.
   existing calls, the frame said back in four languages; the law: said back → canonical parser → the same frame.
 - **A2 — the small reader**: templates and a teacher's rewrites, a LoRA on Qwen3 0.6B, three seeds. Done when, on
   the sealed phrases with two readers agreeing, wrong ≤ 2% and right ≥ 80%.
+- **A2b — days and times computed** (after A2 missed its bar): an exact organ a language that fills or narrows
+  the day and time lines before the reader weighs them; a move said as a difference computed from the booking; a
+  held-out slice with every action. Done by A2's criterion, read once more with the organ.
 - **A3 — the workshop's page**: a field, the frame said back, Confirm, then the engine. A test: nothing runs
   without the confirmation.
 - **A4 — the phone**: the time from the phrase to the frame said back, on a real iPhone.
@@ -372,6 +375,14 @@ sbt "commandsBench/runMain okay.shop.commands.bench.ReadSet new <adapter> <out.t
 sbt "commandsBench/runMain okay.shop.commands.bench.ReadSet sealed+when <adapter> scripts/commands/<name>.tsv"
 ```
 
+### Prepared for the reader, to run ONLY if the held-out slice calls for it
+
+`Teach more` — more texts for the training of what A2's have next to none of: moves by a difference (three attempts
+in five), lists and cancels in everyday words, over desks of their own (seeds from 200000: neither A2's nor the
+held-out slice's), into `more.jsonl`. `Train` takes them by `COMMANDS_MORE=<file>`, and with `COMMANDS_CLEAN=1`
+leaves out every text whose day or time the organ refutes (the far weekdays above). The epochs are to be chosen on
+the held-out slice alone (`ReadSet new+when` of each epoch's adapter). Not run.
+
 ### Not done in A2b
 
 - A weekday with a bare day number (`Monday 24`); `Friday week`, `the Friday after next`; a time from now (`через
@@ -533,3 +544,49 @@ What follows for A3 and for the reader:
   relative moves and for lists and cancels in everyday words; three seeds at two epochs against one. The sealed
   set stays sealed: these are chosen on the held-out texts.
 - Not tried: the options weighed as index tokens; a model larger than 0.6B (okay-desk: 1.7B halves the errors).
+
+### A2b (2026-11-18): the organ measured with no model; the readers NOT read with it yet
+
+**The bar is not measured.** Everything of A2b that needs no GPU is built and measured; the three steps that need
+it — the teacher's texts for the new held-out slice, the three adapters read on it without and with the organ, and
+the one final reading of the 60 sealed phrases with the organ — were NOT run. The one GPU was held from 16:42 to
+past 17:41 by other sessions' queues running jobs back to back (three scripts, a JVM with MLX and the gateway
+serving their teacher); this step's waiter (`a2b-queue.sh` in `COMMANDS_OUT`: no MLX work of any kind seen for
+three minutes) never saw it free and was stopped after an hour, nothing started, rather than overlap. So A2's
+numbers on the sealed set stand, the sealed set was not read again, and no adapter was retrained.
+
+What IS measured:
+
+- The organ alone on A2's 2273 texts: the table under "A2b as built" — days settled to the meant one 83%, times
+  88%; the meant day lost in 5.1%, every one of them a far day the teacher named by a bare weekday; the meant time
+  lost in 1.8%, the teacher's slips.
+- The organ's laws and tables: `WhenSuite` (both platforms), `GenSuite`.
+
+An ESTIMATE, not a measure (`Foreseen`, no model): A2's own readings of the FIRST held-out slice (94 of the
+teacher's texts; bookings, moves and lists only), each answer walked through `Computed` — a day or a time the organ
+settles replaces the reader's, the other lines kept as they were read:
+
+| adapter | right as read (A2) | right with the organ's days and times | wrong | unread |
+| --- | --- | --- | --- | --- |
+| seed 1, epoch 1 | 72 | 77 | 15 | 2 |
+| seed 2, epoch 1 | 53 | 61 | 32 | 1 |
+| seed 3, epoch 1 | 68 | 77 | 16 | 1 |
+
+It rests on inference: a real reading weighs the later lines after the organ's day, and may read them otherwise;
+the slice has three actions and the teacher's far weekdays in it (counted wrong here); and it says nothing of the
+sealed phrases. What is left wrong is mostly not days and times: the action (seed 2 reads a list as `cannot`) and
+the client's span — which the organ does not touch.
+
+To finish A2b, in this order, each when the GPU is free (the script waits; `sbt` commands under "To run"):
+
+1. `a2b-queue.sh teach` — the held-out slice (`held.jsonl`: 300 texts, every action, 24 moves by a difference).
+2. `a2b-queue.sh reads` — seeds 1, 2, 3 on it without and with the organ; `Tables` of the six files: right, wrong
+   and unread by kind and by line, and the pairs agreeing.
+3. Only if those numbers say the READER is the gap for moves by a difference or for lists and cancels (their
+   action misread with the organ on): `Teach more`, three seeds retrained with `COMMANDS_MORE` and
+   `COMMANDS_CLEAN`, the epochs chosen on the held-out slice alone.
+4. Last, once: `a2b-queue.sh sealed` — the 60 sealed phrases with the organ into `reader-s{1,2,3}-when.tsv` beside
+   A2's files, `Tables`, and the bar (two readers agreeing: right ≥ 80%, wrong ≤ 2%) said as it comes out. That
+   reading is also the first time the organ meets the sealed phrases: `ReadSet` prints how many of the 60
+   hand-written commands are still reachable in `Computed`, and a phrase whose day or time the organ refutes is a
+   miss to report, not to repair after the fact.
