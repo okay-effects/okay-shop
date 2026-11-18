@@ -964,6 +964,20 @@ The policy names only the processors the site's config actually uses, and every 
   chat, the host's cookies, the geocoding only with a radius, the list's last full stop); `OldPagesSuite` pins every
   page but the privacy policy (byte for byte as before this change).
 
+## A host's way to pay (operator, 2026-11-18)
+
+The engine knows the ways a payment came (`Method`) and who marked it; it draws no way to pay of its own on an
+order's page. A host may have one — the mall's shops take part of a price in units of a mutual credit network — and
+says it there: `Conf.paying: (Order, Lang) => String`, the host's own HTML (the host's to escape), drawn in the
+status card of an order's page (`/…/track`, by the letter's link and by the form) while the order is neither paid
+nor cancelled. Nothing by default. What the words are, where they link and what is checked behind them is the
+host's; the engine marks the order paid as for every payment.
+
+### Behavior (a host's way to pay)
+
+- [x] The host's word on an unpaid order's page, in the page's language; none on a paid or a cancelled one, none
+  where the order is not shown; a host that says nothing: the page as before.
+
 ## Open core (operator, 2026-10-29)
 
 okay-shop is public (Apache-2.0) and is the engine of ONE site: its storefront, orders, tracking and workshop — and,

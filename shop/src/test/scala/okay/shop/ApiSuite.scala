@@ -68,6 +68,20 @@ class ApiSuite extends munit.FunSuite:
     assert(w.letters.head._2.html.contains("&lt;script&gt;"))
   }
 
+  test("a host's way to pay: its own word on the page of an order not yet paid, by the link and by the form") {
+    val w = World()
+    w.conf = w.conf.copy(paying = (o, l) => s"<p>pay ${o.ref} another way (${l.code})</p>")
+    val j = w.json(w.order())
+    val word = s"<p>pay ${j("ref")} another way (pl)</p>"
+    assert(w.get(s"/pl/track?ref=${j("ref")}&k=${j("key")}").text.contains(word))
+    assert(w.form("/en/track", "ref" -> j("ref"), "contact" -> "anna@example.com", "cf-turnstile-response" -> "t")
+      .text.contains(s"another way (en)"))
+    // nothing of it where the order is not shown
+    assert(!w.get(s"/pl/track?ref=${j("ref")}&k=AAAAAAAAAAAAAAAAAAAAAAAA").text.contains("another way"))
+    // a host that says nothing: the page as it was
+    assert(!World().get("/pl/track").text.contains("another way"))
+  }
+
   test("track: the letter's link shows the status; the form needs the same email or phone; nothing else tells") {
     val w = World()
     val j = w.json(w.order())
