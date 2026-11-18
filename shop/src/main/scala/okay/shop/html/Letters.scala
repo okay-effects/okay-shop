@@ -11,7 +11,10 @@ final case class Conf(site: Site, origin: String, blik: String, paczkomat: Strin
                       more: String => Vector[(String, String)] = _ => Vector.empty, desk: Desk = Desk(),
                       owner: String => Boolean = _ => true,
                       seller: Option[okay.shop.invoice.Seller] = None,
-                      ksef: Option[okay.shop.invoice.KsefEnv] = None)
+                      ksef: Option[okay.shop.invoice.KsefEnv] = None,
+                      // the host's own word on the page of an order not yet paid — a way to pay that is the
+                      // host's, not the engine's: HTML, the host's to escape (specs/shop.md "A host's way to pay")
+                      paying: (Order, Lang) => String = (_, _) => "")
 
 /** where a workshop's sign-in lives (specs/shop.md "The host's own workshop pages"): its path — its API under
  * `<path>/api/`, its page `<path>/` — and its session's cookie. A host may sign its own people in elsewhere */

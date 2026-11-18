@@ -40,7 +40,7 @@ ${if failed then s"""<p class="err">${e(words.notFoundHint)}</p>""" else ""}
 """
 
   /** an order's status: the service, the ref, the status, the delivery, the tracking number, the hints */
-  def status(site: Site, l: Lang, o: Order, paid: Boolean = false): String =
+  def status(site: Site, l: Lang, o: Order, paid: Boolean = false, more: String = ""): String =
     val a = accent(site)
     val words = Words(l)
     val item = site.offer(o.offerKey).map(_.name(l)).getOrElse(words.fromSite)
@@ -82,6 +82,7 @@ body{font:16px/1.5 -apple-system,system-ui,sans-serif;margin:0;background:#faf5f
     <div style="font-size:14px;color:#777;">${e(delivery)}</div>
     $tracking
     $hint
+    $more
   </div>
 </div></body></html>
 """

@@ -154,13 +154,17 @@ object Api:
   private def found[R[_]](ref: String)(ok: Order => Boolean)(using In[Store, R]): Option[Order] ! R =
     if ref.isEmpty then pure(None) else Store.find[R](ref.trim.toUpperCase).map(_.filter(ok))
 
+  /** the host's word on an order's page: while the order is neither paid nor cancelled */
+  private def paying(c: Conf, l: Lang, o: Order, paid: Boolean): String =
+    if paid || o.status == Status.Paid || o.status == Status.Cancelled then "" else c.paying(o, l)
+
   def trackLink[R[_]](c: Conf, l: Lang, r: Request)(using In[Store, R]): Response ! R =
     val ref = r.param("ref").getOrElse("").take(40)
     val key = r.param("k").getOrElse("")
     if key.isEmpty then pure(page(Track.search(c.site, l, ref, c.sitekey, failed = false)))
     else found[R](ref)(o => same(o.key, key)).flatMap {
       case Some(o) => Store.payment[R](Of.Order, o.ref).map(p =>
-          page(Track.status(c.site, l, o, p.exists(_.paid))))
+          page(Track.status(c.site, l, o, p.exists(_.paid), paying(c, l, o, p.exists(_.paid)))))
       case None => pure(page(Track.search(c.site, l, ref, c.sitekey, failed = true)))
     }
 
@@ -176,7 +180,7 @@ object Api:
         else pure(None)
       paid <- o.fold(pure[Option[Payment], R](None))(x => Store.payment[R](Of.Order, x.ref))
     yield o match
-      case Some(o) => page(Track.status(c.site, l, o, paid.exists(_.paid)))
+      case Some(o) => page(Track.status(c.site, l, o, paid.exists(_.paid), paying(c, l, o, paid.exists(_.paid))))
       case None => page(Track.search(c.site, l, ref, c.sitekey, failed = true))
 
   /** the receipt of a paid order or booking (specs/shop.md "Money"): by its payment's record, numbered; an order the

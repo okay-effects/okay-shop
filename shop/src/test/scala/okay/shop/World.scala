@@ -26,7 +26,7 @@ final class World(val id: String = "atelier", var human: Boolean = true,
   var letters: Vector[(String, Note)] = Vector.empty
   private var seed = 1L
   val site = edit(Fixtures.site(id))
-  val conf = Conf(site, s"https://preview-$id.example.workers.dev", "+48 600 000 000", "TST01A",
+  var conf = Conf(site, s"https://preview-$id.example.workers.dev", "+48 600 000 000", "TST01A",
     "1x00000000000000000000AA", staff, "atelier@example.com", "2026-10-28",
     "CALENDAR-KEY-0123456789", more, desk, owner, seller, ksef)
   /** KSeF in memory (specs/shop.md "KSeF"): the seller's NIP its context */
