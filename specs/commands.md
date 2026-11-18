@@ -153,6 +153,42 @@ Still not built in A1: the frame said back and confirmed on a page (A3 calls `De
 
 ## Results
 
-### A0 (2026-11-17)
+### A0 (run 2026-11-18)
 
-Pending: the run waits for the GPU.
+`scripts/commands/ceiling.sc`, model mlx-community/Qwen3.6-35B-A3B-4bit, thinking off, one run. Every answer is in
+`scripts/commands/ceiling-out.tsv`.
+
+| language | exact frames |
+| --- | --- |
+| en | 15/15 |
+| pl | 12/15 |
+| ru | 11/15 |
+| uk | 11/15 |
+| all | 49/60 |
+
+Missed by field: client 10, day 2, time 1 (11 phrases). The action, the service, the master, the booking and the
+amount were right in all 60.
+
+What the misses are, read row by row:
+
+- **8 phrases: the client's name in the nominative.** The text has "Олю Иванову", "Kasię", "Adama Wójcika"; the
+  model answered "Оля Иванова", "Kasia", "Adam Wójcik". The gold is the span as written, because the frame's client
+  line offers spans of the text. The model did what a person would want in a booking; the strict score counts it
+  wrong. English has no cases, which is why it is 15/15.
+- **2 phrases: the name moved to Latin letters** ("Светланы" → "Svetlana", "Катю" → "Katya"). A real error.
+- **2 phrases: the day or the time**, both Ukrainian: "післязавтра" read as four days ahead, and "завтра на пів на
+  першу" read as the day after at 10:30. A real error.
+
+So: 49/60 strict; 57/60 if a name is compared without its case ending; the reading of dates and times is wrong in
+2 of 60, and only in Ukrainian.
+
+Consequences for the next steps:
+
+- The ceiling on the *structure* of a command is high (action 60/60, every option from the Desk 60/60). The frame
+  is not asking for more than a large model can read.
+- A reader that chooses spans cannot make the 8 "errors" at all, and cannot make the name nominative either. The
+  name to store is a separate question (A3): say back the span, and let the master correct it on confirm; a
+  nominative form, if wanted, is a job for an exact organ or a table, not for the reader.
+- Relative days and spoken times ("післязавтра", "пів на першу") are the place to compute and not to read: the
+  frame offers days and times as options from the Desk, and the words for them belong to `Words`, per language.
+- The set stays sealed. The prompt is not tuned after this run.
