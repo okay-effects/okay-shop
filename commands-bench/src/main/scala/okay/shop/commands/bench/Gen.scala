@@ -225,6 +225,35 @@ object Gen:
           Some(Command.Move(b.ref, Reports.plus(b.day, n), b.time) -> (" Note: only the day changes. Say the new " +
             s"day ONLY as a difference from the booking's own day — $said — with no weekday and no date for it."))
 
+  /**
+   * HOW A COMMAND IS SAID INDIRECTLY (A2c) — the teacher's style, the class described and never quoted: a move as
+   * the client's wish (`wish`) or as a refusal of the booked day or time with another instead (`refusal`); and
+   * the two contrasts a reader must tell them from — a client who will not come and asks for nothing instead is a
+   * cancel (`unwilling`), a new client's wish is a booking (`wished`).
+   */
+  private val unordered = " Use NO word for moving, rescheduling, shifting or changing a booking, and give the " +
+    "assistant no order"
+  val wish: String = "the master retells the CLIENT'S WISH — the client asked, wants, hopes or would like to come " +
+    "at the new day or time." + unordered
+  val refusal: String = "the master retells that the booked day or time does NOT SUIT the client — they cannot " +
+    "make it (the booked day or time may be named or only implied) — and when they will come instead." + unordered
+  val unwilling: String = "the master remarks that the client WILL NOT COME — they cannot make the booked day or " +
+    "time, or changed their mind — and ask for NOTHING instead: no other day, no other time. Use no word for " +
+    "cancelling or deleting, and give the assistant no order"
+  val wished: String = "the master retells a new client's WISH — they asked for, want or would like the service at " +
+    "that day and time. Use no word for booking or writing down, and give the assistant no order"
+
+  /**
+   * A MOVE SAID INDIRECTLY (A2c): a move of the desk's — by a difference (`relative`) or to a new day, time or
+   * both — with the difference's note for the teacher, when there is one, and the way to say it: the client's
+   * wish, or a refusal of the old time. None when the desk has no booking, or no such start or day.
+   */
+  def indirect(r: Random, d: Desk, byDifference: Boolean): Option[(Command, Option[String], String)] =
+    if d.bookings.isEmpty then None else
+      val way = pick(r, Vector(wish, refusal))
+      if byDifference then relative(r, d).map((c, note) => (c, Some(note), way))
+      else Some((command(r, d, "move", Lang.en), None, way))
+
   /** what a master may ask that is no command of the shop's: the teacher's topics for `cannot` */
   val outside: Vector[String] = Vector("change the price of a service", "last month's revenue",
     "send a client a reminder message", "add a new service to the list", "the weather tomorrow",

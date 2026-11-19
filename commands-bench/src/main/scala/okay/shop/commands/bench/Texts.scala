@@ -2,7 +2,7 @@ package okay.shop.commands.bench
 
 import java.nio.file.{Files, Path}
 import okay.effects.json.Json
-import okay.frames.Choice
+import okay.frames.{Choice, Laws, Space}
 import okay.shop.commands.{Command, Commands, Desk}
 import okay.shop.model.Lang
 import scala.jdk.CollectionConverters.*
@@ -20,6 +20,11 @@ final case class Said(seed: Long, lang: String, source: String, text: String, pa
 object Texts:
   /** the desks kept out of every training: one in twenty, by seed — the held-out slice of the generated texts */
   def heldOut(seed: Long): Boolean = seed % 20 == 0
+
+  /** REACHABLE BY CHOICES: the command can be chosen, hole by hole, among what the space offers for the text —
+   * in `Computed`, the organ does not refute its day or its time. `ReadSet`'s count and the teacher's gate (A2c) */
+  def reachable(space: Space[Desk, Command])(desk: Desk, text: String, c: Command): Boolean =
+    Laws.reach(space)(desk, text, c).isEmpty
 
   /** a file's texts; a text whose choices do not close over its desk (the generator changed since) stops it */
   def load(path: Path): Vector[Said] = Files.readAllLines(path).asScala.toVector.filter(_.trim.nonEmpty).map { l =>

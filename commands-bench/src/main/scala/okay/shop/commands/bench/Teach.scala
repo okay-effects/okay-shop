@@ -6,7 +6,7 @@ import java.nio.file.{Files, Path, StandardOpenOption}
 import java.time.Duration
 import okay.effects.json.Json
 import okay.frames.Choice
-import okay.shop.commands.{Command, Commands, Desk, Words}
+import okay.shop.commands.{Command, Commands, Computed, Desk, Words}
 import okay.shop.model.{Lang, Money}
 import scala.util.{Random, Try}
 
@@ -18,10 +18,12 @@ import scala.util.{Random, Try}
  *      (the span is a client's option, the amount one of the text's numbers), and
  *  (ii) the teacher, asked apart to read the phrase back into a command given the desk, answers the same command
  *      (every line but the client's words, which are the marked span's: a large model writes a name back in the
- *      nominative, A0).
+ *      nominative, A0);
+ * and, from A2c on, before (ii): the organ does not refute it — its command is reachable in `Computed` (`refused`).
  * Everything else is written to the rejected with its reason.
  *
  *   sbt "commandsBench/runMain okay.shop.commands.bench.Teach <from> <until>"
+ *   sbt "commandsBench/runMain okay.shop.commands.bench.Teach held|more|held3 <from> <until>"   (A2b, A2c)
  *   env: COMMANDS_OUT (the directory of teacher.jsonl and teacher-rejected.tsv), GATEWAY, MODEL
  */
 object Teach:
@@ -149,6 +151,20 @@ object Teach:
     val c = Gen.command(r, desk, Gen.shares((i / 4) % Gen.shares.size), l)
     tried(seed, l, desk, c, request(r, desk, c, l), "teacher", writing)
 
+  /**
+   * WHY A WRITTEN TEXT IS NOT KEPT, before the teacher is asked to read it back — None when it may be. `code`: it
+   * says the booking's reference; `close`: its command does not close over its own options; `organ` (A2c, THE
+   * GATE): the command is not reachable in `Computed` — the text says another day or time than its command has (a
+   * weekday with its "next" dropped, a garbled time), or one the desk does not offer.
+   */
+  def refused(desk: Desk, text: String, meant: Command): Option[String] =
+    val path = Commands.path(desk, meant)
+    val code = path.collectFirst { case Choice("booking", ref) => ref }
+    if code.exists(text.contains) then Some("code")
+    else if !Commands.close(desk, text, path).contains(meant) then Some("close")
+    else if !Texts.reachable(Computed)(desk, text, meant) then Some("organ")
+    else None
+
   /** a command written by the teacher as asked, checked and read back */
   private def tried(seed: Long, l: Lang, desk: Desk, c: Command, asked: String, source: String, rules: String)
       : Either[(String, String, String), Said] =
@@ -175,9 +191,8 @@ object Teach:
           case Left(why) => no(why)
           case Right(m) =>
             val path = Commands.path(desk, m)
-            val code = path.collectFirst { case Choice("booking", ref) => ref }
-            if code.exists(text.contains) then no("code")
-            else if !Commands.close(desk, text, path).contains(m) then no("close")
+            val why = refused(desk, text, m)
+            if why.nonEmpty then no(why.get)
             else ask(Asking.desk(desk) + "\n\n" + reading, text, 0, 120) match
               case None => no("gateway")
               case Some(answer) => lines(answer) match
@@ -211,8 +226,9 @@ object Teach:
   val heldQuota: Map[String, Int] = Map("book" -> 25, "move" -> 9, "move-rel" -> 6, "cancel" -> 10, "dayoff" -> 5,
     "paid" -> 10, "list" -> 5, "cannot" -> 5)
   def heldTexts: Path = out.resolve("held.jsonl")
-  /** a held text's kind: its action, a move by a difference apart */
-  def kind(s: Said): String = if s.source == "held-rel" then "move-rel" else s.path.head.option
+  /** a text's kind: its action, a move by a difference apart; a slice's text (A2c) has it after its source's `:` */
+  def kind(s: Said): String = s.source.split(':').lift(1)
+    .getOrElse(if s.source == "held-rel" then "move-rel" else s.path.head.option)
   private val nearest = writing + "\n- A weekday alone means the NEAREST such day counted from today. For a day a " +
     "week or more ahead say \"next week\" with the weekday, or the day's number."
   private val everyday = "everyday words, said aloud as a question or a remark — not as an order to the assistant"
@@ -247,38 +263,106 @@ object Teach:
     println(s"stopped at $j, asked $asked; every share ${if wanted then "NOT " else ""}filled")
 
   /**
-   * MORE TEXTS FOR THE TRAINING (A2b, when the held-out slice says the reader is the gap): what A2's texts have
-   * next to none of — moves by a difference (three attempts in five), lists and cancels in everyday words (one
-   * each) — over training desks of their own, seeds from `moreFrom`: neither A2's nor the held-out slice's.
+   * A SLICE FILLED TO A QUOTA (A2c, the data loop): texts over desks of the slice's own — seeds `from + j`, a desk
+   * an attempt, `span` of them, drawn by nothing else — until every kind has its number in every language. A kind
+   * is an action, or one of: `move-rel` (a move by a difference, said plainly), `move-ind` and `move-rel-ind` (a
+   * move to a new day or time, and one by a difference, said INDIRECTLY: `Gen.indirect`), `cancel-ind` (a client
+   * who will not come), `book-ind` (a new client's wish). Whose turn it is is the attempt's number's alone, never
+   * the desk's (A2b).
+   */
+  final case class Slice(name: String, from: Long, quota: Map[String, Int]):
+    val span = 100000
+    def texts: Path = out.resolve(s"$name.jsonl")
+    /** the kinds in turn: each as often as its quota, in a fixed order with no pattern */
+    val turn: Vector[String] =
+      new Random(from).shuffle(quota.toVector.sortBy(_._1).flatMap((k, n) => Vector.fill(n)(k)))
+
+  /**
+   * MORE TEXTS FOR THE TRAINING (A2c; prepared in A2b, never run in that shape): what A2's texts have next to none
+   * of, a language — moves said indirectly, 40 to a new day or time and 40 by a difference; 30 moves by a
+   * difference said plainly; the contrasts, 30 clients who will not come and 20 new clients' wishes; and, for the
+   * reader that takes a list for `cannot`, 30 lists and 15 cancels in everyday words. Training desks of their
+   * own, seeds from `moreFrom`: neither A2's nor a held-out slice's.
    */
   val moreFrom = 200000L
-  def moreTexts: Path = out.resolve("more.jsonl")
+  val more: Slice = Slice("more", moreFrom, Map("move-ind" -> 40, "move-rel-ind" -> 40, "move-rel" -> 30,
+    "cancel-ind" -> 30, "book-ind" -> 20, "list" -> 30, "cancel" -> 15))
 
-  private def more(from: Int, until: Int): Unit =
-    var kept = 0
+  /**
+   * THE THIRD HELD-OUT SLICE (A2c): new desks again — seeds from `held3From`, drawn by no training and by neither
+   * earlier slice — with every action and, a language, 10 moves said indirectly to a new day or time and 10 by a
+   * difference, and their contrasts. 90 a language, 360 in all.
+   */
+  val held3From = 600000L
+  val held3: Slice = Slice("held3", held3From, Map("book" -> 15, "book-ind" -> 5, "move" -> 6, "move-rel" -> 6,
+    "move-ind" -> 10, "move-rel-ind" -> 10, "cancel" -> 6, "cancel-ind" -> 6, "dayoff" -> 5, "paid" -> 8,
+    "list" -> 8, "cannot" -> 5))
+
+  /** the seeds every source of texts draws its desks from, `from` until `until`: no two may meet (`GenSuite`).
+   * A2's teacher drew 1000 + i / 8 for attempts under 4320; the canonical texts 100000 + i / 4 */
+  val seeds: Vector[(String, Long, Long)] = Vector(("teacher", 1000L, 1540L), ("canon", 100000L, 200000L),
+    ("held", heldFrom, heldFrom + 100000)) ++ Vector(more, held3).map(s => (s.name, s.from, s.from + s.span))
+
+  /** what an attempt of a slice asks the teacher for */
+  final case class Asked(seed: Long, lang: Lang, desk: Desk, kind: String, command: Command, request: String,
+                         source: String)
+
+  /** THE ATTEMPT `j` OF A SLICE, no model: its language, desk, kind, command and the request to the teacher. None
+   * when the desk has nothing for the kind (no booking to move, no master to free) */
+  def draw(slice: Slice, j: Int): Option[Asked] =
+    val l = Lang.values(j % 4)
+    val r = new Random(j * 7L + slice.from)
+    val seed = slice.from + j
+    val desk = Gen.desk(seed)
+    val kind = slice.turn((j / 4) % slice.turn.size)
+    def plain(action: String, style: Option[String]) = Some(Gen.command(r, desk, action, l))
+      .filter(c => Commands.path(desk, c).head.option == action).map(c => (c, Option.empty[String], style))
+    val drawn = kind match
+      case "move-ind" | "move-rel-ind" =>
+        Gen.indirect(r, desk, kind == "move-rel-ind").map((c, note, way) => (c, note, Some(way)))
+      case "move-rel"        => Gen.relative(r, desk).map((c, note) => (c, Some(note), Option.empty[String]))
+      case "cancel-ind"      => plain("cancel", Some(Gen.unwilling))
+      case "book-ind"        => plain("book", Some(Gen.wished))
+      case "list" | "cancel" => plain(kind, Some(everyday))
+      case action            => plain(action, None)
+    drawn.map((c, note, style) =>
+      Asked(seed, l, desk, kind, c, request(r, desk, c, l, note, style), s"${slice.name}:$kind"))
+
+  /** a slice asked for until its quota is filled; a kind in a language is given up after six times its number of
+   * requests, said so at the end, and the exit is 2. Appends: to go on after a stop, start from the attempt it
+   * stopped at */
+  private def fill(slice: Slice, from: Int, until: Int): Unit =
+    require(until <= slice.span, s"${slice.name} has ${slice.span} seeds")
+    var have = (if Files.exists(slice.texts) then Texts.load(slice.texts) else Vector.empty)
+      .groupBy(s => (kind(s), s.lang)).view.mapValues(_.size).toMap.withDefaultValue(0)
+    var tries = Map.empty[(String, String), Int].withDefaultValue(0)
+    def open(at: (String, String)) = have(at) < slice.quota(at._1) && tries(at) < 6 * slice.quota(at._1)
+    def wanted = slice.quota.keys.exists(k => Lang.values.exists(l => open((k, l.code))))
+    var j = from
     var asked = 0
-    for j <- from until until do
-      val l = Lang.values(j % 4)
-      val r = new Random(j * 7L + 5)
-      val desk = Gen.desk(moreFrom + j)
-      val drawn: Option[(Command, Option[String], Option[String], String)] = (j / 4) % 5 match
-        case 3 => Some((Gen.command(r, desk, "list", l), None, Some(everyday), "more"))
-        case 4 => if desk.bookings.isEmpty then None
-          else Some((Gen.command(r, desk, "cancel", l), None, Some(everyday), "more"))
-        case _ => Gen.relative(r, desk).map((c, note) => (c, Some(note), None, "more-rel"))
-      for (c, note, style, source) <- drawn do
+    while j < until && wanted do
+      for a <- draw(slice, j) if open((a.kind, a.lang.code)) do
+        val at = (a.kind, a.lang.code)
         asked += 1
-        tried(moreFrom + j, l, desk, c, request(r, desk, c, l, note, style), source, nearest) match
-          case Right(said) => kept += 1; append("more.jsonl", said.json)
-          case Left((reason, phrase, back)) =>
-            append("more-rejected.tsv", s"$j\t$source\t$reason\t$phrase\t${back.replaceAll("\\s+", " ")}")
-        if asked % 50 == 0 then println(s"${j + 1}: kept $kept of $asked")
-    println(s"kept $kept of $asked")
+        tries = tries.updated(at, tries(at) + 1)
+        tried(a.seed, a.lang, a.desk, a.command, a.request, a.source, nearest) match
+          case Right(said) => append(s"${slice.name}.jsonl", said.json); have = have.updated(at, have(at) + 1)
+          case Left((reason, phrase, back)) => append(s"${slice.name}-rejected.tsv",
+            s"$j\t${a.kind}\t$reason\t$phrase\t${back.replaceAll("\\s+", " ")}")
+        if asked % 25 == 0 then println(s"$j: asked $asked; kept " + slice.quota.keys.toVector.sorted.map(k =>
+          s"$k ${Lang.values.map(l => have((k, l.code))).mkString("/")}").mkString(", "))
+      j += 1
+    val short = for (k, n) <- slice.quota.toVector.sorted; l <- Lang.values if have((k, l.code)) < n
+      yield s"$k ${l.code} ${have((k, l.code))}/$n"
+    println(s"stopped at $j, asked $asked; " +
+      (if short.isEmpty then "every share filled" else "NOT filled: " + short.mkString(", ")))
+    if short.nonEmpty then sys.exit(2) // a queue does not go on to train or read on a slice that is short
 
   def main(args: Array[String]): Unit =
     Files.createDirectories(out)
     if args.head == "held" then held(args(1).toInt, args(2).toInt)
-    else if args.head == "more" then more(args(1).toInt, args(2).toInt)
+    else if args.head == "more" then fill(more, args(1).toInt, args(2).toInt)
+    else if args.head == "held3" then fill(held3, args(1).toInt, args(2).toInt)
     else first(args(0).toInt, args(1).toInt)
 
   /** A2's texts: the attempts of a range */

@@ -1,7 +1,7 @@
 package okay.shop.commands.bench
 
 import java.nio.file.{Files, Path}
-import okay.frames.{Choice, Laws}
+import okay.frames.Choice
 import okay.shop.commands.{Booked, Commands, Computed, Desk}
 import okay.shop.model.T
 import scala.jdk.CollectionConverters.*
@@ -35,8 +35,9 @@ object Sealed:
  * command, the command read (`-` when no command came out), the least margin.
  *
  *   sbt "commandsBench/runMain okay.shop.commands.bench.ReadSet <set>[+when] <adapter|none> <out.tsv> …"
- * `sealed`: the 60 phrases; `new`: the held-out slice with every action (`Teach held`, A2b); `held`: the teacher's
- * texts over the first held-out desks (COMMANDS_TEXTS). `+when`: read in `Computed`, the days and times computed
+ * `sealed`: the 60 phrases; `new`: the held-out slice with every action (`Teach held`, A2b); a path ending in
+ * `.jsonl`: that file's texts (A2c: `held3.jsonl`); `held`: the teacher's texts over the first held-out desks
+ * (COMMANDS_TEXTS). `+when`: read in `Computed`, the days and times computed
  * (A2b). The file's last column is the text's kind (`Teach.kind`). Several readings, three arguments each, are
  * one job on the GPU.
  */
@@ -49,13 +50,14 @@ object ReadSet:
     val set = which match
       case "sealed" => Sealed.phrases
       case "new" => Texts.load(Teach.heldTexts)
+      case file if file.endsWith(".jsonl") => Texts.load(Path.of(file))
       case _ =>
         val texts = Texts.load(Teach.texts)
         // `held`: the texts over the held-out desks; `seen`: a hundred of those trained on (the pipeline's check)
         if which == "held" then texts.filter(s => Texts.heldOut(s.seed))
         else texts.filterNot(s => Texts.heldOut(s.seed)).take(100)
-    val unreachable = set.count(s => s.command.forall(c => Laws.reach(space)(s.desk, s.text, c).nonEmpty))
-    println(s"$asked by $adapter: ${set.size} texts, ${set.size - unreachable} reachable by choices")
+    val reachable = set.count(s => s.command.exists(c => Texts.reachable(space)(s.desk, s.text, c)))
+    println(s"$asked by $adapter: ${set.size} texts, $reachable reachable by choices")
     val reader = Reader.load(Some(adapter).filter(_ != "none"))
     val t0 = System.nanoTime()
     val rows = set.map { s =>
@@ -102,8 +104,8 @@ object Tables:
       }.mkString(" | ") + " |")
     println()
     // by kind: right/wrong/unread of each
-    val kinds = Vector("book", "move", "move-rel", "cancel", "dayoff", "paid", "list", "cannot")
-      .filter(k => readers.head._2.exists(_.kind == k))
+    val kinds = Vector("book", "book-ind", "move", "move-rel", "move-ind", "move-rel-ind", "cancel", "cancel-ind",
+      "dayoff", "paid", "list", "cannot").filter(k => readers.head._2.exists(_.kind == k))
     println("| reader | " + kinds.map(_ + " r/w/u").mkString(" | ") + " |")
     println("| --- | " + kinds.map(_ => "---").mkString(" | ") + " |")
     for (name, rows) <- readers do

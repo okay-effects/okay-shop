@@ -40,6 +40,9 @@ invented.
 - **A2b — days and times computed** (after A2 missed its bar): an exact organ a language that fills or narrows
   the day and time lines before the reader weighs them; a move said as a difference computed from the booking; a
   held-out slice with every action. Done by A2's criterion, read once more with the organ.
+- **A2c — the data loop** (after A2b missed the bar): a class of failure → the teacher writes texts of the class →
+  the organ rejects every text whose command it refutes → training → a held-out slice that has the class. Its bar
+  is on that slice, by kind; the sealed 60 are not read again (see "A2c").
 - **A3 — the workshop's page**: a field, the frame said back, Confirm, then the engine. A test: nothing runs
   without the confirmation.
 - **A4 — the phone**: the time from the phrase to the frame said back, on a real iPhone.
@@ -377,6 +380,8 @@ sbt "commandsBench/runMain okay.shop.commands.bench.ReadSet sealed+when <adapter
 
 ### Prepared for the reader, to run ONLY if the held-out slice calls for it
 
+(`Teach more` was never run in this shape; A2c below replaced it by a slice filled to a quota.)
+
 `Teach more` — more texts for the training of what A2's have next to none of: moves by a difference (three attempts
 in five), lists and cancels in everyday words, over desks of their own (seeds from 200000: neither A2's nor the
 held-out slice's), into `more.jsonl`. `Train` takes them by `COMMANDS_MORE=<file>`, and with `COMMANDS_CLEAN=1`
@@ -395,6 +400,188 @@ the held-out slice alone (`ReadSet new+when` of each epoch's adapter). Not run.
 - The desk's times are still one list for all days and services (A1): the organ narrows among them, it does not
   know a start is closed that day.
 - A1's page (A3) does not call the organ yet; `Run` and `Desks` are untouched.
+
+## A2c (2026-11-19): the data loop — built, NOT run
+
+Everything below is code, tests and a queue script. No teacher was asked, no adapter trained, no slice read: the
+GPU was other sessions'. There are no results of A2c in this file yet, and nothing here is a forecast of them.
+
+**The loop.** A class of failure seen in a measure → the teacher writes texts of that class → an exact tool
+rejects every text whose command it refutes → the readers are trained again → a held-out slice that HAS the class
+measures them. "A2b measured" (under Results) named three things; each has its part here:
+
+| what A2b found | its part of the loop |
+| --- | --- |
+| a move said indirectly read as a cancel, by two readers at once | the class: training texts, a held-out quota |
+| 19 of 300 held-out gold commands refuted by the organ (the teacher's slips) | the gate: such a text is not kept |
+| seed 2 reads every list as `cannot` | lists and cancels in everyday words in the training texts |
+
+### The gate (`Teach.refused`)
+
+A text the teacher wrote is rejected with the reason `organ` when its command is not reachable in `Computed` for
+that text and desk — some day or time line of the command is not among what `When` leaves of the options (the text
+says another day or time, or one the desk does not offer). It is the notion `ReadSet` prints as "reachable by
+choices", and the same code: `Texts.reachable(space)(desk, text, command)` (okay-frames' `Laws.reach`), which
+`ReadSet` now calls too. `refused` holds the three checks made before the teacher is asked to read the text back —
+`code`, `close`, then `organ` — so a refuted text costs no second request. It is in `tried`, so in every mode:
+`held`, `more`, `held3`, and A2's first (a rerun of A2's texts would be gated too; they are not rerun).
+
+What the gate does to a measure, said plainly: it rejects a text when the organ and the teacher DISAGREE, whoever
+is wrong. A teacher's slip (a weekday with its "next" dropped) goes, and so does a text the organ mishears. So a
+slice kept by the gate has no text the organ refutes, and the organ's own misses on the class are not in it: they
+are in `<slice>-rejected.tsv` under `organ`, to be counted and read by a person after the teacher's run. One such
+is known before any run, from a probe on phrases written for it: a refusal that names the booked clock time and
+then a difference ("… 09:30 is too early for her, she will be there an hour later") is refuted — the organ takes
+the named time. `When` was not changed in this step.
+
+### The class: a move said indirectly (`Gen.indirect`, `Gen.wish`, `Gen.refusal`)
+
+The class was learned from the sealed set's five misses, of which this file quotes three; nothing more of the
+sealed set was opened for this step, and no sealed phrase or fragment is in a prompt, in the code or in a test.
+The teacher is given no example of the class — an example would be copied. It gets the command in canonical words
+as before, and the class as its `Style`, in these words:
+
+- **the client's wish** — "the master retells the CLIENT'S WISH — the client asked, wants, hopes or would like to
+  come at the new day or time";
+- **a refusal of the old time** — "the master retells that the booked day or time does NOT SUIT the client — they
+  cannot make it (the booked day or time may be named or only implied) — and when they will come instead";
+
+each followed by "Use NO word for moving, rescheduling, shifting or changing a booking, and give the assistant no
+order". One of the two is drawn for each text, in all four languages (the request's `Language:`). The move itself
+is of two kinds, each with its own quota:
+
+- `move-ind` — a move to a new day, a new time or both (`Gen.command`'s move), with A2's note of what stays;
+- `move-rel-ind` — a move by a difference (`Gen.relative`, A2b: half an hour to two hours, another day at the same
+  time, a day or a week), with its note that the new time or day is said only as the difference.
+
+**The contrasts, chosen so that a reader learns the difference and not "a wish means a move":**
+
+- `cancel-ind` (`Gen.unwilling`) — the client will not come: they cannot make the booked day or time, or changed
+  their mind, and ask for NOTHING instead; no word for cancelling. The same opening as a refusal of the old time;
+  what tells them apart is whether another day or time follows.
+- `book-ind` (`Gen.wished`) — a new client's wish for a service at a day and time; no word for booking. A wish with
+  a day and a time and no booking behind it is a booking, not a move.
+
+Plain statements that are no command at all (a client who "might be late") were NOT added: the frame has no line
+for them but `cannot`, and what a master means by them is not decided here.
+
+### The slices (`Teach.Slice`, `Teach.draw`, `fill`)
+
+A slice is a name, a first seed and a quota a language. Attempt `j` draws the desk of seed `from + j`, the language
+`j % 4`, and the kind whose turn it is — `turn((j / 4) % turn.size)`, where `turn` holds each kind as often as its
+quota, shuffled once by the slice's seed: the kind is the attempt's number's alone, never the desk's (A2b's
+lesson). `Teach.draw(slice, j)` is that attempt with no model — the desk, the command, the request to the teacher
+— and is what the tests check. A desk with nothing for the kind (no booking, no master) is passed over. A text
+kept is written with the source `<slice>:<kind>`; `Teach.kind` reads it back, and `ReadSet` writes it as the
+file's last column, so `Tables` counts by kind. A kind in a language is given up after six times its number of
+requests; the run then ends with `NOT filled: …` and exit 2, and the queue stops there for a person to decide.
+The teacher's rules are A2b's (`nearest`: a weekday alone is the nearest such day); lists and cancels are asked
+for in everyday words, as in A2b.
+
+- **`more`** — training texts, `more.jsonl`, seeds 200000–299999, 205 a language: `move-ind` 40, `move-rel-ind` 40,
+  `move-rel` 30 (a move by a difference said plainly), `cancel-ind` 30, `book-ind` 20, `list` 30, `cancel` 15.
+- **`held3`** — the third held-out slice, `held3.jsonl`, seeds 600000–699999, 90 a language: `book` 15, `book-ind`
+  5, `move` 6, `move-rel` 6, `move-ind` 10, `move-rel-ind` 10, `cancel` 6, `cancel-ind` 6, `dayoff` 5, `paid` 8,
+  `list` 8, `cannot` 5.
+
+So `more` is 820 texts when filled, 320 of them moves said indirectly; `held3` is 360, 80 of them moves said
+indirectly, and every action is in it. Seeds drawn by anything, none meeting another (`Teach.seeds`, checked in
+`GenSuite`): A2's teacher 1000–1539, the canonical texts 100000–199999, `more` 200000–299999, A2b's held-out slice
+500000–599999 (it drew 500000–500786), `held3` 600000–699999. The people's names are from the same lists as
+everywhere; desks, bookings and phrases are new.
+
+### Training
+
+Three seeds again, each from the released model, not from A2's adapters: `Train` with `COMMANDS_MORE=more.jsonl`
+(the new texts beside A2's), `COMMANDS_CLEAN=1` (every text whose day or time the organ refutes is left out — A2's
+far weekdays; `more` has none by the gate), `COMMANDS_NAME=reader2c`, `COMMANDS_EPOCHS=1`. One epoch is fixed here,
+before any run, because A2's adapters are of one epoch and are what the new ones are compared with; it is not
+chosen on `held3`. The canonical texts stay half as many as the others. The adapters are
+`adapters/reader2c-s{1,2,3}-e1.safetensors`; A2's `reader-s*` are not touched (the queue refuses to start a
+training whose adapter exists).
+
+### To run, in this order (nothing of it was started)
+
+`a2c-queue.sh` in `COMMANDS_OUT` runs the steps named, in the order given. Before each it waits for three minutes
+with no MLX work seen (a JVM with libokm, python MLX, the other sessions' `loop*`, `tree*`, `listwise*`, `mixes*`,
+`base*` scripts, a request at the gateway, or the lock), then takes the shared lock
+`~/work/my/okay-inlay-private/gpu.lock` (`mkdir`) and removes it when the job exits — only a lock it made. Each job
+appends its exit code to `status`; a step that fails stops the queue.
+
+```sh
+P=~/work/my/okay-shop-private/commands
+$P/a2c-queue.sh more held3 train1 train2 train3 reads      # all six, or any of them in this order
+```
+
+1. `more` — `Teach more 0 100000`, the teacher: `more.jsonl`, `more-rejected.tsv`.
+2. `held3` — `Teach held3 0 100000`, the teacher: `held3.jsonl`, `held3-rejected.tsv`.
+3. `train1`, `train2`, `train3` — `Train` with `COMMANDS_SEED` 1, 2, 3 and the variables above:
+   `adapters/reader2c-s<n>-e1.safetensors`. Needs `more.jsonl`.
+4. `reads` — `ReadSet`, twelve readings of `held3.jsonl` in one job: A2's `reader-s<n>-e1` and the new
+   `reader2c-s<n>-e1`, each as `<file>` and as `<file>+when`, into `held3/old-s<n>.tsv`, `old-s<n>-when.tsv`,
+   `new-s<n>.tsv`, `new-s<n>-when.tsv`. Needs `held3.jsonl` and the three new adapters.
+
+The logs are `logs/a2c-<step>.log` (appended), the waiting `logs/a2c-wait.log`.
+
+Then, with no model:
+
+```sh
+sbt "commandsBench/runMain okay.shop.commands.bench.Tables $P/held3/old-s1-when.tsv $P/held3/old-s2-when.tsv \
+  $P/held3/old-s3-when.tsv"                                # and the same for new-s*-when, old-s*, new-s*
+sbt "commandsBench/runMain okay.shop.commands.bench.Narrowing $P/more.jsonl"   # the organ on the new texts
+```
+
+`ReadSet` takes a set by its file now: an argument ending in `.jsonl` (with `+when`: read in `Computed`).
+
+### What will be measured, and the bar
+
+On `held3`, by kind (`Tables`' "by kind" rows): each reader's right / wrong / unread, and for every pair of readers
+agreeing right / asked / wrong — A2's adapters against the retrained ones, each without and with the organ. Also
+to report: the teacher's rejections by reason for both slices, the `organ` ones counted and read (the teacher's
+slip or the organ's miss); what `COMMANDS_CLEAN` left out; any kind a language did not fill.
+
+The bar of A2c, on `held3`, the retrained adapters, with the organ, for EVERY pair of readers agreeing:
+
+- the whole slice (360): right ≥ 80%, wrong ≤ 2%;
+- moves said indirectly (`move-ind` and `move-rel-ind` together, 80): right ≥ 80%, wrong ≤ 2% — on 80 texts that
+  is at most one wrong answer;
+- no kind with more than one wrong answer in a language;
+- each retrained reader alone has the action of a list right in at least 29 of the 32 lists.
+
+A2's adapters on the same slice are the baseline, not part of the bar. The numbers of the bar are a choice made
+before the run (the first two are A2's criterion); with 80 texts the second is coarse, and that is said with the
+result.
+
+**The sealed set.** The 60 sealed phrases are NOT read again in A2c. They were read once with the organ, and the
+class this step trains was learned from that reading: a reader trained on the class and then read on those phrases
+would be measured on what it was tuned towards. So after A2c the sealed 60 are no longer a clean test of this
+reader, and A2c claims nothing about them. `held3` is a held-out slice, not a sealed set: its texts are the
+teacher's — written by the model that also checks them, in the class as this file describes it, and passed by
+the organ — so it says how the readers do on such texts, not on what masters say. A clean claim by A2's criterion
+needs a NEW sealed set: phrases written by a person who has not seen these, with moves said indirectly among them,
+read once.
+
+### Tests (`GenSuite`, no model)
+
+- the gate: over generated desks, a booking said with a bare weekday is kept for the nearest such day and rejected
+  (`organ`) for the same weekday a week later and for another time, while `Commands` alone reaches the refuted
+  one; a canonical saying is kept (or says its booking's code), and is rejected for another day; a client who
+  will not come has nothing to refute;
+- the class: both slices draw, in each of the four languages, at least twice the quota of every kind in 6000
+  attempts; every indirect move is a `Move` of a booking of its desk to a day and a start the desk has, not the
+  booking's own; its request carries one of the two ways (each, in each language) and, by a difference, the note;
+  the kind is read back from the source;
+- the quotas (90 a language in `held3`, every action in it, each kind's turns its quota) and the seed ranges, no
+  two meeting.
+
+### Not done in A2c
+
+- Nothing was run: the teacher's yield for the class in each language, how many texts the gate rejects, and every
+  number of the bar are unknown.
+- `When` does not hear a refusal that names the booked clock time before a difference (above); such texts are
+  rejected by the gate, so neither trained on nor measured.
+- No new sealed set was written.
+- A2b's `held` mode is as it was (its slice is filled); it was not moved onto `Slice`.
 
 ## Results
 

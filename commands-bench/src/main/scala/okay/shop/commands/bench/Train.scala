@@ -13,7 +13,8 @@ import scala.util.Random
  *
  *   sbt "commandsBench/runMain okay.shop.commands.bench.Train"
  *   env: COMMANDS_SEED (1), COMMANDS_EPOCHS (2), COMMANDS_TEXTS (teacher.jsonl), COMMANDS_ONLY (so many of the
- *   teacher's texts), COMMANDS_CANON, COMMANDS_NAME (the adapter's name: reader), COMMANDS_OUT, COMMANDS_MODEL
+ *   teacher's texts), COMMANDS_CANON, COMMANDS_NAME (the adapter's name: reader), COMMANDS_OUT, COMMANDS_MODEL,
+ *   COMMANDS_MORE (a file of more texts: `Teach more`), COMMANDS_CLEAN (leave out what the organ refutes)
  */
 object Train:
   def main(args: Array[String]): Unit =
