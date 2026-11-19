@@ -14,7 +14,8 @@ import scala.util.Random
  *   sbt "commandsBench/runMain okay.shop.commands.bench.Train"
  *   env: COMMANDS_SEED (1), COMMANDS_EPOCHS (2), COMMANDS_TEXTS (teacher.jsonl), COMMANDS_ONLY (so many of the
  *   teacher's texts), COMMANDS_CANON, COMMANDS_NAME (the adapter's name: reader), COMMANDS_OUT, COMMANDS_MODEL,
- *   COMMANDS_MORE (a file of more texts: `Teach more`), COMMANDS_CLEAN (leave out what the organ refutes)
+ *   COMMANDS_MORE (a file of more texts: `Teach more`), COMMANDS_CLEAN (leave out what the organ refutes),
+ *   COMMANDS_TREE (a batch: an epoch in tries)
  */
 object Train:
   def main(args: Array[String]): Unit =
@@ -48,12 +49,20 @@ object Train:
     val t0 = System.nanoTime()
     def seconds = (System.nanoTime() - t0) / 1e9
     Files.createDirectories(Teach.out.resolve("adapters"))
+    // COMMANDS_TREE=<batch>: an epoch in tries (mlx-scala `Lora.epochTree`: texts over one desk share the prompt's
+    // beginning, run once a batch). okay-desk's frame reader at 8, lr 2e-4: 1.8× faster an epoch and wrong 51
+    // against 93 of 1004 never trained, three seeds alike (okay-desk specs/frames.md §5.12) — not yet measured here
+    val tree = sys.env.get("COMMANDS_TREE").map(_.toInt)
     for e <- 1 to epochs do
       var sum = 0f; var k = 0
-      for i <- rnd.shuffle(items) do
-        val (ids, from) = tokens(i)
-        sum += lora.step(ids, from); k += 1
-        if k % 200 == 0 then println(f"epoch $e, $k/${items.size}: mean loss ${sum / k}%.4f ($seconds%.0f s)")
+      tree match
+        case Some(b) =>
+          sum = lora.epochTree(items.map(tokens), rnd, b) * items.size; k = items.size
+        case None =>
+          for i <- rnd.shuffle(items) do
+            val (ids, from) = tokens(i)
+            sum += lora.step(ids, from); k += 1
+            if k % 200 == 0 then println(f"epoch $e, $k/${items.size}: mean loss ${sum / k}%.4f ($seconds%.0f s)")
       val heldLoss = held.map { h => val (ids, from) = tokens(h); lora.evaluate(ids, from) }
       println(f"epoch $e: mean loss ${sum / k}%.4f; held out ${heldLoss.sum / math.max(1, held.size)}%.4f " +
         f"($seconds%.0f s)")
