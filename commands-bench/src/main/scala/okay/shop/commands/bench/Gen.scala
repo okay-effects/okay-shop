@@ -241,7 +241,8 @@ object Gen:
     "time, or changed their mind — and ask for NOTHING instead: no other day, no other time. Use no word for " +
     "cancelling or deleting, and give the assistant no order"
   val wished: String = "the master retells a new client's WISH — they asked for, want or would like the service at " +
-    "that day and time. Use no word for booking or writing down, and give the assistant no order"
+    "that day and time. Use no word for booking or writing down, and give the assistant no order. It is still a " +
+    "NEW booking: the client's name goes in double square brackets, [[…]], as the rules say"
 
   /**
    * A MOVE SAID INDIRECTLY (A2c): a move of the desk's — by a difference (`relative`) or to a new day, time or
