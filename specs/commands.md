@@ -547,6 +547,8 @@ What follows for A3 and for the reader:
 
 ### A2b (2026-11-18): the organ measured with no model; the readers NOT read with it yet
 
+(Superseded on 2026-11-19 by "A2b measured" at the end of this section: the three steps were run.)
+
 **The bar is not measured.** Everything of A2b that needs no GPU is built and measured; the three steps that need
 it — the teacher's texts for the new held-out slice, the three adapters read on it without and with the organ, and
 the one final reading of the 60 sealed phrases with the organ — were NOT run. The one GPU was held from 16:42 to
@@ -590,3 +592,50 @@ To finish A2b, in this order, each when the GPU is free (the script waits; `sbt`
    reading is also the first time the organ meets the sealed phrases: `ReadSet` prints how many of the 60
    hand-written commands are still reachable in `Computed`, and a phrase whose day or time the organ refutes is a
    miss to report, not to repair after the fact.
+
+### A2b measured (2026-11-19): the bar is NOT met; days and times are no longer the gap
+
+Steps 1, 2 and 4 were run; step 3 (retraining) was not. The same three adapters as A2 (seeds 1, 2, 3, epoch 1).
+
+**The 60 sealed phrases, read once with the organ** (`scripts/commands/reader-s{1,2,3}-when.tsv`; all 60 gold
+commands reachable in `Computed`):
+
+| reader | right, A2 | right, with the organ | day | time | action |
+| --- | --- | --- | --- | --- | --- |
+| seed 1 | 42 | 50 | 35/35 | 27/27 | 54/60 |
+| seed 2 | 38 | 47 | 30/31 | 27/27 | 49/60 |
+| seed 3 | 41 | 48 | 34/34 | 26/26 | 51/60 |
+
+| two readers agreeing | right | asked | wrong | A2: right / asked / wrong |
+| --- | --- | --- | --- | --- |
+| 1 + 2 | 41 (68%) | 18 | 1 (1.7%) | 33 / 22 / 5 |
+| 1 + 3 | 41 (68%) | 16 | 3 (5.0%) | 34 / 20 / 6 |
+| 2 + 3 | 41 (68%) | 16 | 3 (5.0%) | 32 / 20 / 8 |
+
+The bar is right ≥ 80%, wrong ≤ 2%: right is missed by every pair, wrong is met by one pair of three. Against A2
+the organ adds 7–9 right answers in a pair and takes the wrong ones from 5–8 to 1–3. A day or a time is wrong once
+in 180 readings. Every answer two readers agree on and get wrong (five phrases) is the ACTION of a move said
+indirectly — "asked to come an hour earlier", "не может в четверг, давай в пятницу в то же время", "chce przyjść
+pół godziny wcześniej" — read as a cancel (once a day off). Seed 2 still reads every list as `cannot`.
+
+**The held-out slice** (step 1: `held.jsonl`, 300 texts, every action, 24 moves by a difference, 193 of the
+teacher's texts rejected; step 2: files and tables in `COMMANDS_OUT/held2`):
+
+| reader | right | right with the organ | time | move by a difference |
+| --- | --- | --- | --- | --- |
+| seed 1 | 250 | 265 | 132/152 → 144/152 | 6/24 → 18/24 |
+| seed 2 | 195 | 239 | 113/154 → 146/153 | 4/24 → 16/24 |
+| seed 3 | 231 | 264 | 120/159 → 145/158 | 3/24 → 15/24 |
+
+Two readers agreeing with the organ: right 227, 252, 227 of 300 (76%, 84%, 76%), wrong 16 each (5.3%); without it
+right 182, 216, 178, wrong 10, 12, 19. The slice's wrong answers are mostly the TEACHER's: with the organ 19 of
+the 300 gold commands are not reachable, and of the answers seeds 1 and 3 agree on and get wrong, ten are a bare
+weekday in the text ("у п'ятницю") whose gold is a week after the nearest one — the teacher dropped "next" — and
+a few more are garbled times ("о шостій пів на дев'ята"). So this slice cannot measure a wrong rate under about 5%.
+
+**Why step 3 was not run.** Its condition was read on the held-out slice, as written: there the action is right
+in 291–299 of 300 for seeds 1 and 3, and moves by a difference are wrong for their time, not their action. The
+sealed set then showed the gap the slice does not have: moves said indirectly, read as cancels. That was seen on
+the sealed set, so it may not be tuned on it. What follows from it is new work, not a rerun: texts for training
+AND a new held-out slice with moves said as a wish or a refusal of the old time, the teacher's weekdays checked
+by the organ before a text is kept (a text whose gold `Computed` refutes is rejected), and seed 2's lists.
