@@ -826,3 +826,60 @@ sealed set then showed the gap the slice does not have: moves said indirectly, r
 the sealed set, so it may not be tuned on it. What follows from it is new work, not a rerun: texts for training
 AND a new held-out slice with moves said as a wish or a refusal of the old time, the teacher's weekdays checked
 by the organ before a text is kept (a text whose gold `Computed` refutes is rejected), and seed 2's lists.
+
+### A2c measured (2026-11-19): the data loop works on its own slice; one pair meets the bar
+
+Run under the shared GPU lock, 13:15–19:36. Files in `COMMANDS_OUT`: `more.jsonl`, `held3.jsonl`, their
+`-rejected.tsv`, `adapters/reader2c-s{1,2,3}-e1.safetensors`, `held3/{old,new}-s{1,2,3}[-when].tsv` and
+`held3/tables-*.txt` (`Tables`' output). The sealed 60 were not read.
+
+**The teacher.** `more`: 820 kept of 2253 asked (the first run stopped with `book-ind` at 5 of 80 — the teacher
+left the new client's name unmarked, 471 rejections as `marks`; `Gen.wished` now asks for the brackets and the
+slice was filled from attempt 5023 on). `held3`: 347 kept of 789 asked, NOT its 360 — `move-ind` stopped at 27 of
+40 (pl 4, en 8, uk 5, ru 10) when its tries ran out; the slice was used as it is, with 67 indirect moves (27 to a
+new day or time, 40 by a difference). Why the texts were rejected, both slices: the organ 757 (of them 583
+indirect moves), the teacher's own read-back giving another action 319 (of them 281 indirect moves) — a move said
+indirectly is ambiguous to the 35B teacher itself.
+
+**The readers on `held3`, 347 texts, with the organ** (A2's adapters "old", the retrained "new"; one epoch each,
+4,316 texts against 3,212):
+
+| reader | right, old | right, new | action right, old → new | list, old → new |
+| --- | --- | --- | --- | --- |
+| seed 1 | 279 | 313 | 302 → 336 of 347 | 31 → 30 of 32 |
+| seed 2 | 218 | 262 | 239 → 323 | 3 → 31 |
+| seed 3 | 248 | 327 | 295 → 343 | 31 → 30 |
+
+| two readers agreeing | old: right / asked / wrong | new: right / asked / wrong | new, the 67 indirect moves |
+| --- | --- | --- | --- |
+| 1 + 2 | 207 / 114 / 26 (60%, 7.5%) | 250 / 94 / 3 (72%, 0.9%) | 46 / 20 / 1 |
+| 1 + 3 | 237 / 91 / 19 (68%, 5.5%) | 306 / 35 / 6 (88%, 1.7%) | 56 / 9 / 2 |
+| 2 + 3 | 192 / 132 / 23 (55%, 6.6%) | 257 / 86 / 4 (74%, 1.2%) | 44 / 22 / 1 |
+
+The old pairs on the 67 indirect moves: right 6, 13, 4; wrong 21, 13, 20. Without the organ the new pairs are
+right 200, 238, 215 and wrong 9, 9, 14: the organ adds 38–68 right answers and takes away half of the wrong ones.
+
+**Against the bar.** Whole slice (right ≥ 80%, wrong ≤ 2%): met by seeds 1 + 3; the two pairs with seed 2 meet
+wrong and miss right (72%, 74%). The indirect moves (right ≥ 80%, at most one wrong): 1 + 3 is right in 84% with
+2 wrong — missed by one text; the pairs with seed 2 have 1 wrong and are right in 69% and 66%. Lists, each reader
+(≥ 29 of 32): met, 30, 31, 30. No kind with more than one wrong in a language: not checked by kind and language.
+
+**What it shows, and what it does not.**
+- The class was missing from the data and data mends it: indirect moves go from 4–13 right of 67 to 44–56, and
+  the wrong answers two readers agree on from 13–21 to 1–2. Seed 2's lists are mended (3 → 31 of 32).
+- Seed 2 is a weak adapter in both rounds (wrong alone: 126 old, 82 new) and got WORSE on cancels (23 → 11 of 24
+  right) and `cannot` (20 → 16): the new texts moved its confusion, they did not remove it. A pair is as good as
+  its weaker reader; a third seed like 1 or 3 is the cheap next step, not more data.
+- Of the six texts seeds 1 + 3 agree on and get wrong: three are a time or a booking of a move by a difference,
+  one is "next Saturday" read as the nearest Saturday where the gold is the one after (the organ reaches both, so
+  the gate cannot settle which the words mean), one a list read as `cannot`, one a time said oddly ("во второй").
+- `held3` is the SAME teacher, the same styles and the same gate as the training texts: it measures whether the
+  class was learned, not how people say it. And the gate removed from both the texts the organ refutes. By eye,
+  of 36 of the organ's rejections of indirect moves sampled, about 22 read as ordinary phrases — typically a
+  refusal that names the old time and then the new one ("can't make it Thursday at five but will come Monday at
+  five") or a difference after a named time ("can't make it at 2:30, he's coming an hour later") — and about 14
+  as the teacher's garbling. Why the organ refuted each was not traced. If that share holds, the organ refutes
+  ordinary refusals: such phrases are in neither slice, and with the organ on they would be narrowed to the old
+  day or time. That is work on `When` (a phrase with an old and a new time), not on the reader.
+- Not claimed: anything about the sealed 60 or about phrases written by people. A clean claim needs a new sealed
+  set written by a person, with indirect moves and refusals in it.
