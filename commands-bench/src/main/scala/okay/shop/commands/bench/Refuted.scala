@@ -20,7 +20,9 @@ import scala.jdk.CollectionConverters.*
  *  - `d`  the organ found a value that is neither the booked one nor the gold (`dx`: and none the desk offers);
  *  - `e`  anything else.
  *
- * A rejection's class is its day's and its time's, the first of `a`, `c1`, `c2`, `b`, `d`, `e` among them.
+ * A rejection's class is its day's and its time's, the first of `a`, `c1`, `c2`, `b`, `d`, `e` among them; `-`
+ * when no line refutes — the command is reachable now. The organ's rejections of what is no move are only counted,
+ * with how many are reachable now. Printed: the counts by class and language, and five rows of each class.
  *
  *   sbt "commandsBench/runMain okay.shop.commands.bench.Refuted [rows.tsv]"       (every row, to a file)
  */
@@ -78,6 +80,21 @@ object Refuted:
         }
       }
 
+  /** the organ's rejections of what is no move in a slice's file, by kind: whether the command is reachable now.
+   * A new booking's client is the span the teacher marked, as `Teach` takes it */
+  def others(slice: Teach.Slice): Vector[(String, Boolean)] =
+    Files.readAllLines(Teach.out.resolve(s"${slice.name}-rejected.tsv")).asScala.toVector.map(_.split("\t", -1))
+      .collect { case r if r.length >= 4 && r(2) == "organ" && !kinds(r(1)) => r }.flatMap { r =>
+        val marked = "\\[\\[(.+?)\\]\\]".r.findAllMatchIn(r(3)).map(_.group(1).trim).toVector
+        val text = r(3).replace("[[", "").replace("]]", "").replaceAll("\\s+", " ").trim
+        Teach.draw(slice, r(0).toInt).map { a =>
+          val meant = (a.command, marked) match
+            case (b: Command.Book, Vector(span)) => b.copy(client = span)
+            case (c, _)                          => c
+          a.kind -> Texts.reachable(Computed)(a.desk, text, meant)
+        }
+      }
+
   def line(r: Row): String = Vector(r.slice, r.attempt, r.kind, r.lang, r.cls,
     if r.reachable then "reachable" else "refuted", s"day ${r.dayClass}", s"time ${r.timeClass}",
     s"today ${day(r.desk, r.desk.days.head)}",
@@ -96,7 +113,12 @@ object Refuted:
           s"$l ${mine.count(_.lang == l)}").mkString(", ") + s"\treachable now ${mine.count(_.reachable)}")
     table("moves said indirectly (move-ind, move-rel-ind)", all.filter(_.kind.endsWith("-ind")))
     table("moves said plainly (move, move-rel)", all.filterNot(_.kind.endsWith("-ind")))
-    table("all", all)
+    table("all moves", all)
+    val rest = Vector(Teach.more, Teach.held3).flatMap(others)
+    println(s"what is no move: ${rest.size} rejections, ${rest.count(_._2)} reachable now (" +
+      rest.groupBy(_._1).toVector.sortBy(_._1).map((k, v) => s"$k ${v.count(_._2)}/${v.size}").mkString(", ") + ")")
+    println(s"every organ rejection: ${all.size + rest.size}, ${all.count(_.reachable) + rest.count(_._2)} " +
+      "reachable now")
     println("lines refuting, by class: " + all.flatMap(r => Vector("day " + r.dayClass, "time " + r.timeClass))
       .filterNot(_.endsWith(" ")).groupBy(identity).toVector.sortBy(_._1).map((k, v) => s"$k ${v.size}")
       .mkString(", "))

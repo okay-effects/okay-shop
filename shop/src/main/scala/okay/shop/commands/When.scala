@@ -31,6 +31,9 @@ object When:
   enum Day:
     /** so many days from today — more than one when the words mean either (`через день`) */
     case In(days: Vector[Int])
+    /** `in three days`, `через неделю`: so many days ahead — of today, and in a move that names the booking's
+     * own day, maybe of that day (A2d) */
+    case Ahead(days: Vector[Int])
     /** Monday is 0 */
     case Weekday(weekday: Int, mode: Mode)
     case Date(day: Int, month: Option[Int])
@@ -48,6 +51,9 @@ object When:
     /** a move by a difference: minutes (0: the same time), days (0: the same day) */
     case Later(minutes: Int)
     case DaysLater(days: Int)
+    /** `in an hour`, `через полчаса`: so many minutes from now — which no desk knows — or, in a move that names
+     * the booking's own time, from that time (A2d) */
+    case After(minutes: Int)
 
   /** one thing heard, and the words it was heard in: from a place to before another */
   final case class Heard(what: What, at: Int, end: Int)
@@ -181,10 +187,17 @@ object When:
       def what(days: Boolean, n: Int) = if days then What.DaysLater(n) else What.Later(n)
       said(i, t.sameTime).map(n => Heard(What.Later(0), i, n))
         .orElse(said(i, t.sameDay).map(n => Heard(What.DaysLater(0), i, n)))
+        .orElse(said(i, t.dayAfter).map(n => Heard(What.DaysLater(1), i, n)))
         .orElse(for (days, n, j) <- duration(if is(i, t.by) then i + 1 else i); s <- sign(j)
           yield Heard(what(days, s * n), i, j + 1))
         .orElse(for s <- sign(i) if is(i + 1, t.by); (days, n, j) <- duration(i + 2)
           yield Heard(what(days, s * n), i, j))
+        // `in an hour`, `za pół godziny` — days and weeks so said are a day's (`ahead`); `за годину раніше` is
+        // a difference as any other
+        .orElse(if !is(i, t.in) then None else duration(i + 1).flatMap { (days, n, j) =>
+          sign(j).map(s => Heard(what(days, s * n), i, j + 1))
+            .orElse(if days then None else Some(Heard(What.After(n), i, j)))
+        })
 
     // ---- a day ----
     private def weekday(i: Int): Option[Int] =
@@ -203,8 +216,8 @@ object When:
       // `in three days`, `через неделю`
       def ahead = if led || !is(i, t.in) then None else
         val (n, j) = count(i + 1).getOrElse(1 -> (i + 1))
-        if is(j, t.dayUnit) then heard(Day.In(if j == i + 1 && t.dayOrTwo then Vector(1, 2) else Vector(n)), j + 1)
-        else if is(j, t.weekUnit) then heard(Day.In(Vector(7 * n)), j + 1)
+        if is(j, t.dayUnit) then heard(Day.Ahead(if j == i + 1 && t.dayOrTwo then Vector(1, 2) else Vector(n)), j + 1)
+        else if is(j, t.weekUnit) then heard(Day.Ahead(Vector(7 * n)), j + 1)
         else None
       def marked(mode: Mode, of: Vector[Vector[String]]) = said(a, of).flatMap { n =>
         weekday(n) match
@@ -352,9 +365,11 @@ object When:
   private def dated(today: Long, day: Int, month: Option[Int]): Option[Long] =
     (today until today + 366).find { e => val (_, m, d) = Civil.ymd(e); d == day && month.forall(_ == m) }
 
-  /** what the phrase says, of the desk's options: the sets said, each with the word before it */
-  private final class Read(desk: Desk, text: String):
+  /** what the phrase says, of the desk's options: the sets said, each with the word before it; `own` is the
+   * booking a move moves — its day and time are known, and the phrase may name them (A2d) */
+  private final class Read(desk: Desk, text: String, own: Option[Booked]):
     private val (toks, all) = heard(text)
+    private val ownDay: Option[Long] = own.map(b => Reports.epochDay(b.day))
     private val today = Reports.epochDay(desk.days.headOption.getOrElse("1970-01-01"))
     private val horizon = desk.days.map(Reports.epochDay).toSet
     private def weekdayOf(e: Long): Int = Math.floorMod(e + 3, 7L).toInt
@@ -373,25 +388,41 @@ object When:
       case Vector(one) => Some(one)
       case _           => None
 
-    private def one(d: Day): Vector[Long] = d match
+    /**
+     * The days a day said may be. In a move (A2d) the booking's own day is one more day to count from, and what
+     * a day's words may mean of it is answered beside what they mean of today: `in a week` is a week from today
+     * or from the booking's day; a bare weekday that is the booking's weekday may be the booking's own day,
+     * however far; `next` such weekday may be the one after the booking's. `from`: the booking's own day when the
+     * phrase names it — any other weekday said beside it may be the first one after it.
+     */
+    private def one(d: Day, from: Option[Long]): Vector[Long] = d match
       case Day.In(days) => days.map(today + _)
+      case Day.Ahead(days) => (days.map(today + _) ++ ownDay.toVector.flatMap(o => days.map(o + _))).distinct
       case Day.Date(day, month) => dated(today, day, month).toVector
       case Day.Weekday(w, mode) =>
-        val next = today + Math.floorMod(w - weekdayOf(today) + 6, 7) + 1
+        def after(e: Long) = e + Math.floorMod(w - weekdayOf(e) + 6, 7) + 1
+        val next = after(today)
+        val same = ownDay.filter(weekdayOf(_) == w)
         weeks match
           case Some(n) => Vector(monday + 7 * n + w)
           case None => mode match
-            case Mode.Bare => if weekdayOf(today) == w then Vector(today, next) else Vector(next)
+            case Mode.Bare => ((if weekdayOf(today) == w then Vector(today, next) else Vector(next)) ++
+              same ++ from.map(after)).distinct
             case Mode.This => Vector(if weekdayOf(today) == w then today else next)
-            case Mode.Next => Vector(next, monday + 7 + w).distinct
+            case Mode.Next => (Vector(next, monday + 7 + w) ++ same.map(after) ++ from.map(after)).distinct
 
     /** days said one after another are one day (`Friday 20.11`, `завтра, в среду`) when they agree */
-    private def together(g: Vector[What.OnDay]): Vector[Long] =
-      val fixed = g.map(_.day).filterNot(_.isInstanceOf[Day.Weekday]).map(one)
+    private def together(g: Vector[What.OnDay], from: Option[Long]): Vector[Long] =
+      val fixed = g.map(_.day).filterNot(_.isInstanceOf[Day.Weekday]).map(one(_, from))
       val named = g.map(_.day).collect { case Day.Weekday(w, _) => w }
+      // `Tuesday in a week`: what that Tuesday may be, or the Tuesday so many weeks after it
+      val weeksOn = g.map(_.day).collect { case Day.Ahead(Vector(n)) if n % 7 == 0 => n }
       val strict = if fixed.isEmpty then Vector.empty
         else fixed.reduce(_ intersect _).filter(e => named.forall(_ == weekdayOf(e)))
-      if strict.nonEmpty then strict else g.flatMap(d => one(d.day)).distinct
+      if named.nonEmpty && weeksOn.size == 1 && fixed.size == 1 then
+        val said = g.map(_.day).filter(_.isInstanceOf[Day.Weekday]).flatMap(one(_, from))
+        (said ++ said.map(_ + weeksOn.head)).distinct
+      else if strict.nonEmpty then strict else g.flatMap(d => one(d.day, from)).distinct
 
     private val dayGroups: Vector[(Role, Vector[String])] =
       val said = known.collect { case h @ Heard(d: What.OnDay, _, _) => (h, d) }
@@ -402,7 +433,11 @@ object When:
           case Some(g) if glued(g.last._1, m) => gs.init :+ (g :+ m)
           case _ => gs :+ Vector(m)
       }
-      val named = groups.map(g => g.head._2.role -> together(g.map(_._2)))
+      def days(from: Option[Long]) = groups.map(g => g.head._2.role -> together(g.map(_._2), from))
+      val alone = days(None)
+      // the booking's own day named: a weekday said beside it is counted from today, and from that day too
+      val old = ownDay.filter(o => alone.exists(_._2.contains(o)))
+      val named = old.fold(alone)(o => alone.zip(days(old)).map((a, b) => if a._2.contains(o) then a else b))
       // a week said with no weekday is its days
       val week = if said.exists(_._2.day.isInstanceOf[Day.Weekday]) then None
         else weeks.map(n => Role.Plain -> (0 to 6).toVector.map(monday + 7 * n + _).filter(_ >= today))
@@ -418,52 +453,68 @@ object When:
 
     private def narrowed[A](sets: Vector[(Role, Vector[A])], options: Vector[A], action: String, own: Option[A],
                             shifted: Option[A], show: A => String): Narrowed =
-      if sets.isEmpty then shifted.fold(Narrowed.Unsaid) { s =>
-        if options.contains(s) then Narrowed.Among(Vector(show(s))) else Narrowed.Outside(Vector(show(s)))
-      }
+      // a difference said is one more thing said: the booking's own value, shifted
+      val said = sets ++ shifted.map(Role.Plain -> Vector(_))
+      if said.isEmpty then Narrowed.Unsaid
       else
         def unless(of: Vector[(Role, Vector[A])], drop: ((Role, Vector[A])) => Boolean) =
           val rest = of.filterNot(drop)
           if rest.isEmpty then of else rest
         // what is said `instead of` is not the one meant
-        val live = unless(sets.map((as, s) => as -> s.filter(options.contains)).filter(_._2.nonEmpty),
+        val live = unless(said.map((as, s) => as -> s.filter(options.contains)).filter(_._2.nonEmpty),
           _._1 == Role.Instead)
         val kept =
-          // a move goes FROM what the booking has, which the phrase may say, to the rest
+          // a move goes FROM what the booking has, which the phrase may say, to the rest (A2d)
           if action == "move" then
             val to = unless(live, _._1 == Role.From)
-            own.fold(to)(o => unless(to, _._2 == Vector(o)))
+            own.fold(to) { o =>
+              // what may be the booking's own value — its description, the old one — and what cannot be
+              val (old, other) = to.partition(_._2.contains(o))
+              // nothing else is said: it stays as it is — but for a difference that leaves the desk
+              if other.isEmpty then (if shifted.exists(!options.contains(_)) then Vector.empty else old)
+              else shifted.filter(s => s != o && options.contains(s)) match
+                // a difference is counted from the booking's own value: what names that value is not where the
+                // booking goes; a new value named too is the same one, or both are answered
+                case Some(s) => if other.forall(_._2.contains(s)) then Vector(Role.Plain -> Vector(s)) else other
+                // else the own value is not where it goes, unless said so (`the same time`); what else a
+                // mention that may be the old one may mean stays
+                case None => other ++ old.map((as, s) => as -> s.filter(_ != o)) ++
+                  shifted.filter(_ == o).map(Role.Plain -> Vector(_))
+            }
           // elsewhere a `from` is the beginning, and an `until` after it the end
           else if live.exists(_._1 == Role.From) then unless(live, _._1 == Role.Until)
           else live
         val found = kept.flatMap(_._2).toSet
-        if found.isEmpty then Narrowed.Outside(sets.flatMap(_._2).distinct.map(show))
+        if found.isEmpty then Narrowed.Outside(said.flatMap(_._2).distinct.map(show))
         else Narrowed.Among(options.filter(found).map(show))
 
-    private def moved(action: String, booking: Option[Booked]): Option[Booked] =
-      if action == "move" then booking else None
-
-    def days(action: String, booking: Option[Booked]): Narrowed =
-      val own = moved(action, booking)
+    def days(action: String): Narrowed =
       val shift = known.collect { case Heard(What.DaysLater(n), _, _) => n }.distinct match
         case Vector(n) => own.map(b => Reports.plus(b.day, n))
         case _         => None
       narrowed(dayGroups, desk.days, action, own.map(_.day), shift, identity)
 
-    def times(action: String, booking: Option[Booked]): Narrowed =
-      val own = moved(action, booking)
-      val shift = known.collect { case Heard(What.Later(n), _, _) => n }.distinct match
+    def times(action: String): Narrowed =
+      val later = known.collect { case Heard(What.Later(n), _, _) => n }.distinct
+      // `in an hour` is from the booking's own time only when the phrase names that time
+      val after = known.collect { case Heard(What.After(n), _, _) => n }.distinct
+        .filter(_ => own.exists(b => timeGroups.exists(_._2.contains(b.time))))
+      val shift = (if later.nonEmpty then later else after) match
         case Vector(n) => own.map(_.time + n)
         case _         => None
       narrowed(timeGroups, desk.times, action, own.map(_.time), shift, Span.label)
 
+  /** the booking a move moves: its day and time are what the phrase may name as the old ones */
+  private def moved(action: String, booking: Option[Booked]): Option[Booked] =
+    if action == "move" then booking else None
+
   /** THE DAYS a phrase says, among the desk's: for an action's day line; `booking` is the one a move moves */
   def days(desk: Desk, text: String, action: String, booking: Option[Booked] = None): Narrowed =
-    if desk.days.isEmpty then Narrowed.Unsaid else Read(desk, text).days(action, booking)
+    if desk.days.isEmpty then Narrowed.Unsaid else Read(desk, text, moved(action, booking)).days(action)
 
   /** THE TIMES a phrase says, among the desk's starts (as `09:30`) */
   def times(desk: Desk, text: String, action: String, booking: Option[Booked] = None): Narrowed =
-    if desk.days.isEmpty then Narrowed.Unsaid else Read(desk, text).times(action, booking)
+    if desk.days.isEmpty then Narrowed.Unsaid else Read(desk, text, moved(action, booking)).times(action)
 
 /**
  * THE SPACE OF COMMANDS WITH ITS DAYS AND TIMES COMPUTED: `Commands`, but a day's and a time's options are only

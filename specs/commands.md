@@ -312,8 +312,9 @@ candidates are answered (two options are still an exact narrowing; the reader or
 - **In a move** a day or a time said after `from` (`с пятницы`, `z 10`, `from 3`) is what the booking leaves, and
   one equal to the booking's own is the booking's description — both dropped when anything else is said (`from
   10 to 12` is 12; `Anna's Friday haircut to Saturday` is Saturday; `Anna's Friday haircut to 11:30` keeps
-  Friday). **Elsewhere** `from 3 to 4` is 3: the `until` after a `from` is the end. In every action a day said
-  after `instead of` (`вместо`, `замість`, `zamiast`) is dropped when another is said.
+  Friday). A2d below widens this: a mention that MAY be the booking's own, a difference beside the old time, days
+  counted from the booking's day. **Elsewhere** `from 3 to 4` is 3: the `until` after a `from` is the end. In
+  every action a day said after `instead of` (`вместо`, `замість`, `zamiast`) is dropped when another is said.
 - **What is no day and no time**: a number after a word of paying or before a currency (`paid 150`, `12.50 zł`), a
   reference, a number with nothing around it that says a time (`Lipowa 12`, `2 haircuts`, `600 000 000`), a number
   of people, minutes, days or weeks (`for 3 people`, `на 2 години`), English `at 12 Baker Street`. And the narrowing
@@ -579,9 +580,179 @@ read once.
 - Nothing was run: the teacher's yield for the class in each language, how many texts the gate rejects, and every
   number of the bar are unknown.
 - `When` does not hear a refusal that names the booked clock time before a difference (above); such texts are
-  rejected by the gate, so neither trained on nor measured.
+  rejected by the gate, so neither trained on nor measured. (Heard since A2d, below.)
 - No new sealed set was written.
 - A2b's `held` mode is as it was (its slice is filled); it was not moved onto `Slice`.
+
+## A2d (2026-11-20): a phrase with an old and a new time
+
+No model, no GPU, no teacher: a trace of what the gate rejected in A2c, a change of `When` for moves, and the two
+no-model measures before and after. On the branch `when-two-times`; `more.jsonl`, `held3.jsonl` and the adapters
+are as A2c left them, and nothing was read or trained with the changed organ.
+
+### The trace (`Refuted`)
+
+A2c's gate rejected 757 of the teacher's texts as `organ`; 640 of them are moves (583 said indirectly, 57 plainly),
+the other 117 a booking, a list or a day off. `Refuted` rebuilds each rejected move with no model — `Teach.draw`
+gives the attempt's desk, gold command and booking — asks the organ again for the phrase, and classes every line
+(the day, the time) whose gold value is not among what the organ leaves, by rule alone:
+
+- `a` — the organ left the BOOKED value and heard no difference;
+- `c1` — a difference was heard, the gold is the booked value shifted by it, and the organ answered a value named
+  beside it instead (`c1a`: that value is the booked one — the old time named, then the difference);
+- `c2` — a difference was heard and the gold is not the booked value shifted by it;
+- `b` — the day's gold is a week or more after a day the organ took;
+- `d` — the organ found a value that is neither the booked one nor the gold (`dx`: none the desk offers);
+- `e` — anything else.
+
+A rejection's class is the first of `a`, `c1`, `c2`, `b`, `d`, `e` among its two lines. All 640 were refuted again
+by the unchanged organ (the draw reproduces the run). Before the change:
+
+| class | said indirectly | said plainly | all | en | pl | ru | uk | reachable after the change |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `a` the booked value left | 98 | 5 | 103 | 18 | 27 | 27 | 31 | 43 |
+| `c1` a difference beside a named value | 89 | 9 | 98 | 34 | 28 | 19 | 17 | 92 |
+| `c2` a difference that is not the gold's | 21 | 6 | 27 | 3 | 7 | 7 | 10 | 1 |
+| `b` a weekday a week or more on | 196 | 26 | 222 | 34 | 59 | 43 | 86 | 66 |
+| `d` another value | 179 | 11 | 190 | 9 | 62 | 28 | 91 | 9 |
+| `e` | 0 | 0 | 0 | | | | | |
+| all | 583 | 57 | 640 | 98 | 183 | 124 | 235 | 211 |
+
+By line: day `a` 71, `b` 229, `c1` 18 (12 of them `c1a`), `c2` 2, `d` 54; time `a` 34, `c1` 81 (71 `c1a`), `c2` 26,
+`d` 201 (24 `dx`).
+
+What the classes are, read row by row (all of `a`; samples of the others):
+
+- **The hypothesis is real and is a third of it.** `c1` is it exactly: the booked time named, then a difference
+  ("can't make it at 10, he'll be two hours later", "nie zdąży na 14:30, niech przyjdzie pół godziny później") —
+  A2b took a difference only when no time was named, so the named, booked time was settled. `a` is the same thing
+  where the organ could not see the old value for what it is: the booked day named by a weekday that is also
+  today's ("can't make it on Tuesday, she's coming Saturday instead", said on a Tuesday for the booking of next
+  Tuesday — `Tuesday` was today or in a week, not exactly the booking's day, so it was not dropped); the booked
+  time and then "in an hour" ("о дев'ятій не встигне, прийде через годину": not heard as a difference); the booked
+  day and then a day said from it ("the next day", "через тиждень", "next Friday" for the Friday after the
+  booking's).
+- **`b` is mostly the teacher's, and partly the organ's.** In 36 of its 229 lines the gold IS the booked day,
+  named by its weekday while it is a week or more ahead ("can't make it at 11:00 on Friday, she'll be here an hour
+  earlier", the booking on the Friday of next week): the organ SETTLED the nearest Friday — a wrong value, by its
+  own rule for a bare weekday. In the rest the new day is a bare weekday a week or more after the nearest one —
+  A2b's "far weekday", the teacher's slip against its own rule; where the phrase names the booked day and the gold
+  is the first such weekday after it ("не зможе в суботу, прийде в неділю", the booking on the Saturday of next
+  week), the far reading is an ordinary one, and the organ had settled the near one.
+- **`c2` is the teacher's**: the difference said is not the command's ("на годину пізніше" for half an hour,
+  "на полдня позже").
+- **`d` is the teacher's garbling, and one weakness of the organ on it.** Of 68 of its time lines read: about 47
+  say another time than the gold or a broken one ("о сьомій" for 14:00, "о шостій без півтори", "jedenastę i
+  pół"); in about 21 the organ heard the hour and not the minutes said after it in a broken or unusual form
+  ("o jedenastej trzydziestej", "о п'ятій годині сорока п'яти хвилин", "в одиннадцать часов тридцать") and
+  settled the bare hour. Its day lines are `today` or `tomorrow` said for another day, and "через тиждень" meant
+  from the booked day.
+
+### The rule
+
+For a move the booking is known before its day and time are asked for (the frame's order: the booking's line is
+chosen first, and `Computed` hands that booking to `When`). Its own day and time are the evidence: **what a phrase
+says that may be the booking's own value is the booking's description — the OLD one — once anything else is
+said.** For each of the two lines:
+
+1. What the phrase says of the line is its mentions — each the set of values its words may mean (A2b) — and, when
+   a difference is said, one more: the booking's own value shifted by it.
+2. A mention MAY BE THE OLD ONE when the booking's own value is among what it may mean.
+   - Nothing else said: the mentions stay as they are (A2b: "Anna's Friday haircut to 11:30" keeps Friday).
+   - A difference said: it is counted from the booking's own value, so the mentions that may be the old one are
+     what it is counted from and are left out whole; the answer is the shifted value — alone, or with any other
+     value named when the two disagree.
+   - Another value said, no difference: the booking's own value is taken out, and everything else the mentions may
+     mean is answered — the other mentions', and what a mention that may be the old one may ALSO mean (the organ
+     cannot tell that `at seven` is the booked 19:00 and not 07:00; both readings of the phrase stay). The own
+     value stays only when the phrase says so (`the same time`, `the same day`).
+3. The booking's day is one more day to count from. In a move: a bare weekday that is the booking's weekday may be
+   the booking's own day however far it is (it was the nearest alone); `next` such weekday may be the one after
+   the booking's; `in a week`, `in N days` is from today or from the booking's day; and when the phrase names the
+   booking's own day, any other weekday said is the nearest one or the first after the booking's day.
+4. `in an hour`, `через полчаса`, `za pół godziny` (`What.After`, new) is a difference only beside the booking's
+   own time named in the phrase; with no such time it is from now, which no desk knows, and nothing is narrowed —
+   as before.
+5. Three things heard that were not, in every action: `the next day` (`на следующий день`, `наступного дня`,
+   `następnego dnia`) is a difference of a day; `неделей позже`, `тижнем пізніше`; and a weekday with `in a week`
+   said after it ("во вторник через неделю") is that weekday or the one a week after it (it was that weekday or
+   today plus seven).
+
+Nothing here looks at words of refusing or wishing: no list of "can't", "не сможет", "nie zdąży". The order of the
+mentions does not matter either (the old one first or last).
+
+**Why it cannot settle a wrong value, and where it still can.** Every step either ADDS what a mention may mean
+(3, 5) — which can only turn a settled line into a choice — or takes out the booking's own value once something
+else is said (2), which A2b already did for a mention equal to it. So a wrong value is settled only where A2b's
+own rule could settle one, and in one new case:
+
+- a phrase that says, beside the move, a day or a time that is not this move's ("Anna to 7, Karol's 5 o'clock is
+  gone"; "Friday, not Monday") — as in A2b: nothing hears whose a mention is, or a "not";
+- the old value named and the new one said in words the organ does not hear ("can't make it on Tuesday, he'll be
+  back the following week", "прийде в інший понеділок", "she'll be half an hour late") — the line is settled to
+  the old value, as in A2b; 47 rejections are still of the class `a`, most of them this or the teacher naming the
+  booked day as the wish;
+- new: `in half an hour` beside the booked time is taken from the booked time; meant from now it is another time
+  unless now is the booked time;
+- an hour heard and its minutes not (the class `d` above), as in A2b.
+
+### What it changed
+
+**The rejections, the trace run again** (`Refuted`): 211 of the 640 moves are reachable now — 188 of the 583 said
+indirectly (en 51, pl 42, ru 48, uk 47) and 23 of the 57 said plainly; none of the 117 that are no move. So 211 of
+the 757, and 546 are still refuted: of the moves `a` 47, `b` 156, `c2` 26, `d` 200. Whether each of the 211 is an
+ordinary phrase was not judged again by eye.
+
+**The organ on A2's 2273 texts** (`Narrowing teacher.jsonl`, the table of A2b):
+
+| line | | settled to the meant one | narrowed, the meant among | unsaid | the meant one lost |
+| --- | --- | --- | --- | --- | --- |
+| day (1224 lines) | before | 1021 (83%) | 43 | 98 | 62 (5.1%) |
+| | after | 1000 (82%) | 86 | 98 | 40 (3.3%) |
+| time (881 lines) | before | 777 (88%) | 11 | 77 | 16 (1.8%) |
+| | after | 776 (88%) | 12 | 77 | 16 (1.8%) |
+
+No line is lost that was not lost before (the lost rows after are a subset of those before, on all four files
+below). 22 days are no longer lost — a booked day named by its weekday a week ahead, a far weekday after a named
+booked day — and 21 days and one time went from settled to a choice of two or three: the price of 3 above.
+
+The same on the kept texts of the later slices (day lines, then time lines: settled / narrowed / unsaid / lost):
+
+| file | day before | day after | time before | time after |
+| --- | --- | --- | --- | --- |
+| `held.jsonl` (A2b) | 159 / 5 / 22 / 14 | 159 / 14 / 22 / 5 | 134 / 0 / 21 / 5 | the same |
+| `more.jsonl` | 420 / 73 / 147 / 0 | 411 / 83 / 146 / 0 | 418 / 7 / 95 / 0 | the same |
+| `held3.jsonl` | 179 / 9 / 59 / 0 | 178 / 10 / 59 / 0 | 170 / 1 / 24 / 0 | the same |
+
+### Tests
+
+`WhenSuite`, both platforms, one test more ("a move that names the booking's own day or time and the new one"), its
+62 rows written for it in the four languages, none from the rejected files: old then new; new then old; the old
+time and a difference, by `later` and by `in half an hour`; `in half an hour` alone (nothing); only the new one;
+the next day; `in a week` (from today or from the booking); `next Friday` beside Friday; a booking on the Friday
+of next week (`Friday` is the nearest or the booking's — both, never the nearest alone); a booking whose day and
+time the phrase's words may or may not name (`at seven` for 19:00, `Wednesday` said on a Wednesday: what else they
+may mean stays an option); a new booking, where nothing is counted from one; and four refusals' commands
+reachable in `Computed`.
+Every earlier test passes unchanged. `sbt test`: JVM 198 (one skipped, as before), JS 168; `commandsBench/test` 10.
+
+### To run
+
+```sh
+sbt "commandsBench/runMain okay.shop.commands.bench.Refuted [rows.tsv]"     # classes, counts, five rows of each
+sbt "commandsBench/runMain okay.shop.commands.bench.Narrowing <texts.jsonl>"
+```
+
+### Not done in A2d
+
+- Nothing was run with a model: the gate was not run again over the teacher's texts, no slice was refilled, no
+  reader trained or read. The 211 phrases the organ no longer refutes are in no slice. The readers were trained
+  on texts kept by the old gate, and what a day's choice of two or three (3 above) does to them is not measured.
+- The teacher's far weekday (`b`, 156 left) is the teacher's rule to mend, not the organ's.
+- Not heard still: "the following week", "another Monday", "half an hour late", minutes in a broken form after an
+  hour, a "not" before a day or a time, whose a mention is.
+- The class `d` was read in samples, not labelled row by row; the bar of A2c was not looked at again.
+- Not merged into `main` (which moved on while this was written), not released.
 
 ## Results
 

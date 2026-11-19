@@ -53,7 +53,9 @@ private[commands] final case class Tongue(
     /** the language's own halves and quarters: at a place, the hour (1–12), the minute and the place after */
     idiom: (When.Hearing, Int, When.Role) => Option[(Int, Int, Int)],
     /** `a`, `an`: one, where a count is asked for */
-    one: Set[String] = Set.empty)
+    one: Set[String] = Set.empty,
+    /** `the next day`: a move by a day (A2d) */
+    dayAfter: Vector[Vector[String]] = Vector.empty)
 
 private[commands] object Tongues:
   private def set(s: String): Set[String] = s.split(' ').filter(_.nonEmpty).toSet
@@ -117,7 +119,8 @@ private[commands] object Tongues:
     near = Vector(phrases("сегодня|сегодняшний|сегодняшние|сегодняшних|сегодняшнюю|сегодняшнего") -> Vector(0),
       phrases("завтра|завтрашний|завтрашние|завтрашних|завтрашнюю|завтрашнего") -> Vector(1),
       phrases("послезавтра|после завтра") -> Vector(2)),
-    in = set("через"), dayUnit = set("день дня дней"), weekUnit = set("неделю недели недель"), dayOrTwo = true,
+    in = set("через"), dayUnit = set("день дня дней"), weekUnit = set("неделю недели недель неделей"),
+    dayOrTwo = true,
     thisOne = phrases("этот|эту|это|этого|этой|этом|ближайший|ближайшую|ближайшее|ближайшего|ближайшей"),
     nextOne = phrases("следующий|следующую|следующее|следующего|следующей|следующем"),
     week = set("неделя неделе недели неделю"),
@@ -142,7 +145,8 @@ private[commands] object Tongues:
     sameDay = phrases("тот же день|тот же самый день|этот же день|день тот же|того же дня"),
     pay = set("заплатил заплатила заплатили оплатил оплатила оплатили оплата оплачено взял взяла внес внесла " +
       "стоит цена отдал отдала"),
-    currency = money, counted = set("человек человека людей персон персоны гостей"), idiom = ruIdiom)
+    currency = money, counted = set("человек человека людей персон персоны гостей"), idiom = ruIdiom,
+    dayAfter = phrases("следующий день|следующего дня"))
 
   // ---- Ukrainian ----
   private val ukNumbers = counted("один одна одну одного однієї|два дві двох двом|три трьох трьом|" +
@@ -203,7 +207,7 @@ private[commands] object Tongues:
     near = Vector(phrases("сьогодні|нині|сьогоднішній|сьогоднішні|сьогоднішніх|сьогоднішню") -> Vector(0),
       phrases("завтра|завтрашній|завтрашні|завтрашніх|завтрашню") -> Vector(1),
       phrases("післязавтра|після завтра|позавтра|післязавтрього") -> Vector(2)),
-    in = set("через за"), dayUnit = set("день дні днів"), weekUnit = set("тиждень тижні тижнів"),
+    in = set("через за"), dayUnit = set("день дні днів"), weekUnit = set("тиждень тижні тижнів тижнем"),
     dayOrTwo = true,
     thisOne = phrases("цей|цю|це|цього|цієї|цьому|цій|найближчий|найближчу|найближче|найближчого|найближчої"),
     nextOne = phrases("наступний|наступну|наступне|наступного|наступної|наступному|наступній"),
@@ -231,7 +235,8 @@ private[commands] object Tongues:
       "день той самий|день той же"),
     pay = set("заплатив заплатила заплатили сплатив сплатила сплатили сплачено оплатив оплатила оплата взяв " +
       "взяла коштує ціна"),
-    currency = money, counted = set("осіб особи людей гостей години годин"), idiom = ukIdiom)
+    currency = money, counted = set("осіб особи людей гостей години годин"), idiom = ukIdiom,
+    dayAfter = phrases("наступний день|наступного дня"))
 
   // ---- Polish ----
   private val plNumbers = counted("jeden jedna jedno jednego|dwa dwie dwoch dwu|trzy trzech|cztery czterech|" +
@@ -319,7 +324,8 @@ private[commands] object Tongues:
     sameDay = phrases("tego samego dnia|ten sam dzien|tym samym dniu|dzien ten sam|dzien bez zmian"),
     pay = set("zaplacil zaplacila zaplacili zaplacone zaplacono placi wplacil wplacila wzialem wzielam " +
       "kosztuje cena oplacone"),
-    currency = money, counted = set("osob osoby ludzi gosci godziny godzin"), idiom = plIdiom)
+    currency = money, counted = set("osob osoby ludzi gosci godziny godzin"), idiom = plIdiom,
+    dayAfter = phrases("nastepny dzien|nastepnego dnia"))
 
   // ---- English ----
   private val enHours = counted("one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve")
@@ -382,7 +388,8 @@ private[commands] object Tongues:
     pay = set("paid pays pay payment charged charge cost costs price took"),
     currency = money,
     counted = set("people persons person guests kids hours hour hrs street st road rd avenue ave lane"),
-    idiom = enIdiom, one = set("a an"))
+    idiom = enIdiom, one = set("a an"),
+    dayAfter = phrases("the next day|next day|the following day|following day"))
 
   /** `instead of`: the day or the time after it is the one NOT meant */
   val instead: Set[String] = set("вместо замість zamiast instead")
