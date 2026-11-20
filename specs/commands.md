@@ -1054,3 +1054,45 @@ wrong and miss right (72%, 74%). The indirect moves (right ≥ 80%, at most one 
   day or time. That is work on `When` (a phrase with an old and a new time), not on the reader.
 - Not claimed: anything about the sealed 60 or about phrases written by people. A clean claim needs a new sealed
   set written by a person, with indirect moves and refusals in it.
+
+### A2c, a fourth seed, and A2d read with a model (2026-11-20)
+
+**A fourth seed** (`reader2c-s4-e1`, the same texts and one epoch), on `held3` with the organ: alone 293 right of
+347 (seed 1: 313, seed 3: 327, seed 2: 262). Pairs: 1 + 4 right 279 (80%), wrong 9 (2.6%); 3 + 4 right 287 (83%),
+wrong 7 (2.0%); 1 + 3 as before, 306 (88%), wrong 6 (1.7%). So of three ordinary seeds every pair is right in
+80% or more, and wrong in 1.7–2.6%: the bar on wrong is met by two pairs of three, by a text or two. A seed's
+luck moves a pair by 8 points of right. Seed 2 stays the outlier.
+
+**A2d's organ under the same readers.** With `when-two-times` merged, seeds 1, 3 and 4 read `held3` again: the
+same answers (one day line of seed 3 differs: 239 → 238 right). Expected — `held3` was filtered by the old gate,
+so it has none of the phrases the new rule is for; it shows only that the wider choices do no harm there.
+
+**The 211 recovered phrases** (`Refuted … recovered.jsonl`: the moves the old gate refuted and the new organ
+reaches; 188 said indirectly; no reader was trained on such phrases; NOT checked by the teacher's read-back, so
+some gold commands are the teacher's mistakes), read by seeds 1, 3, 4 with the new organ:
+
+| reader | right of 211 | action | day | time |
+| --- | --- | --- | --- | --- |
+| seed 1 | 130 | 209/211 | 138/209 | 189/209 |
+| seed 3 | 123 | 208/211 | 130/208 | 194/208 |
+| seed 4 | 111 | 207/211 | 115/207 | 178/207 |
+
+Two readers agreeing: right 112, 97, 96 (46–53%), wrong 56, 48, 55 (23–27%). By kind, seeds 1 + 3: a difference
+said indirectly 96 right / 20 wrong of 138; a new day or time said indirectly 6 right / 28 wrong of 50.
+
+- The ACTION is read (207–209 of 211): what A2c taught holds on harder phrases.
+- The DAY is the loss, and the readers agree on it. Of the wrong answers read by eye, the pattern is one: the
+  booking is a week or more ahead, the phrase names its weekday and then another ("can't make it on Sunday,
+  she'll come Saturday instead"), the gold is the weekday beside the BOOKING, both readers give the nearest one
+  from TODAY. The new organ offers both (that is what it was widened to do); the readers were trained on "a
+  weekday alone is the nearest" and no text told them otherwise.
+- So agreement is no doubt here: the two readers share the bias. But the organ KNOWS the case — a move whose new
+  weekday has two readings, from today and from the booking. That can be an exact doubt: ask, whatever the
+  readers say. Not built.
+- These numbers overstate the wrong rate by the teacher's own mistakes among the 211 (class `b` of the trace was
+  mostly the teacher's far weekday; 66 of its 222 are reachable now and in this set), by how much is not known.
+
+**What follows** (the loop's next turn, not done): (1) the organ's two readings of a weekday in a move as a forced
+question, or a rule for which one a move means — a decision about meaning, the operator's; (2) the recovered
+phrases through the teacher's read-back, then into the training texts and a held-out slice, and the seeds
+retrained; (3) the teacher's far weekday and its broken minutes, still untouched.

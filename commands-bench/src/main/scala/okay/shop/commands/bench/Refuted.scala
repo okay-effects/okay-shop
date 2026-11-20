@@ -1,7 +1,7 @@
 package okay.shop.commands.bench
 
 import java.nio.file.{Files, Path}
-import okay.shop.commands.{Booked, Command, Computed, Desk, Narrowed, When}
+import okay.shop.commands.{Booked, Command, Commands, Computed, Desk, Narrowed, When}
 import okay.shop.model.{Reports, Span}
 import scala.jdk.CollectionConverters.*
 
@@ -24,12 +24,12 @@ import scala.jdk.CollectionConverters.*
  * when no line refutes — the command is reachable now. The organ's rejections of what is no move are only counted,
  * with how many are reachable now. Printed: the counts by class and language, and five rows of each class.
  *
- *   sbt "commandsBench/runMain okay.shop.commands.bench.Refuted [rows.tsv]"       (every row, to a file)
+ *   sbt "commandsBench/runMain okay.shop.commands.bench.Refuted [rows.tsv [recovered.jsonl]]"
  */
 object Refuted:
   val kinds: Set[String] = Set("move", "move-rel", "move-ind", "move-rel-ind")
 
-  final case class Row(slice: String, attempt: Int, kind: String, lang: String, text: String, desk: Desk,
+  final case class Row(seed: Long, slice: String, attempt: Int, kind: String, lang: String, text: String, desk: Desk,
                        booked: Booked, gold: Command.Move, day: Narrowed, time: Narrowed, heard: Vector[When.Heard]):
     /** the classes of the day's line and of the time's: empty when the line does not refute */
     val dayClass: String = classOf(day, gold.day, booked.day, heard.collect {
@@ -71,10 +71,10 @@ object Refuted:
     Files.readAllLines(Teach.out.resolve(s"${slice.name}-rejected.tsv")).asScala.toVector.map(_.split("\t", -1))
       .collect { case r if r.length >= 4 && r(2) == "organ" && kinds(r(1)) => r }.flatMap { r =>
         val text = r(3).replace("[[", "").replace("]]", "").replaceAll("\\s+", " ").trim
-        Teach.draw(slice, r(0).toInt).collect { case Teach.Asked(_, l, desk, kind, c: Command.Move, _, _) =>
+        Teach.draw(slice, r(0).toInt).collect { case Teach.Asked(seed, l, desk, kind, c: Command.Move, _, _) =>
           require(kind == r(1), s"${slice.name} ${r(0)}: drawn $kind, the file says ${r(1)}")
           val booked = desk.bookings.find(_.ref == c.booking).get
-          Row(slice.name, r(0).toInt, kind, l.code, text, desk, booked, c,
+          Row(seed, slice.name, r(0).toInt, kind, l.code, text, desk, booked, c,
             When.days(desk, text, "move", Some(booked)), When.times(desk, text, "move", Some(booked)),
             When.hear(text))
         }
@@ -106,6 +106,10 @@ object Refuted:
   def main(args: Array[String]): Unit =
     val all = Vector(Teach.more, Teach.held3).flatMap(rows)
     args.headOption.foreach(f => Files.write(Path.of(f), all.map(line).asJava))
+    // a second file: the moves reachable now, as a set `ReadSet` reads (source `recovered:<kind>`). They passed
+    // neither the old gate nor the teacher's read-back, and no reader was trained on them
+    args.lift(1).foreach(f => Files.write(Path.of(f), all.filter(_.reachable).map(r =>
+      Said(r.seed, r.lang, s"recovered:${r.kind}", r.text, Commands.path(r.desk, r.gold)).json).asJava))
     def table(name: String, of: Vector[Row]): Unit =
       println(s"$name: ${of.size} rejections, ${of.count(_.reachable)} reachable now")
       for (c, mine) <- of.groupBy(_.cls).toVector.sortBy(_._1) do
