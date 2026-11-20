@@ -1185,4 +1185,49 @@ and nearly all of them one case — the new day is the booked weekday A WEEK LAT
 both readers give the booked day itself: a move to the very day and time it is on, which is no move. The organ
 offers both readings there (A2d keeps "next" and "in a week" as a choice). Under the operator's rule the nearest
 reading of the booked weekday is the booked day, which a move cannot mean: so beside the booked day, "next" /
-"following" / "a week later" of the SAME weekday is the booked day plus seven — settled. Not built.
+"following" / "a week later" of the SAME weekday is the booked day plus seven — settled. Built the same day as
+A2f, below.
+
+### A2f (2026-11-20): the booked weekday a week on
+
+**The rule** (`When`, the operator's go-ahead): in a move, the BOOKED weekday said with "next" / "following"
+(`Mode.Next`), or with "in a week" ("Friday in a week"), is the booking's own day a week on (n weeks for "in n
+weeks"), settled when the desk has that day; otherwise A2d's readings stay. It holds whether the old day is named
+or not: "Move Anna to next Friday" for a booking on Friday is the Friday after it. Outside a move nothing changed
+("Book Anna for next Friday" is as it was). "In a week" with no weekday ("za tydzień, o tej samej godzinie") is
+untouched: still a week from today or from the booking.
+
+**The price.** A booking two Fridays away and "move her to next Friday" meant as the nearer one: settled to the
+later one, silently. Written down as A2e's is.
+
+**Tests.** A2d's four rows "can't make Friday, she'll come next Friday" now answer 9 (was `2,9`); a new test of
+the rule in the four languages — `next`, `following`, `in a week`, the old day named or not, a booking whose next
+Friday is past the desk's days (A2d's readings), no move unchanged. `sbt test`: JVM 200 (199 passed, 1 skipped),
+JS 170; `commandsBench/test` 10.
+
+**No model** (`Narrowing`, days): no line lost anew in any set; days settled, A2e → A2f: `teacher` 1026 → 1027,
+`held` 162 → 163, `more` 449 → 452, `held3` 179 → 180, `recovered` 61 → 71.
+
+**Read with a model** (seeds 1, 3, 4, `reader2c`, not retrained; `held3/rec-s{1,3,4}-when4.tsv`), the 211
+recovered phrases:
+
+| reader | right of 211: A2d → A2e → A2f | day right: A2d → A2e → A2f |
+| --- | --- | --- |
+| seed 1 | 130 → 141 → 149 | 138 → 148 → 156 of 209 |
+| seed 3 | 123 → 145 → 154 | 130 → 151 → 160 of 208 |
+| seed 4 | 111 → 122 → 131 | 115 → 128 → 137 of 207 |
+
+On the 176 whose gold the rule reaches (the 35 others are the teacher's far weekday): seeds 1 + 3 right 139
+(79%), asked 31, wrong 6 (3.4%); 1 + 4 right 121 (69%), wrong 7 (4.0%); 3 + 4 right 123 (70%), wrong 6 (3.4%).
+A2d → A2f for 1 + 3: right 112 of 211 → 139 of 176, wrong 56 of 211 → 6 of 176.
+
+The six that seeds 1 + 3 still agree on and get wrong: two take the wrong booking ("Daryna can't make it at
+eight, she'll be an hour and a half later"; "Vasyl … tydzień później"), one a wish read as a new booking ("Mysha
+Volkov asked for a diagnostics … next Friday"), one "za tydzień, o tej samej godzinie" (a week with no weekday,
+read as the booked day), one the teacher's contradiction ("на день раніше, на вівторок" for a Thursday booking,
+the gold a Wednesday), one a garbled time ("в семь с половиной минут восьмого"). None is a weekday counted the
+wrong way.
+
+**Not done.** "In a week" with no weekday in a move (the booked day is one of its readings, which a move to the
+same time cannot mean); the 16 kept texts A2e loses anew are still in the training texts and slices; no seed was
+retrained on phrases with the old day named; no new sealed set.
