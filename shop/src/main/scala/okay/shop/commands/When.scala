@@ -374,6 +374,13 @@ object When:
     private val horizon = desk.days.map(Reports.epochDay).toSet
     private def weekdayOf(e: Long): Int = Math.floorMod(e + 3, 7L).toInt
     private val monday = today - weekdayOf(today)
+    /** A2e: a weekday said beside the booked day is the one NEAREST the booked day — at most three days before
+     * or after it (seven days apart, two such weekdays are never equally near): `can't on Saturday, will come
+     * Sunday` the day after, `can't on Monday, will come Sunday` the day before, `can't on Friday, will come
+     * Monday` the Monday after */
+    private def nearBooked(o: Long, w: Int): Long =
+      val ahead = Math.floorMod(w - weekdayOf(o), 7)
+      if ahead <= 3 then o + ahead else o + ahead - 7
 
     /** a `10.11` is a date when the horizon has it, else a time when the desk starts then, else a date */
     private val dotted: Vector[Heard] = all.collect { case h @ Heard(What.Dotted(a, b, clock, twelve, as, led), _, _) =>
@@ -395,7 +402,7 @@ object When:
      * however far; `next` such weekday may be the one after the booking's. `from`: the booking's own day when the
      * phrase names it — any other weekday said beside it may be the first one after it.
      */
-    private def one(d: Day, from: Option[Long]): Vector[Long] = d match
+    private def one(d: Day, from: Option[Long], beside: Boolean = false): Vector[Long] = d match
       case Day.In(days) => days.map(today + _)
       case Day.Ahead(days) => (days.map(today + _) ++ ownDay.toVector.flatMap(o => days.map(o + _))).distinct
       case Day.Date(day, month) => dated(today, day, month).toVector
@@ -406,13 +413,19 @@ object When:
         weeks match
           case Some(n) => Vector(monday + 7 * n + w)
           case None => mode match
-            case Mode.Bare => ((if weekdayOf(today) == w then Vector(today, next) else Vector(next)) ++
-              same ++ from.map(after)).distinct
+            case Mode.Bare =>
+              // THE OPERATOR'S RULE (A2e): beside the booking's own day named, a weekday is counted from the
+              // booking — the one nearest the booked day; settled, when after today and the desk's (today's own
+              // weekday said bare stays today or a week on, A2b)
+              val settled = from.filter(_ => beside && same.isEmpty).map(nearBooked(_, w))
+                .filter(e => e > today && horizon(e))
+              settled.fold(((if weekdayOf(today) == w then Vector(today, next) else Vector(next)) ++
+                same ++ from.map(after)).distinct)(Vector(_))
             case Mode.This => Vector(if weekdayOf(today) == w then today else next)
             case Mode.Next => (Vector(next, monday + 7 + w) ++ same.map(after) ++ from.map(after)).distinct
 
     /** days said one after another are one day (`Friday 20.11`, `завтра, в среду`) when they agree */
-    private def together(g: Vector[What.OnDay], from: Option[Long]): Vector[Long] =
+    private def together(g: Vector[What.OnDay], from: Option[Long], beside: Boolean = false): Vector[Long] =
       val fixed = g.map(_.day).filterNot(_.isInstanceOf[Day.Weekday]).map(one(_, from))
       val named = g.map(_.day).collect { case Day.Weekday(w, _) => w }
       // `Tuesday in a week`: what that Tuesday may be, or the Tuesday so many weeks after it
@@ -422,7 +435,7 @@ object When:
       if named.nonEmpty && weeksOn.size == 1 && fixed.size == 1 then
         val said = g.map(_.day).filter(_.isInstanceOf[Day.Weekday]).flatMap(one(_, from))
         (said ++ said.map(_ + weeksOn.head)).distinct
-      else if strict.nonEmpty then strict else g.flatMap(d => one(d.day, from)).distinct
+      else if strict.nonEmpty then strict else g.flatMap(d => one(d.day, from, beside)).distinct
 
     private val dayGroups: Vector[(Role, Vector[String])] =
       val said = known.collect { case h @ Heard(d: What.OnDay, _, _) => (h, d) }
@@ -433,11 +446,19 @@ object When:
           case Some(g) if glued(g.last._1, m) => gs.init :+ (g :+ m)
           case _ => gs :+ Vector(m)
       }
-      def days(from: Option[Long]) = groups.map(g => g.head._2.role -> together(g.map(_._2), from))
+      def days(from: Option[Long], beside: Boolean = false) =
+        groups.map(g => g.head._2.role -> together(g.map(_._2), from, beside))
       val alone = days(None)
-      // the booking's own day named: a weekday said beside it is counted from today, and from that day too
+      // the booking's own day named: a weekday said beside it is counted from that day (A2e) — and where that
+      // rule settles one, what may be the booking's own day IS it, the old one
       val old = ownDay.filter(o => alone.exists(_._2.contains(o)))
-      val named = old.fold(alone)(o => alone.zip(days(old)).map((a, b) => if a._2.contains(o) then a else b))
+      val named = old.fold(alone) { o =>
+        val (either, counted) = (days(old), days(old, beside = true))
+        val settles = alone.indices.exists(i => !alone(i)._2.contains(o) && counted(i) != either(i))
+        alone.indices.toVector.map { i =>
+          if !alone(i)._2.contains(o) then counted(i) else if settles then alone(i)._1 -> Vector(o) else alone(i)
+        }
+      }
       // a week said with no weekday is its days
       val week = if said.exists(_._2.day.isInstanceOf[Day.Weekday]) then None
         else weeks.map(n => Role.Plain -> (0 to 6).toVector.map(monday + 7 * n + _).filter(_ >= today))

@@ -230,7 +230,15 @@ object Teach:
   def kind(s: Said): String = s.source.split(':').lift(1)
     .getOrElse(if s.source == "held-rel" then "move-rel" else s.path.head.option)
   private val nearest = writing + "\n- A weekday alone means the NEAREST such day counted from today. For a day a " +
-    "week or more ahead say \"next week\" with the weekday, or the day's number."
+    "week or more ahead say \"next week\" with the weekday, or the day's number." + beside
+  /** A2e, the operator's rule, told to the teacher (`When.nearBooked`): how the new day of a move is named once
+   * the phrase names the booked day. `Gen` is not changed — `Teach.draw` must go on giving the attempts of the
+   * slices already written; a text that breaks the rule is rejected by the gate */
+  private def beside = "\n- In a MOVE whose phrase names the BOOKED day, a weekday alone for the NEW day is " +
+    "counted from the booking, not from today: it means the such weekday NEAREST the booked day, at most three " +
+    "days before or after it. If the new day is any other day, do not name it by a weekday alone: say the " +
+    "day's number, or \"next week\" with the weekday. If the phrase does not name the booked day, the rule " +
+    "above holds."
   private val everyday = "everyday words, said aloud as a question or a remark — not as an order to the assistant"
 
   private def held(from: Int, until: Int): Unit =

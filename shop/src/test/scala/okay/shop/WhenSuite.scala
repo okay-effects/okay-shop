@@ -471,33 +471,35 @@ class WhenSuite extends munit.FunSuite:
       """, "move", anna)
     assertEquals(near, 36)
     // a booking on the Friday of next week (9): `Friday` is the nearest one or the booking's own — both, never the
-    // nearest alone; a weekday said beside it is the nearest one or the first after the booking's day
+    // nearest alone; a weekday said beside it is counted from the booking (A2e: it was the nearest one or the
+    // first after the booking's day, `2,3,10`)
     val far = check("""
       Anna can't make it at 10 on Friday, she'll be here an hour earlier | 2,9 | 09:00
       Move Anna to Friday | 2,9 | -
-      Anna can't make Friday, she'll come Saturday | 2,3,10 | -
+      Anna can't make Friday, she'll come Saturday | 10 | -
       Анна не успевает в пятницу к 10, придёт на час раньше | 2,9 | 09:00
       Перенеси Анну на пятницу | 2,9 | -
-      Анна не сможет в пятницу, придёт в субботу | 2,3,10 | -
+      Анна не сможет в пятницу, придёт в субботу | 10 | -
       Анна не встигає в п'ятницю на 10, прийде на годину раніше | 2,9 | 09:00
       Перенеси Анну на п'ятницю | 2,9 | -
-      Анна не зможе в п'ятницю, прийде в суботу | 2,3,10 | -
+      Анна не зможе в п'ятницю, прийде в суботу | 10 | -
       Anna nie zdąży w piątek na 10, przyjdzie godzinę wcześniej | 2,9 | 09:00
       Przenieś Annę na piątek | 2,9 | -
-      Anna nie da rady w piątek, przyjdzie w sobotę | 2,3,10 | -
+      Anna nie da rady w piątek, przyjdzie w sobotę | 10 | -
       """, "move", Some(Booked("b2", "Anna Kowalska", "haircut", "olena", "2027-03-12", 600)))
     assertEquals(far, 12)
     // a booking next Wednesday (7, today's weekday) at 19:00: `at seven` and `Wednesday` may be the booking's own
-    // or not, and the organ cannot tell — what else they may mean stays beside the new one
+    // or not, and the organ cannot tell — what else `at seven` may mean stays beside the new time; the day beside
+    // `Wednesday` is counted from the booking (A2e: it was `0,2,9`)
     val both = check("""
       Anna can't make it at seven, she'll come at eight | - | 07:00,08:00,20:00
-      Anna can't do Wednesday, she'll come Friday | 0,2,9 | -
+      Anna can't do Wednesday, she'll come Friday | 9 | -
       Анна не сможет в семь, придёт в восемь | - | 07:00,08:00,20:00
-      Анна не сможет в среду, придёт в пятницу | 0,2,9 | -
+      Анна не сможет в среду, придёт в пятницу | 9 | -
       Анна не зможе о сьомій, прийде о восьмій | - | 07:00,08:00,20:00
-      Анна не зможе в середу, прийде в п'ятницю | 0,2,9 | -
+      Анна не зможе в середу, прийде в п'ятницю | 9 | -
       Anna nie da rady o siódmej, przyjdzie o ósmej | - | 07:00,08:00,20:00
-      Anna nie da rady w środę, przyjdzie w piątek | 0,2,9 | -
+      Anna nie da rady w środę, przyjdzie w piątek | 9 | -
       """, "move", Some(Booked("b3", "Anna Kowalska", "haircut", "olena", "2027-03-10", 1140)))
     assertEquals(both, 8)
     // no move, no booking: nothing is counted from one; a weekday `in a week` is that weekday or the one after
@@ -515,9 +517,90 @@ class WhenSuite extends munit.FunSuite:
     for (text, day, time) <- Vector(
       ("Anna can't make it at 10 on Friday, she'll be here an hour earlier", "2027-03-12", 540),
       ("Анна не сможет в пятницу, придёт в субботу", "2027-03-13", 600),
-      ("Анна не зможе в п'ятницю о 10, прийде в понеділок о 12", "2027-03-08", 720),
+      ("Анна не зможе в п'ятницю о 10, прийде в понеділок о 12", "2027-03-15", 720), // A2e: it was 03-08
       ("Anna nie da rady w piątek, przyjdzie za tydzień", "2027-03-10", 600))
     do assertEquals(Laws.reach(Computed)(next, text, Command.Move("b2", day, time)), None, text)
+
+  test("a weekday said beside the booking's own day is counted from the booking (A2e, the operator's rule)"):
+    // the booking on the Friday of next week (9); today is Wednesday. Later in the booking's week; earlier in it,
+    // up to three days back; four or more days back is the one after (the nearest to the booked day: a Friday
+    // booking cannot tell it from the Monday week); said with `from`; with no old day named a
+    // weekday is the nearest from today, as before; `next` keeps both readings, as before
+    val far = Some(Booked("b2", "Anna Kowalska", "haircut", "olena", "2027-03-12", 600))
+    val counted = check("""
+      Anna can't make Friday, she'll come Sunday | 11 | -
+      Anna can't make Friday, she'll come Wednesday | 7 | -
+      Anna can't make Friday, she'll come Tuesday | 6 | -
+      Anna can't make Friday, she'll come Monday | 12 | -
+      Move Anna from Friday to Thursday | 8 | -
+      Anna would like to come on Saturday | 3 | -
+      Move Anna to Saturday | 3 | -
+      Anna can't make Friday, she'll come next Saturday | 2,3,10 | -
+      Анна не сможет в пятницу, придёт в воскресенье | 11 | -
+      Анна не сможет в пятницу, придёт в среду | 7 | -
+      Анна не сможет в пятницу, придёт во вторник | 6 | -
+      Анна не сможет в пятницу, придёт в понедельник | 12 | -
+      Перенеси Анну с пятницы на четверг | 8 | -
+      Анна хотела бы прийти в субботу | 3 | -
+      Перенеси Анну на субботу | 3 | -
+      Анна не сможет в пятницу, придёт в следующую субботу | 2,3,10 | -
+      Анна не зможе в п'ятницю, прийде в неділю | 11 | -
+      Анна не зможе в п'ятницю, прийде в середу | 7 | -
+      Анна не зможе в п'ятницю, прийде у вівторок | 6 | -
+      Анна не зможе в п'ятницю, прийде в понеділок | 12 | -
+      Перенеси Анну з п'ятниці на четвер | 8 | -
+      Анна хотіла б прийти в суботу | 3 | -
+      Перенеси Анну на суботу | 3 | -
+      Анна не зможе в п'ятницю, прийде наступної суботи | 2,3,10 | -
+      Anna nie da rady w piątek, przyjdzie w niedzielę | 11 | -
+      Anna nie da rady w piątek, przyjdzie w środę | 7 | -
+      Anna nie da rady w piątek, przyjdzie we wtorek | 6 | -
+      Anna nie da rady w piątek, przyjdzie w poniedziałek | 12 | -
+      Przenieś Annę z piątku na czwartek | 8 | -
+      Anna chciałaby przyjść w sobotę | 3 | -
+      Przenieś Annę na sobotę | 3 | -
+      Anna nie da rady w piątek, przyjdzie w następną sobotę | 2,3,10 | -
+      """, "move", far)
+    assertEquals(counted, 32)
+    // the fallbacks, A2d's choice as it was. The booking on the Monday after next (12): the Thursday of its week
+    // is past the desk's days — the nearest Thursday, or what else `Monday` may mean
+    val past = check("""
+      Anna can't make Monday, she'll come Thursday | 1,5 | -
+      Анна не сможет в понедельник, придёт в четверг | 1,5 | -
+      Анна не зможе в понеділок, прийде в четвер | 1,5 | -
+      Anna nie da rady w poniedziałek, przyjdzie w czwartek | 1,5 | -
+      """, "move", Some(Booked("b4", "Anna Kowalska", "haircut", "olena", "2027-03-15", 600)))
+    // the booking this Friday (2): the Wednesday of its week is today, and today's own weekday said bare is
+    // today or a week on (A2b); its Tuesday is gone, so the nearest one
+    val gone = check("""
+      Anna can't make Friday, she'll come Wednesday | 0,7 | -
+      Anna can't make Friday, she'll come Tuesday | 6 | -
+      Анна не сможет в пятницу, придёт в среду | 0,7 | -
+      Анна не сможет в пятницу, придёт во вторник | 6 | -
+      Анна не зможе в п'ятницю, прийде в середу | 0,7 | -
+      Анна не зможе в п'ятницю, прийде у вівторок | 6 | -
+      Anna nie da rady w piątek, przyjdzie w środę | 0,7 | -
+      Anna nie da rady w piątek, przyjdzie we wtorek | 6 | -
+      """, "move", desk.bookings.headOption)
+    assertEquals(past + gone, 12)
+    // the nearest to the booked day, not its Monday week: a Monday booking (12) and a Sunday or a Saturday said
+    // beside it is the day or two before
+    val monday = check("""
+      Anna can't make Monday, she'll come Sunday | 11 | -
+      Anna can't make Monday, she'll come Saturday | 10 | -
+      Анна не сможет в понедельник, придёт в воскресенье | 11 | -
+      Анна не сможет в понедельник, придёт в субботу | 10 | -
+      Анна не зможе в понеділок, прийде в неділю | 11 | -
+      Анна не зможе в понеділок, прийде в суботу | 10 | -
+      Anna nie da rady w poniedziałek, przyjdzie w niedzielę | 11 | -
+      Anna nie da rady w poniedziałek, przyjdzie w sobotę | 10 | -
+      """, "move", Some(Booked("b4", "Anna Kowalska", "haircut", "olena", "2027-03-15", 600)))
+    assertEquals(monday, 8)
+    // in the space the settled day is the only option: no reader is asked for it
+    val next = desk.copy(bookings = far.toVector)
+    val hole = Computed.next(next, "Anna can't make Friday, she'll come Sunday",
+      Vector(okay.frames.Choice("action", "move"), okay.frames.Choice("booking", "b2")))
+    assertEquals(hole.map(_.options), Some(Vector("2027-03-14")))
 
   test("the space with its days and times computed: a settled line has one option, an outside one none"):
     val text = "Book Emma for a haircut on Friday at 3 with Marek"

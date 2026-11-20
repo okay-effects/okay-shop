@@ -752,7 +752,73 @@ sbt "commandsBench/runMain okay.shop.commands.bench.Narrowing <texts.jsonl>"
 - Not heard still: "the following week", "another Monday", "half an hour late", minutes in a broken form after an
   hour, a "not" before a day or a time, whose a mention is.
 - The class `d` was read in samples, not labelled row by row; the bar of A2c was not looked at again.
-- Not merged into `main` (which moved on while this was written), not released.
+- Not merged into `main` (which moved on while this was written), not released. (Merged 2026-11-20 with A2c's
+  fourth seed: see "A2c, a fourth seed, and A2d read with a model".)
+
+## A2e (2026-11-20): a weekday counted from the booking — the operator's rule
+
+The case put to the operator: a booking next Saturday, the master says "can't on Saturday, will come on Sunday".
+A2d left the new day a choice — the Sunday nearest today, the one after the booking — and the readers, trained on
+"a weekday alone is the nearest from today", agreed on the wrong one in the recovered phrases. The operator's
+decision (2026-11-20): count it FROM THE BOOKING, settled by the organ, no question asked.
+
+### The rule
+
+In a move whose phrase names what may be the booking's own day (A2d's evidence rule) and, beside it, another
+weekday said bare — no "next", no number, no "in a week" — the new day is that weekday NEAREST the booked day: at
+most three days before or after it (`When.nearBooked`; seven days apart, two such weekdays are never equally
+near). It is settled when it is after today and among the desk's days; otherwise A2d's choice stands. A bare
+weekday in a move that does NOT name the old day keeps its meaning (the nearest from today): that case was not put
+to the operator. With "next" or "in a week" A2d's readings stay. The same holds for a plain move that names the
+old day ("from Friday to Thursday").
+
+A first version (by an agent, not committed) took the weekday in the booking's own Monday-to-Sunday week, or the
+one after when that was four or more days back. It is the same for a booking on a Friday, and wrong for one early
+in the week: "can't on Monday, will come Sunday" became the Sunday six days AFTER the Monday. Measured below as
+"week"; the nearest is what was kept.
+
+**The price, accepted by the operator's choice and written here so it is not hidden:** the organ now SETTLES a
+day where a person may mean the other one — "can't on Wednesday, will come Monday" is the Monday two days before
+even if the Monday after was meant; "from Monday to Friday" is the Friday three days before. A wrong day of this
+kind is silent: no reader is asked for it.
+
+### What it changed (`Narrowing`, no model; days only — times are untouched)
+
+| set | before (A2d): settled / narrowed / lost | week | nearest (kept) | lost anew, nearest |
+| --- | --- | --- | --- | --- |
+| `teacher.jsonl` (A2, 1224 day lines) | 1000 / 86 / 40 | 1025 / 51 / 50 | 1026 / 51 / 49 | 10 |
+| `held.jsonl` (200) | 159 / 14 / 5 | 161 / 9 / 8 | 162 / 9 / 7 | 2 |
+| `more.jsonl` (A2c training, 640) | 411 / 83 / 0 | 442 / 43 / 9 | 449 / 43 / 2 | 2 |
+| `held3.jsonl` (247) | 178 / 10 / 0 | 179 / 7 / 2 | 179 / 7 / 2 | 2 |
+| `recovered.jsonl` (211) | 39 / 109 / 0 | 72 / 52 / 24 | 61 / 52 / 35 | 35 |
+
+- Every line lost anew in the kept texts (16 in all) is a phrase the teacher wrote under "the nearest from today"
+  where that day is four or more days from the booking: "Move Kate Wright from Thursday to Saturday at 1" for the
+  Saturday after the Thursday booking's week, "Dmytro nie zdąży na środę, ale w piątek będzie" for a Friday five
+  days before a Wednesday. Under the rule they now mean the other day; such texts must leave the training texts
+  and the held-out slices before the next round (`more` 2, `held3` 2).
+- In the 211 recovered phrases (the old gate refuted them; never checked by the teacher's read-back) the gold of
+  every one of the 35 lost lines is exactly seven days after the day the rule settles: the teacher's far weekday
+  (class `b` of A2d). Under the rule the teacher is wrong there, not the organ.
+- The teacher's request now carries the rule (`Teach.beside`, after the "nearest from today" note): a weekday
+  alone beside the booked day is the one nearest it; any other new day by its number or "next week". `Gen` is not
+  changed, so `Teach.draw` still rebuilds the slices already written. No text was asked for under it yet.
+
+### Tests
+
+`WhenSuite`: A2d's rows that A2e changes have their new answers with the old one in a comment; a new test of the
+rule in the four languages — later and earlier in the week, three days back, four back (the one after), said with
+"from", no old day named (unchanged), "next" (unchanged), the fallbacks (a day past the desk's, a day not after
+today), the nearest against a Monday week (a Monday booking and a Sunday or a Saturday said beside it), and the
+settled day as the only option of its hole in `Computed`. `sbt test`: JVM 199 (198 passed, 1 skipped), JS 169;
+`sbt commandsBench/test`: 10.
+
+### Not done in A2e
+
+- No reader read with the rule here (see "A2e read with a model" below if it is there). No text left the
+  training set; no slice was refilled; no seed was retrained.
+- The case without the old day named ("Move Anna to Saturday") is untouched: not the operator's decision.
+- Still unheard as in A2d.
 
 ## Results
 

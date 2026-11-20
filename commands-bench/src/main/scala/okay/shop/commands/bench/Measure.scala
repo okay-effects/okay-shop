@@ -187,8 +187,14 @@ object Narrowing:
     // what is lost, and what a command that is no move says in words the organ does not hear
     for (s, line, kind) <- rows if kind == "LOST" || (kind == "unsaid" && s.path.head.option != "move") do
       val ahead = s.path.collectFirst { case Choice("day", d) => s.desk.days.indexOf(d) }.fold("")(n => s", day +$n")
+      // what the organ leaves of the line, and for a move the booking's own day (A2e: a settled day that is not
+      // the meant one is told from a choice without it)
+      val left = Computed.next(s.desk, s.text, s.path.take(s.path.indexWhere(_.hole == line)))
+        .fold(Vector.empty[String])(_.options)
+      val booked = s.path.collectFirst { case Choice("booking", ref) => ref }
+        .flatMap(ref => s.desk.bookings.find(_.ref == ref)).fold("")(b => s"\tbooked ${Asking.day(b.day)}")
       println(s"$kind $line\t${s.lang}\t${s.text}\t${ReadSet.line(s.path)}\ttoday " +
-        Asking.day(s.desk.days.head) + ahead)
+        Asking.day(s.desk.days.head) + ahead + s"\tleft ${left.mkString(",")}" + booked)
 
 /**
  * WHAT THE ORGAN WOULD CHANGE IN READINGS ALREADY MADE, NO MODEL (A2b) — an estimate, not a measure: each answer of
