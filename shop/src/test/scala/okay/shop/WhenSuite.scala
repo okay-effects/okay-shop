@@ -431,6 +431,7 @@ class WhenSuite extends munit.FunSuite:
     val anna = desk.bookings.headOption // Friday (2) at 10:00
     // old then new; new then old; the old time and a difference (`in half an hour` only beside the old time);
     // only the new one; the next day; a week from today or from the booking's day; `next Friday` beside Friday
+    // (A2f: the Friday a week after the booking, 9 — it was `2,9`)
     val near = check("""
       Anna can't make Friday at 10, she'll come Monday at 12 | 5 | 12:00
       Anna will come Monday at 12, she can't make Friday at 10 | 5 | 12:00
@@ -440,7 +441,7 @@ class WhenSuite extends munit.FunSuite:
       Anna would like to come on Monday at 12 | 5 | 12:00
       Anna can't make Friday, she'll come the next day | 3 | -
       Anna can't make Friday, she'll come in a week | 7,9 | -
-      Anna can't make Friday, she'll come next Friday | 2,9 | -
+      Anna can't make Friday, she'll come next Friday | 9 | -
       Анна не сможет в пятницу в 10, придёт в понедельник в 12 | 5 | 12:00
       Анна придёт в понедельник в 12, в пятницу в 10 она не сможет | 5 | 12:00
       Анна не успевает к 10, придёт на час позже | - | 11:00
@@ -449,7 +450,7 @@ class WhenSuite extends munit.FunSuite:
       Анна хотела бы прийти в понедельник в 12 | 5 | 12:00
       Анна не сможет в пятницу, придёт на следующий день | 3 | -
       Анна не сможет в пятницу, придёт через неделю | 7,9 | -
-      Анна не сможет в пятницу, придёт в следующую пятницу | 2,9 | -
+      Анна не сможет в пятницу, придёт в следующую пятницу | 9 | -
       Анна не зможе в п'ятницю о 10, прийде в понеділок о 12 | 5 | 12:00
       Анна прийде в понеділок о 12, в п'ятницю о 10 вона не зможе | 5 | 12:00
       Анна не встигає на 10, прийде на годину пізніше | - | 11:00
@@ -458,7 +459,7 @@ class WhenSuite extends munit.FunSuite:
       Анна хотіла б прийти в понеділок о 12 | 5 | 12:00
       Анна не зможе в п'ятницю, прийде наступного дня | 3 | -
       Анна не зможе в п'ятницю, прийде через тиждень | 7,9 | -
-      Анна не зможе в п'ятницю, прийде наступної п'ятниці | 2,9 | -
+      Анна не зможе в п'ятницю, прийде наступної п'ятниці | 9 | -
       Anna nie da rady w piątek o 10, przyjdzie w poniedziałek o 12 | 5 | 12:00
       Anna przyjdzie w poniedziałek o 12, w piątek o 10 nie da rady | 5 | 12:00
       Anna nie zdąży na 10, przyjdzie godzinę później | - | 11:00
@@ -467,7 +468,7 @@ class WhenSuite extends munit.FunSuite:
       Anna chciałaby przyjść w poniedziałek o 12 | 5 | 12:00
       Anna nie da rady w piątek, przyjdzie następnego dnia | 3 | -
       Anna nie da rady w piątek, przyjdzie za tydzień | 7,9 | -
-      Anna nie da rady w piątek, przyjdzie w następny piątek | 2,9 | -
+      Anna nie da rady w piątek, przyjdzie w następny piątek | 9 | -
       """, "move", anna)
     assertEquals(near, 36)
     // a booking on the Friday of next week (9): `Friday` is the nearest one or the booking's own — both, never the
@@ -601,6 +602,33 @@ class WhenSuite extends munit.FunSuite:
     val hole = Computed.next(next, "Anna can't make Friday, she'll come Sunday",
       Vector(okay.frames.Choice("action", "move"), okay.frames.Choice("booking", "b2")))
     assertEquals(hole.map(_.options), Some(Vector("2027-03-14")))
+
+  test("the booked weekday `next` or `in a week` is the booking's day a week on (A2f)"):
+    // the booking this Friday (2): `next Friday`, `the following Friday`, `Friday in a week` are the Friday after it
+    // (9), whether the old day is named or not; another weekday `next` keeps A2d's readings; the booking on the
+    // Friday of next week (9): the Friday after it is past the desk's days, so A2d's readings stay
+    val anna = desk.bookings.headOption
+    val near = check("""
+      Move Anna to next Friday | 9 | -
+      Anna can't make Friday, she'll come the following Friday | 9 | -
+      Anna will come Friday in a week | 9 | -
+      Перенеси Анну на следующую пятницу | 9 | -
+      Анна придёт в пятницу через неделю | 9 | -
+      Перенеси Анну на наступну п'ятницю | 9 | -
+      Анна прийде в п'ятницю через тиждень | 9 | -
+      Przenieś Annę na następny piątek | 9 | -
+      Anna przyjdzie w piątek za tydzień | 9 | -
+      """, "move", anna)
+    val far = check("""
+      Move Anna to next Friday | 2,9 | -
+      Перенеси Анну на следующую пятницу | 2,9 | -
+      Перенеси Анну на наступну п'ятницю | 2,9 | -
+      Przenieś Annę na następny piątek | 2,9 | -
+      """, "move", Some(Booked("b2", "Anna Kowalska", "haircut", "olena", "2027-03-12", 600)))
+    assertEquals(near + far, 13)
+    // no move: `next Friday` is as it was
+    assertEquals(shown(When.days(desk, "Book Anna for next Friday", "book", None),
+      d => desk.days.indexOf(d).toString), "2,9")
 
   test("the space with its days and times computed: a settled line has one option, an outside one none"):
     val text = "Book Emma for a haircut on Friday at 3 with Marek"

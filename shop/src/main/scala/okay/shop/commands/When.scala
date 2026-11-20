@@ -422,7 +422,11 @@ object When:
               settled.fold(((if weekdayOf(today) == w then Vector(today, next) else Vector(next)) ++
                 same ++ from.map(after)).distinct)(Vector(_))
             case Mode.This => Vector(if weekdayOf(today) == w then today else next)
-            case Mode.Next => (Vector(next, monday + 7 + w) ++ same.map(after) ++ from.map(after)).distinct
+            // A2f: in a move, `next` (`following`) of the booked weekday is counted from the booking too — the one a
+            // week after it, settled when the desk has it: the nearest such day to the booking is its own day,
+            // which a move does not go to
+            case Mode.Next => same.map(after).filter(horizon).fold(
+              (Vector(next, monday + 7 + w) ++ from.map(after)).distinct)(Vector(_))
 
     /** days said one after another are one day (`Friday 20.11`, `завтра, в среду`) when they agree */
     private def together(g: Vector[What.OnDay], from: Option[Long], beside: Boolean = false): Vector[Long] =
@@ -432,7 +436,11 @@ object When:
       val weeksOn = g.map(_.day).collect { case Day.Ahead(Vector(n)) if n % 7 == 0 => n }
       val strict = if fixed.isEmpty then Vector.empty
         else fixed.reduce(_ intersect _).filter(e => named.forall(_ == weekdayOf(e)))
-      if named.nonEmpty && weeksOn.size == 1 && fixed.size == 1 then
+      // A2f: in a move, the booked weekday `in a week` is the booking's day so many weeks on, when the desk has it
+      val ownOn = ownDay.filter(o => named.contains(weekdayOf(o)) && weeksOn.size == 1)
+        .map(_ + weeksOn.head).filter(horizon)
+      if named.nonEmpty && weeksOn.size == 1 && fixed.size == 1 && ownOn.nonEmpty then ownOn.toVector
+      else if named.nonEmpty && weeksOn.size == 1 && fixed.size == 1 then
         val said = g.map(_.day).filter(_.isInstanceOf[Day.Weekday]).flatMap(one(_, from))
         (said ++ said.map(_ + weeksOn.head)).distinct
       else if strict.nonEmpty then strict else g.flatMap(d => one(d.day, from, beside)).distinct
