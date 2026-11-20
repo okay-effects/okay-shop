@@ -1161,4 +1161,28 @@ said indirectly 96 right / 20 wrong of 138; a new day or time said indirectly 6 
 **What follows** (the loop's next turn, not done): (1) the organ's two readings of a weekday in a move as a forced
 question, or a rule for which one a move means — a decision about meaning, the operator's; (2) the recovered
 phrases through the teacher's read-back, then into the training texts and a held-out slice, and the seeds
-retrained; (3) the teacher's far weekday and its broken minutes, still untouched.
+retrained; (3) the teacher's far weekday and its broken minutes, still untouched. — (1) was decided on
+2026-11-20: from the booking (A2e, above).
+
+### A2e read with a model (2026-11-20)
+
+The same seeds 1, 3, 4 (`reader2c`, not retrained) read the 211 recovered phrases with A2e's organ
+(`held3/rec-s{1,3,4}-when3.tsv`):
+
+| reader | right of 211, A2d → A2e | day right, A2d → A2e |
+| --- | --- | --- |
+| seed 1 | 130 → 141 | 138 → 148 of 209 |
+| seed 3 | 123 → 145 | 130 → 151 of 208 |
+| seed 4 | 111 → 122 | 115 → 128 of 207 |
+
+Pairs on all 211: right 130 / 112 / 114, wrong 47 / 45 / 46 (A2d: 112 / 97 / 96 right, 56 / 48 / 55 wrong). On the
+176 phrases whose gold the rule reaches (the 35 others are the teacher's far weekday, above): seeds 1 + 3 right
+130 (74%), asked 32, wrong 14 (8.0%); 1 + 4 and 3 + 4: right 64–65%, wrong 8.5%.
+
+What is left in the 14 that seeds 1 + 3 agree on and get wrong: 11 are a move by a difference said indirectly,
+and nearly all of them one case — the new day is the booked weekday A WEEK LATER ("the following Friday",
+"на следующую пятницу", "z wtorku na następny wtorek", "за тиждень, о тій самій годині", "tydzień później") and
+both readers give the booked day itself: a move to the very day and time it is on, which is no move. The organ
+offers both readings there (A2d keeps "next" and "in a week" as a choice). Under the operator's rule the nearest
+reading of the booked weekday is the booked day, which a move cannot mean: so beside the booked day, "next" /
+"following" / "a week later" of the SAME weekday is the booked day plus seven — settled. Not built.
